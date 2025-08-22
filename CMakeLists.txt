@@ -5,8 +5,9 @@ set(CMAKE_CXX_STANDARD 20)
 
 set(CMAKE_CXX_FLAGS "-O3 -Wall -Wextra")
 
-project(quantum_simulator)
+project(QILab)
 
+#get the stim library
 include(FetchContent)
 FetchContent_Declare(stim
         GIT_REPOSITORY https://github.com/quantumlib/stim.git
@@ -16,6 +17,13 @@ if(NOT stim_POPULATED)
   FetchContent_Populate(stim)
   add_subdirectory(${stim_SOURCE_DIR})
 endif()
+include_directories("src")
 
-add_executable(test_stim some.cpp)
-target_link_libraries(test_stim PRIVATE libstim)
+add_executable(stim_evaluation
+  application.cpp
+  src/CommandHandler/command_handler.cpp
+  src/CommandHandler/handlers/mock_handler.cpp
+  src/simulator_runner.cpp
+  src/Simulator/adapters/mock_adapter.cpp
+  )
+target_link_libraries(stim_evaluation PRIVATE libstim)
