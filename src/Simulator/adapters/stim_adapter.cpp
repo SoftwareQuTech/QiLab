@@ -9,7 +9,7 @@ StimAdapter::StimAdapter()
 }
 StimAdapter::~StimAdapter() {}
 
-bool StimAdapter::qubit_initialize(uint8_t qubit_address)
+bool StimAdapter::qubit_initialize(uint8_t qubit_address) 
 {
 
 }

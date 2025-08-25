@@ -14,7 +14,7 @@ class ILogger
     virtual void save_to_file(const std::string &path) = 0;
 };
 
-class LocalLogger: ILogger
+class LocalLogger: public ILogger
 {
     public:
         LocalLogger();

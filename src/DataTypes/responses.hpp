@@ -33,11 +33,11 @@ struct ResponseData
     uint8_t crc;
     Outcome_t outcome;
     uint8_t lp_data;
-    void serialize_data(uint8_t* buffer)
+    void serialize_data(uint8_t* buffer) const
     {
         buffer[0] = cycle_count;
         buffer[1] = (0xff00 & ((uint8_t)outcome << 8)) + (0x00ff & (uint8_t)status);
         buffer[2] = (uint8_t)lp_data & 0x00ff;
-        buffer[3] = crc; //shold calculate ofcourse
+        buffer[3] = crc; //TODO: calculate CRC
     }
 };
