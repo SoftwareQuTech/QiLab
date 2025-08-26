@@ -3,7 +3,7 @@ set(CMAKE_C_COMPILER "/usr/bin/gcc")
 set(CMAKE_CXX_COMPILER "/usr/bin/g++")
 set(CMAKE_CXX_STANDARD 20)
 
-set(CMAKE_CXX_FLAGS "-Og")
+set(CMAKE_CXX_FLAGS "-O2")
 
 project(QILab)
 
@@ -25,5 +25,7 @@ add_executable(stim_evaluation
   src/CommandHandler/handlers/mock_handler.cpp
   src/simulator_runner.cpp
   src/Simulator/adapters/mock_adapter.cpp
+  src/Simulator/adapters/stim_adapter.cpp
+  src/logger/logger.cpp
   )
 target_link_libraries(stim_evaluation PRIVATE libstim)

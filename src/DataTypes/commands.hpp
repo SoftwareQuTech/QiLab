@@ -27,7 +27,37 @@ enum Axis_t
 
 enum Angle_t
 {
-
+    _PI_16 = 1,
+    _2_PI_16 = 2,
+    _3_PI_16= 3,
+    _4_PI_16= 4,
+    _5_PI_16= 5,
+    _6_PI_16= 6,
+    _7_PI_16= 7,
+    _8_PI_16= 8,
+    _9_PI_16= 9,
+    _10_PI_16= 10,
+    _11_PI_16= 11,
+    _12_PI_16= 12,    
+    _13_PI_16 = 13,
+    _14_PI_16 = 14,
+    _15_PI_16= 15,
+    _MINUS_PI= 16,
+    _MINUS_15_PI_16= 17,
+    _MINUS_14_PI_16= 18,
+    _MINUS_13_PI_16= 19,
+    _MINUS_12_PI_16= 20,
+    _MINUS_11_PI_16= 21,
+    _MINUS_10_PI_16= 22,
+    _MINUS_9_PI_16= 23,
+    _MINUS_8_PI_16= 24,
+    _MINUS_7_PI_16= 25,
+    _MINUS_6_PI_16= 26,
+    _MINUS_5_PI_16=27,
+    _MINUS_4_PI_16= 28,
+    _MINUS_3_PI_16= 29,
+    _MINUS_2_PI_16= 30,
+    _MINUS_1_PI_16= 31
 };
 
 
@@ -81,12 +111,12 @@ struct SingleQubitGate final: public CommandBase
     SingleQubitGate(const uint8_t* &data) : CommandBase(data)
     {
         qubit1_address = (QUBIT_BIT_MASK & data[1]);
-        angle = (ANGLE_BIT_MASK & data[2]);
-        axis = AXIS_BIT_MASK & (data[2] >> 5);
+        angle = static_cast<Angle_t>((ANGLE_BIT_MASK & data[2]));
+        axis = static_cast<Axis_t>(AXIS_BIT_MASK & (data[2] >> 5));
     }
     uint8_t qubit1_address;
-    uint8_t angle;
-    uint8_t axis;
+    Angle_t angle;
+    Axis_t axis;
 };
 
 struct TwoQubitGate final: public CommandBase

@@ -9,11 +9,13 @@
 
 #include "Simulator/sim_interface.hpp"
 #include "CommandHandler/command_handler.hpp"
+#include "logger/logger.hpp"
 
 class SimulatorRunner
 {
     public:
     SimulatorRunner(ISimulator*, CommandHandler*);
+    SimulatorRunner(ISimulator*, CommandHandler*, ILogger*);
     ~SimulatorRunner() = default;
 
     void run_simulation();
@@ -21,6 +23,8 @@ class SimulatorRunner
     private:
     ISimulator* simulator;
     CommandHandler* command_handler;
+    ILogger* event_logger;
+    
     ResponseData execute_command(CommandBase*);
 
     SimulatorRunner(const SimulatorRunner&) = delete;

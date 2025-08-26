@@ -6,39 +6,36 @@
 #include "stim/circuit/circuit_instruction.h"
 
 #include <Simulator/adapters/mock_adapter.hpp>
+#include <Simulator/adapters/stim_adapter.hpp>
 #include <simulator_runner.hpp>
 #include <CommandHandler/command_handler.hpp>
 #include <CommandHandler/handlers/mock_handler.hpp>
+#include "logger/logger.hpp"
 
-stim::Circuit make_bell_pair_circuit() {
-    return stim::Circuit(R"CIRCUIT(
-        H 0
-        CNOT 0 1
-        M 0 1
-        DETECTOR rec[-1] rec[-2]
-    )CIRCUIT");
-}
+
 
 int main()
 {
-    // constexpr size_t qbits = 64;
-    // stim::TableauSimulator<qbits> t(std::mt19937_64(102), 25);
-    // //t.do_X(1);
-    // stim::GateTarget g{1};
-    // t.do_MZ(stim::CircuitInstruction{stim::GateType::M, {}, &g, ""});
-    // stim::Circuit c = make_bell_pair_circuit();
-    // auto rec = t.measurement_record.storage.back();
-    // //std::cout <<  << std::endl;
-    // stim::print_circuit(std::cout, c, 0);
     MockAdapter* adapter = new MockAdapter();
+    StimAdapter* stim_adapter = new StimAdapter(0xaabccdd, 10);
     MockHandler* handler = new MockHandler();
+    ILogger* logger = new LocalLogger();
     CommandHandler* command_handler = new CommandHandler(handler);
-    SimulatorRunner sim(adapter, command_handler);
+    SimulatorRunner sim(stim_adapter, command_handler, logger);
+
+    std::cout << "Starting simulation" << std::endl;
 
     sim.run_simulation();
 
+    logger->save_to_file("test_mock_sim.txt");
 
 
-    std::cout << "Executed the command" << std::endl;
+    std::cout << "Executed the simulation" << std::endl;
+
+    delete adapter;
+    delete handler;
+    delete logger;
+    delete command_handler;
+    
     return 0;
 }
