@@ -112,7 +112,7 @@ struct SingleQubitGate final: public CommandBase
     {
         qubit1_address = (QUBIT_BIT_MASK & data[1]);
         angle = static_cast<Angle_t>((ANGLE_BIT_MASK & data[2]));
-        axis = static_cast<Axis_t>(AXIS_BIT_MASK & (data[2] >> 5));
+        axis = static_cast<Axis_t>(AXIS_BIT_MASK & (data[2] >> 5)); //check
     }
     uint8_t qubit1_address;
     Angle_t angle;
@@ -125,13 +125,13 @@ struct TwoQubitGate final: public CommandBase
     {
         qubit1_address = (QUBIT_BIT_MASK & data[1]);
         qubit2_address = QUBIT_BIT_MASK & (data[1] >> 4);
-        angle = (ANGLE_BIT_MASK & data[2]);
-        axis = AXIS_BIT_MASK & (data[2] >> 5);
+        angle = static_cast<Angle_t>((ANGLE_BIT_MASK & data[2]));
+        axis = static_cast<Axis_t>(AXIS_BIT_MASK & (data[2] >> 5));
     }
     uint8_t qubit1_address;
     uint8_t qubit2_address;
-    uint8_t angle;
-    uint8_t axis;
+    Angle_t angle;
+    Axis_t axis;
 };
 
 struct QubitMeasure final: public CommandBase

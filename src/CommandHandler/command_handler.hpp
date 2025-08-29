@@ -4,16 +4,44 @@
 ** Description: Contains command handler. This serializes and
 **              deserializes the data from the communication
 */
+
 #pragma once
 #include <memory>
 #include "CommandHandler/transmision_handler.hpp"
 #include "DataTypes/commands.hpp"
 #include "DataTypes/responses.hpp"
+#include "logger/logger.hpp"
 
+/**
+ * @brief Handles the reception and transmission of commands and responses.
+ *
+ * The CommandHandler acts as the interface between the transport layer
+ * (provided by an ITransmissionHandler) and the higher-level command/
+ * response abstractions. It serializes outgoing responses into raw frames,
+ * and deserializes incoming frames into Command objects.
+ *
+ * Typical usage:
+ * - Construct with a pointer to a concrete ITransmissionHandler implementation.
+ * - Call receive_command() to block until a command arrives and is decoded.
+ * - Call send_response() to serialize and transmit a response.
+ *
+ * @note Copy and move operations are disabled to avoid multiple handlers
+ *       owning the same transport.
+ */
 class CommandHandler
 {
 public:
-    CommandHandler(ITransmissionHandler *);
+    /**
+     * @brief Construct a new CommandHandler.
+     *
+     * @param[in] handler Pointer to a valid transport implementation.
+     *                    The CommandHandler does not take ownership; the
+     *                    caller must ensure the lifetime exceeds this object.
+     */
+    CommandHandler(ITransmissionHandler *handler);
+    CommandHandler(ITransmissionHandler *handler, ILogger*);
+
+    /// Destructor. Does not delete the underlying transport handler.
     ~CommandHandler();
 
     /**
@@ -56,15 +84,30 @@ public:
     uint8_t send_response(const ResponseData &resp);
 
 private:
-    /* A pointer to the desired data handler object*/
+    /// Pointer to the transport handler used for sending/receiving raw data.
     ITransmissionHandler *data_handler;
 
-    /*Desialize the command received from comuncation channel*/
-    std::unique_ptr<CommandBase> deserialize_command(const uint8_t *);
+    /**
+     * @brief Deserializes a raw byte buffer into a Command object.
+     *
+     * @param[in] buffer Raw bytes received from the transport.
+     * @return A unique_ptr to a decoded CommandBase instance.
+     * @retval nullptr if the buffer does not represent a valid command.
+     */
+    std::unique_ptr<CommandBase> deserialize_command(const uint8_t *buffer);
 
-    /*Serialize the response into an array that is ready to be sent*/
-    uint8_t serialize_command(const ResponseData &, uint8_t *);
+    /**
+     * @brief Serializes a response into a raw byte array.
+     *
+     * @param[in]  resp   Response object to serialize.
+     * @param[out] buffer Destination buffer for serialized data.
+     *
+     * @return status of the operation
+     */
+    uint8_t serialize_response(const ResponseData &resp, uint8_t *buffer);
 
+    ILogger* local_logger;
+    // Disable copy/move
     CommandHandler(const CommandHandler &) = delete;
     CommandHandler(const CommandHandler &&) = delete;
     CommandHandler &operator=(CommandHandler &) = delete;

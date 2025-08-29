@@ -13,17 +13,20 @@ void LocalLogger::log_event(const std::string &event_id, const std::string &mess
     auto timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
     auto mess = event_id + "," + message + "," + std::to_string(timestamp.count());
     
+    data_lock.lock();
+    
     if (log_num == logged_items.capacity())
     {
         logged_items.resize(log_num + 100);
     }
-    data_lock.lock();
     logged_items[log_num++] = mess;
+
     data_lock.unlock();
 }
 
 void LocalLogger::save_to_file(const std::string &path)
 {
+    data_lock.lock();
     std::ofstream file_to_write(path);
     file_to_write << "Event ID, Message, Timestamp" << std::endl;
     for (auto item : logged_items)
@@ -31,4 +34,5 @@ void LocalLogger::save_to_file(const std::string &path)
         file_to_write << item << std::endl;
     }
     file_to_write.close();
+    data_lock.unlock();
 }

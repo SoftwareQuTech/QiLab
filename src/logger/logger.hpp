@@ -22,13 +22,13 @@ class LocalLogger: public ILogger
     public:
         LocalLogger();
         ~LocalLogger() = default;
-        
+
         void log_event(const std::string &event_id, const std::string &message = "") override;
         void save_to_file(const std::string &path) override;
 
     private:
         std::chrono::time_point<std::chrono::high_resolution_clock> initial_time;       
-        std::vector<std::string> logged_items{100}; //init with size so we get a deterministic logging for those logs
+        std::vector<std::string> logged_items{100}; //init with size so we get a deterministic logging at least for those logs
         std::string path_to_save;
         size_t log_num = 0;
         std::mutex data_lock{};

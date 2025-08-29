@@ -28,7 +28,7 @@ class StimAdapter : public ISimulator
     uint8_t entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_address) override;
 
 private:
-    // the instance of the stim simulator. 256 is the bit packing of the words
+    // the instance of the stim simulator. 64 is the bit packing of the words
     // can test out with different bit packings
     stim::TableauSimulator<64> stim_instance;
     // the random number generator

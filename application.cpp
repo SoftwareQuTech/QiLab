@@ -16,11 +16,11 @@
 
 int main()
 {
-    MockAdapter* adapter = new MockAdapter();
-    StimAdapter* stim_adapter = new StimAdapter(0xaabccdd, 10);
-    MockHandler* handler = new MockHandler();
     ILogger* logger = new LocalLogger();
-    CommandHandler* command_handler = new CommandHandler(handler);
+    MockAdapter* adapter = new MockAdapter();
+    StimAdapter* stim_adapter = new StimAdapter(0, 3); //the seed is problematic
+    MockHandler* handler = new MockHandler(logger);
+    CommandHandler* command_handler = new CommandHandler(handler, logger);
     SimulatorRunner sim(stim_adapter, command_handler, logger);
 
     std::cout << "Starting simulation" << std::endl;

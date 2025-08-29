@@ -20,14 +20,16 @@ bool StimAdapter::qubit_initialize(uint8_t qubit_address)
 {
     //TODO: check if this exepts!!
     stim_instance.ensure_large_enough_for_qubits(qubit_address + 1);
-    stim::GateTarget g{qubit_address};
-    stim::CircuitInstruction inst{stim::GateType::M, {}, &g, ""};
-    stim_instance.do_MZ(inst); // performs Z-measure & records bit
-    if ((bool)stim_instance.measurement_record.storage.back())
-    {
-        stim::CircuitInstruction reset_{stim::GateType::X, {}, &g, ""};
-        stim_instance.do_X(reset_);
-    }
+
+    /* just a suggestion, but if you measure, result, the qubit might not correct afterwards */
+    // stim::GateTarget g{qubit_address};
+    // stim::CircuitInstruction inst{stim::GateType::M, {}, &g, ""};
+    // stim_instance.do_MZ(inst); // performs Z-measure & records bit
+    // if ((bool)stim_instance.measurement_record.storage.back())
+    // {
+    //     stim::CircuitInstruction reset_{stim::GateType::X, {}, &g, ""};
+    //     stim_instance.do_X(reset_);
+    // }
 
     return true;
 }
@@ -58,8 +60,8 @@ bool StimAdapter::single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t
             //TODO: check if this exepts!
             stim_instance.ensure_large_enough_for_qubits(qubit_address + 1);
             stim::GateTarget g{qubit_address};
-            stim::CircuitInstruction inst{stim::GateType::S, {}, &g, ""};
-            stim_instance.do_SPP(inst);
+            stim::CircuitInstruction inst{stim::GateType::S, {}, &g, ""}; //as per py bindings
+            stim_instance.do_SQRT_Z(inst);
             return true;
         }
         else
@@ -91,7 +93,7 @@ bool StimAdapter::single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t
             stim_instance.ensure_large_enough_for_qubits(qubit_address + 1);
             stim::GateTarget g{qubit_address};
             stim::CircuitInstruction inst{stim::GateType::S_DAG, {}, &g, ""};
-            stim_instance.do_SPP_DAG(inst);
+            stim_instance.do_SQRT_Z_DAG(inst);
         }
         else
             return false;
@@ -129,26 +131,38 @@ bool StimAdapter::single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t
     }
     else
         return false;
+
+    return false;
 }
+
 bool StimAdapter::two_qubit_gate(uint8_t qubit1_address, uint8_t qubit2_address, Angle_t angle, Axis_t axis)
 {
+    stim_instance.ensure_large_enough_for_qubits(std::max(qubit1_address, qubit2_address) + 1);
+    std::vector<stim::GateTarget> tgts = {stim::GateTarget{qubit1_address}, stim::GateTarget{qubit2_address}};
+    stim::SpanRef<const stim::GateTarget> tspan(tgts);   // *** size = 2 (even) ***
+    stim::CircuitInstruction inst{stim::GateType::CX, {}, tspan, ""};
+    stim_instance.do_ZCX(inst);
 
+    return true;
 }
 uint8_t StimAdapter::qubit_measure(uint8_t qubit_address, bool basis)
 {
+    // auto z = stim_instance.peek_z(qubit_address);
+    // auto p = stim_instance.peek_bloch(qubit_address);
     stim_instance.ensure_large_enough_for_qubits(qubit_address + 1);
     stim::GateTarget g{qubit_address};
     stim::CircuitInstruction inst{stim::GateType::M, {}, &g, ""};
-    stim_instance.do_MZ(inst);                                       // performs Z-measure & records bit
-    return (bool)stim_instance.measurement_record.storage.back();    // return the last recorded bit
+    stim_instance.do_MZ(inst);
+    // p = stim_instance.peek_bloch(qubit_address);                                       
+    return (bool)stim_instance.measurement_record.storage.back();    
 }
 uint8_t StimAdapter::attempt_entanglement(uint16_t fidelity, uint8_t neighbour_address, uint8_t qid)
 {
-
+    return 0;
 }
 uint8_t StimAdapter::entanglement_measure(uint16_t fidelity, uint8_t neighbour_address, bool basis, uint8_t qid, bool try_now, uint8_t repetitions)
 {
-
+    return 0;
 }
 void StimAdapter::pre_measure_gates_selection(bool target, Angle_t angle_1, Angle_t angle_2, Angle_t angle_3)
 {
@@ -164,5 +178,5 @@ void StimAdapter::qubit_swap(uint8_t qubit1_address, uint8_t qubit2_address)
 }
 uint8_t StimAdapter::entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_address)
 {
-    
+    return 0;
 }

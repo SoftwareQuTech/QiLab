@@ -15,7 +15,7 @@ enum NodeStatus_t
     BUSY_LINK = 0x04
 };
 
-enum Outcome_t
+enum Outcome_Status_t
 {
     UNKNOWN_FAILURE = 0x00,
     HARDWARE_FAILURE = 0x01,
@@ -26,17 +26,48 @@ enum Outcome_t
     SUCCESS = 0x08
 };
 
+
+enum Measurement_t
+{
+    MEASURE_OUTCOME_PLUS_1      = 0x8,
+    MEASURE_OUTCOME_MINUS_1     = 0xC,
+};
+
+enum Entaglement_t
+{
+    STATE_PHI_PLUS              = 0x8,
+    STATE_PHI_MINUS             = 0x9,
+    STATE_PSI_PLUS              = 0xA,
+    STATE_PSI_MINUS             = 0xB
+};
+
+enum Bell_State_Measurent_t
+{
+    BELL_STATE_PHI_PLUS          = 0x8,
+    BELL_STATE_PHI_MINUS         = 0x9,
+    BELL_STATE_PSI_PLUS          = 0xA,
+    BELL_STATE_PSI_MINUS         = 0xB
+};
+
 struct ResponseData
 {
     uint8_t cycle_count;
     NodeStatus_t status;
     uint8_t crc;
-    Outcome_t outcome;
+    uint8_t outcome_result;
+    Outcome_Status_t outcome_status;
     uint8_t lp_data;
     void serialize_data(uint8_t* buffer) const
     {
         buffer[0] = cycle_count;
-        buffer[1] = (0xff00 & ((uint8_t)outcome << 8)) + (0x00ff & (uint8_t)status);
+        if(outcome_status & Outcome_Status_t::SUCCESS)
+        {
+            buffer[1] = (0xff00 & ((uint8_t)outcome_result << 8)) + (0x00ff & (uint8_t)status);
+        }
+        else
+        {
+            buffer[1] = (0xff00 & ((uint8_t)outcome_status << 8)) + (0x00ff & (uint8_t)status);
+        }
         buffer[2] = (uint8_t)lp_data & 0x00ff;
         buffer[3] = crc; //TODO: calculate CRC
     }
