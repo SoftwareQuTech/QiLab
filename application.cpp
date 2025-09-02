@@ -16,9 +16,12 @@
 
 int main()
 {
+    std::random_device d;
+    std::seed_seq seq{d(), d(), d(), d(), d(), d(), d(), d()};
+    
     ILogger* logger = new LocalLogger();
     MockAdapter* adapter = new MockAdapter();
-    StimAdapter* stim_adapter = new StimAdapter(0, 3); //the seed is problematic
+    StimAdapter* stim_adapter = new StimAdapter(seq, 3); //the seed is problematic
     MockHandler* handler = new MockHandler(logger);
     CommandHandler* command_handler = new CommandHandler(handler, logger);
     SimulatorRunner sim(stim_adapter, command_handler, logger);

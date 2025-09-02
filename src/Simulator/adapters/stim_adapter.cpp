@@ -3,12 +3,12 @@
 
 #include "stim_adapter.hpp"
 
-StimAdapter::StimAdapter(const uint64_t &seed, const uint8_t &num_qubits) : rng(seed), stim_instance(std::move(rng))
+StimAdapter::StimAdapter(const std::seed_seq &seed_seq, const uint8_t &num_qubits) : rng(seed_seq), stim_instance(std::move(rng))
 {
     stim_instance.set_num_qubits(num_qubits);
 }
 
-StimAdapter::StimAdapter(const uint64_t &seed, const uint8_t &num_qubits, ILogger* logger) : rng(seed), stim_instance(std::move(rng))
+StimAdapter::StimAdapter(const std::seed_seq &seed_seq, const uint8_t &num_qubits, ILogger* logger) : rng(seed_seq), stim_instance(std::move(rng))
 {
     stim_instance.set_num_qubits(num_qubits);
 }

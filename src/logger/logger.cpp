@@ -2,14 +2,15 @@
 #include <mutex>
 
 #include "logger/logger.hpp"
+
 LocalLogger::LocalLogger()
 {
-    initial_time = std::chrono::high_resolution_clock::now();
+    initial_time = std::chrono::steady_clock::now();
 }
 
 void LocalLogger::log_event(const std::string &event_id, const std::string &message)
 {
-    auto duration = std::chrono::high_resolution_clock::now() - initial_time;
+    auto duration = std::chrono::steady_clock::now() - initial_time;
     auto timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
     auto mess = event_id + "," + message + "," + std::to_string(timestamp.count());
     
