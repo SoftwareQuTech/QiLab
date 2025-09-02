@@ -7,12 +7,15 @@
 #pragma once
 #include <cstdint>
 
+
+//double check the bit masks@@
 #define ANGLE_BIT_MASK      0x1f
 #define AXIS_BIT_MASK       0x03
-#define QUBIT_BIT_MASK      0x0f
+#define QUBIT_1_BIT_MASK    0x0f
+#define QUBIT_2_BIT_MASK    0xf0
 #define BASIS_BIT_MASK      0x01
-#define QID_BIT_MASK        0x03
-#define NGHBR_BIT_MASK      0x0f
+#define QID_BIT_MASK        0x0c
+#define NGHBR_BIT_MASK      0xf0
 #define FIDELITY_BIT_MASK   0x0f
 
 
@@ -110,7 +113,7 @@ struct SingleQubitGate final: public CommandBase
 {
     SingleQubitGate(const uint8_t* &data) : CommandBase(data)
     {
-        qubit1_address = (QUBIT_BIT_MASK & data[1]);
+        qubit1_address = (QUBIT_1_BIT_MASK & data[1]);
         angle = static_cast<Angle_t>((ANGLE_BIT_MASK & data[2]));
         axis = static_cast<Axis_t>(AXIS_BIT_MASK & (data[2] >> 5)); //check
     }
@@ -123,8 +126,8 @@ struct TwoQubitGate final: public CommandBase
 {
     TwoQubitGate(const uint8_t* &data) : CommandBase(data)
     {
-        qubit1_address = (QUBIT_BIT_MASK & data[1]);
-        qubit2_address = QUBIT_BIT_MASK & (data[1] >> 4);
+        qubit1_address = (QUBIT_1_BIT_MASK & data[1]);
+        qubit2_address = (QUBIT_2_BIT_MASK & data[1]) >> 4;
         angle = static_cast<Angle_t>((ANGLE_BIT_MASK & data[2]));
         axis = static_cast<Axis_t>(AXIS_BIT_MASK & (data[2] >> 5));
     }
@@ -138,7 +141,7 @@ struct QubitMeasure final: public CommandBase
 {
     QubitMeasure(const uint8_t* &data) : CommandBase(data)
     {
-        qubit1_address = QUBIT_BIT_MASK & data[1];
+        qubit1_address = QUBIT_1_BIT_MASK & data[1];
         basis = (BASIS_BIT_MASK & data[2]);
     }
     uint8_t qubit1_address;
@@ -150,8 +153,8 @@ struct EntanglementAttempt final: public CommandBase
     EntanglementAttempt(const uint8_t* &data) : CommandBase(data)
     {
         fidelity = (FIDELITY_BIT_MASK & data[1]);
-        nghbr = NGHBR_BIT_MASK & (data[1] >> 4);
-        qid = QID_BIT_MASK & (data[2] >> 2);
+        nghbr = (NGHBR_BIT_MASK & data[1]) >> 4;
+        qid = ((QID_BIT_MASK & data[2]) >> 2);
     }
     uint8_t fidelity;
     uint8_t nghbr;
@@ -163,8 +166,8 @@ struct EntangleMeasure final: public CommandBase
     EntangleMeasure(const uint8_t* &data) : CommandBase(data)
     {
         fidelity = (FIDELITY_BIT_MASK & data[1]);
-        nghbr = NGHBR_BIT_MASK & (data[1] >> 4);
-        qid = QID_BIT_MASK & (data[2] >> 2);
+        nghbr = (NGHBR_BIT_MASK & data[1]) >> 4;
+        qid = ((QID_BIT_MASK & data[2]) >> 2);
         basis = (BASIS_BIT_MASK & data[2]);
         immediate = 0x01 & (data[2] >> 1);
         repetitions = 0x0f & (data[2] >> 4);
@@ -196,8 +199,8 @@ struct QubitMove final: public CommandBase
 {
     QubitMove(const uint8_t* &data) : CommandBase(data)
     {
-        qubit1_address = QUBIT_BIT_MASK & data[1];
-        qubit2_address = QUBIT_BIT_MASK & (data[1] >> 4);
+        qubit1_address = QUBIT_1_BIT_MASK & data[1];
+        qubit2_address = (QUBIT_2_BIT_MASK & data[1]) >> 4;
     }
     uint8_t qubit1_address;
     uint8_t qubit2_address;
@@ -207,8 +210,8 @@ struct QubitSwap final: public CommandBase
 {
     QubitSwap(const uint8_t* &data) : CommandBase(data)
     {
-        qubit1_address = QUBIT_BIT_MASK & data[1];
-        qubit2_address = QUBIT_BIT_MASK & (data[1] >> 4);
+        qubit1_address = QUBIT_1_BIT_MASK & data[1];
+        qubit2_address = (QUBIT_2_BIT_MASK & data[1]) >> 4;
     }
     uint8_t qubit1_address;
     uint8_t qubit2_address;
@@ -218,8 +221,8 @@ struct EntanglementSwap final: public CommandBase
 {
     EntanglementSwap(const uint8_t* &data) : CommandBase(data)
     {
-        qubit1_address = QUBIT_BIT_MASK & data[1];
-        qubit2_address = QUBIT_BIT_MASK & (data[1] >> 4);
+        qubit1_address = QUBIT_1_BIT_MASK & data[1];
+        qubit2_address = (QUBIT_2_BIT_MASK & data[1]) >> 4;
     }
     uint8_t qubit1_address;
     uint8_t qubit2_address;
