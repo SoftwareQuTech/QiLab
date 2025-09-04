@@ -4,7 +4,7 @@
 #define RESPONSE_MESSAGE_LENGTH         4
 
 CommandHandler::CommandHandler(ITransmissionHandler* transmission_handler) : data_handler(transmission_handler) {}
-CommandHandler::CommandHandler(ITransmissionHandler* transmission_handler, ILogger* logger) : data_handler(transmission_handler), local_logger(logger) {}
+CommandHandler::CommandHandler(ITransmissionHandler* transmission_handler, IProfiler* logger) : data_handler(transmission_handler), local_logger(logger) {}
 
 CommandHandler::~CommandHandler() {}
 
@@ -30,7 +30,6 @@ uint8_t CommandHandler::receive_command(std::unique_ptr<CommandBase> &cmd)
 uint8_t CommandHandler::send_response(const ResponseData &response)
 {
     uint8_t data_buffer[RESPONSE_MESSAGE_LENGTH];
-    local_logger->log_event("Outcome from sim", std::to_string(response.outcome_result));
     //response is simple, no need for extra overhead
     response.serialize_data(data_buffer);
     data_handler->send_data(data_buffer, RESPONSE_MESSAGE_LENGTH);

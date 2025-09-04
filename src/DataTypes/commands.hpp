@@ -10,7 +10,7 @@
 
 //double check the bit masks@@
 #define ANGLE_BIT_MASK      0x1f
-#define AXIS_BIT_MASK       0x03
+#define AXIS_BIT_MASK       0x60
 #define QUBIT_1_BIT_MASK    0x0f
 #define QUBIT_2_BIT_MASK    0xf0
 #define BASIS_BIT_MASK      0x01
@@ -104,7 +104,7 @@ struct QubitInitialize final: public CommandBase
 {
     QubitInitialize(const uint8_t* &data) : CommandBase(data)
     {
-        qubit1_address = 0x0f & data[1];
+        qubit1_address = QUBIT_1_BIT_MASK & data[1];
     }
     uint8_t qubit1_address;
 };
@@ -115,7 +115,7 @@ struct SingleQubitGate final: public CommandBase
     {
         qubit1_address = (QUBIT_1_BIT_MASK & data[1]);
         angle = static_cast<Angle_t>((ANGLE_BIT_MASK & data[2]));
-        axis = static_cast<Axis_t>(AXIS_BIT_MASK & (data[2] >> 5)); //check
+        axis = static_cast<Axis_t>((AXIS_BIT_MASK & data[2]) >> 5); //check
     }
     uint8_t qubit1_address;
     Angle_t angle;
@@ -129,7 +129,7 @@ struct TwoQubitGate final: public CommandBase
         qubit1_address = (QUBIT_1_BIT_MASK & data[1]);
         qubit2_address = (QUBIT_2_BIT_MASK & data[1]) >> 4;
         angle = static_cast<Angle_t>((ANGLE_BIT_MASK & data[2]));
-        axis = static_cast<Axis_t>(AXIS_BIT_MASK & (data[2] >> 5));
+        axis = static_cast<Axis_t>((AXIS_BIT_MASK & data[2]) >> 5);
     }
     uint8_t qubit1_address;
     uint8_t qubit2_address;
@@ -169,8 +169,8 @@ struct EntangleMeasure final: public CommandBase
         nghbr = (NGHBR_BIT_MASK & data[1]) >> 4;
         qid = ((QID_BIT_MASK & data[2]) >> 2);
         basis = (BASIS_BIT_MASK & data[2]);
-        immediate = 0x01 & (data[2] >> 1);
-        repetitions = 0x0f & (data[2] >> 4);
+        immediate = (0x02 & data[2]) >> 1;
+        repetitions = (0xf0 & data[2]) >> 4;
     }
     uint8_t fidelity;
     uint8_t nghbr;
@@ -185,9 +185,9 @@ struct PreMeasureGatesSelection final: public CommandBase
     PreMeasureGatesSelection(const uint8_t* &data) : CommandBase(data)
     {
         angle1 = (0x1f & data[1]);
-        angle2 = (0x07 & (data[1] >> 5)) + (0x18 & (data[2] << 3));
-        angle2 = ANGLE_BIT_MASK & (data[2] >> 2);
-        target = 0x01 & (data[2] >> 7);
+        angle2 = ((0x03 & data[2]) << 3) | ((0xe0 & data[1]) >> 5);
+        angle3 = (0x7c & data[2]) >> 2;
+        target = (0x80 & data[2]) >> 7;
     }
     uint8_t angle1;
     uint8_t angle2;

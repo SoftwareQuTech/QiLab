@@ -16,10 +16,16 @@
 
 int main()
 {
+#if defined(__linux) && defined(__GLIBCXX__) && __GLIBCXX__ >= 20200128
+    // Workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=94087
+    // See https://github.com/quantumlib/Stim/issues/26
+    std::random_device d("/dev/urandom");
+#else
     std::random_device d;
+#endif
     std::seed_seq seq{d(), d(), d(), d(), d(), d(), d(), d()};
-    
-    ILogger* logger = new LocalLogger();
+
+    IProfiler* logger = new LocalProfiler();
     MockAdapter* adapter = new MockAdapter();
     StimAdapter* stim_adapter = new StimAdapter(seq, 3); //the seed is problematic
     MockHandler* handler = new MockHandler(logger);
@@ -30,7 +36,7 @@ int main()
 
     sim.run_simulation();
 
-    logger->save_to_file("test_mock_sim.txt");
+    logger->save_to_file("test_mock_sim");
 
 
     std::cout << "Executed the simulation" << std::endl;

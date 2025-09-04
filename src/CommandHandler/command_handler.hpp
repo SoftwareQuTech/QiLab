@@ -39,7 +39,7 @@ public:
      *                    caller must ensure the lifetime exceeds this object.
      */
     CommandHandler(ITransmissionHandler *handler);
-    CommandHandler(ITransmissionHandler *handler, ILogger*);
+    CommandHandler(ITransmissionHandler *handler, IProfiler*);
 
     /// Destructor. Does not delete the underlying transport handler.
     ~CommandHandler();
@@ -106,7 +106,7 @@ private:
      */
     uint8_t serialize_response(const ResponseData &resp, uint8_t *buffer);
 
-    ILogger* local_logger;
+    IProfiler* local_logger;
     // Disable copy/move
     CommandHandler(const CommandHandler &) = delete;
     CommandHandler(const CommandHandler &&) = delete;

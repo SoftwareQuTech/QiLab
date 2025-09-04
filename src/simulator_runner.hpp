@@ -15,7 +15,7 @@ class SimulatorRunner
 {
     public:
     SimulatorRunner(ISimulator*, CommandHandler*);
-    SimulatorRunner(ISimulator*, CommandHandler*, ILogger*);
+    SimulatorRunner(ISimulator*, CommandHandler*, IProfiler*);
     ~SimulatorRunner() = default;
 
     void run_simulation();
@@ -23,7 +23,7 @@ class SimulatorRunner
     private:
     ISimulator* simulator;
     CommandHandler* command_handler;
-    ILogger* event_logger;
+    IProfiler* event_logger;
     
     ResponseData execute_command(CommandBase*);
 

@@ -3,37 +3,85 @@
 
 #include "logger/logger.hpp"
 
-LocalLogger::LocalLogger()
+LocalProfiler::LocalProfiler() : initial_time_(std::chrono::steady_clock::now())
 {
-    initial_time = std::chrono::steady_clock::now();
+    events_.reserve(initial_number_of_logs_);
+    durations_.reserve(initial_number_of_logs_);
 }
 
-void LocalLogger::log_event(const std::string &event_id, const std::string &message)
+void LocalProfiler::log_event(const std::string &message)
 {
-    auto duration = std::chrono::steady_clock::now() - initial_time;
-    auto timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
-    auto mess = event_id + "," + message + "," + std::to_string(timestamp.count());
-    
-    data_lock.lock();
-    
-    if (log_num == logged_items.capacity())
-    {
-        logged_items.resize(log_num + 100);
-    }
-    logged_items[log_num++] = mess;
+    using namespace std::chrono;
+    const auto t = duration_cast<nanoseconds>(steady_clock::now() - initial_time_).count();
 
-    data_lock.unlock();
+    std::lock_guard<std::mutex> lk(mu_);
+    events_.emplace_back(message, t);
 }
 
-void LocalLogger::save_to_file(const std::string &path)
+bool LocalProfiler::register_profiling_event(const std::string &event_id)
 {
-    data_lock.lock();
-    std::ofstream file_to_write(path);
-    file_to_write << "Event ID, Message, Timestamp" << std::endl;
-    for (auto item : logged_items)
+    if (event_id.empty())
+        return false;
+    const auto now = std::chrono::steady_clock::now();
+    std::lock_guard<std::mutex> lk(mu_);
+    auto [it, inserted] = start_times_.emplace(event_id, now);
+    if (!inserted)
     {
-        file_to_write << item << std::endl;
+        // already present; refresh to now (or return false if you prefer)
+        it->second = now;
     }
-    file_to_write.close();
-    data_lock.unlock();
+    return true;
+}
+
+bool LocalProfiler::pe_start(const std::string &event_id)
+{
+    if (event_id.empty())
+        return false;
+    const auto now = std::chrono::steady_clock::now();
+    std::lock_guard<std::mutex> lk(mu_);
+    start_times_[event_id] = now; // auto-registers if absent
+    return true;
+}
+
+bool LocalProfiler::pe_stop(const std::string &event_id)
+{
+    if (event_id.empty())
+        return false;
+
+    const auto now = std::chrono::steady_clock::now();
+    std::lock_guard<std::mutex> lk(mu_);
+    auto it = start_times_.find(event_id);
+    if (it == start_times_.end())
+        return false;
+
+    const auto dur_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now - it->second).count();
+    durations_.emplace_back(event_id, dur_ns);
+    return true;
+}
+
+// Writes two CSVs:
+//   <base_path>_events.csv:    "Message,TimestampNs"
+//   <base_path>_durations.csv: "EventID,DurationNs"
+void LocalProfiler::save_to_file(const std::string &base_path)
+{
+    std::lock_guard<std::mutex> lk(mu_);
+
+    // events
+    {
+        std::ofstream ofs(base_path + "_events.csv");
+        ofs << "Message,TimestampNs\n";
+        for (const auto &event : events_)
+        {
+            ofs << event.first << "," << event.second << "\n";
+        }
+    }
+    // durations
+    {
+        std::ofstream ofs(base_path + "_durations.csv");
+        ofs << "EventID,DurationNs\n";
+        for (const auto &duration: durations_)
+        {
+            ofs << duration.first << "," << duration.second << "\n";
+        }
+    }
 }

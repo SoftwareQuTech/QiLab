@@ -39,7 +39,7 @@ public:
      *       @p num_qubits. Behavior for operations outside this range is
      *       implementation-defined (typically rejected).
      */
-    StimAdapter(const std::seed_seq &seed_seq, const uint8_t &num_qubits);
+    StimAdapter(std::seed_seq &seed_seq, const uint8_t &num_qubits);
 
     /**
      * @brief Construct with optional logger for performance measurements.
@@ -50,7 +50,7 @@ public:
      *               The caller retains ownership and must outlive this adapter,
      *               or pass nullptr to disable logging.
      */
-    StimAdapter(const std::seed_seq &seed_seq, const uint8_t &num_qubits, ILogger* logger);
+    StimAdapter(std::seed_seq &seed_seq, const uint8_t &num_qubits, IProfiler* logger);
 
     /// @brief Virtual destructor to allow cleanup via base pointer.
     ~StimAdapter() override;
@@ -140,6 +140,15 @@ public:
     uint8_t entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_address) override;
 
 private:
+
+    /**
+     * @brief Pseudo-random number generator for mock outcomes.
+     *
+     * Seeded from the provided @c std::seed_seq in the constructor to enable
+     * reproducible tests.
+     */
+    std::mt19937_64 generator;
+
     /**
      * @brief Underlying Stim tableau simulator instance.
      *
@@ -149,20 +158,12 @@ private:
     stim::TableauSimulator<64> stim_instance;
 
     /**
-     * @brief Pseudo-random number generator for mock outcomes.
-     *
-     * Seeded from the provided @c std::seed_seq in the constructor to enable
-     * reproducible tests.
-     */
-    std::mt19937_64 rng;
-
-    /**
      * @brief Optional non-owning logger for performance tracing.
      *
      * Not owned; lifetime is managed by the caller. May be nullptr to disable
      * logging. Guard calls appropriately in implementation.
      */
-    ILogger *local_logger;
+    IProfiler *local_logger;
 
     // Non-copyable and non-movable: each adapter owns unique simulator state.
     StimAdapter(const StimAdapter &) = delete;
