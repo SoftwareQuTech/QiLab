@@ -39,3 +39,6 @@
 
 #builds
 /build
+
+#vscode
+.vscode
