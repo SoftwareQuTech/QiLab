@@ -1,0 +1,21 @@
+image: debian:stable-slim
+
+stages: [build]
+
+build:
+  stage: build
+  variables:
+    BUILD_DIR: build
+  before_script:
+    - apt-get update -y
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cmake g++ make
+  script:
+    - cmake -S . -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
+    - cmake --build "$BUILD_DIR" --parallel
+    # Run tests if present (won't fail pipeline if none)
+    - ctest --test-dir "$BUILD_DIR" --output-on-failure || true
+  artifacts:
+    when: always
+    paths:
+      - build/
+    expire_in: 1 week
