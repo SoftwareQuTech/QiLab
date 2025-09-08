@@ -58,9 +58,10 @@ add_executable(stim_evaluation
   application.cpp
   src/CommandHandler/command_handler.cpp
   src/CommandHandler/handlers/mock_handler.cpp
-  src/simulator_runner.cpp
+  src/SimulatorRunner/simulator_runner.cpp
   src/Simulator/adapters/mock_adapter.cpp
   src/Simulator/adapters/stim_adapter.cpp
+  src/CommandNode/command_node.cpp
   src/logger/logger.cpp
   )
 target_link_libraries(stim_evaluation PRIVATE libstim)

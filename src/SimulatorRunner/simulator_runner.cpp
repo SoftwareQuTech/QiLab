@@ -1,21 +1,18 @@
 #include <memory>
 #include "simulator_runner.hpp"
 
-SimulatorRunner::SimulatorRunner(ISimulator *sim, CommandHandler *handler) : simulator(sim), command_handler(handler) {}
-SimulatorRunner::SimulatorRunner(ISimulator *sim, CommandHandler *handler, IProfiler *logger) : simulator(sim), command_handler(handler), event_logger(logger) {}
+SimulatorRunner::SimulatorRunner(ISimulator *sim) : simulator(sim) {}
+SimulatorRunner::SimulatorRunner(ISimulator *sim, IProfiler *logger) : simulator(sim), event_logger(logger) {}
 
-void SimulatorRunner::run_simulation()
+int16_t SimulatorRunner::register_node(uint8_t num_qubits)
 {
-    std::unique_ptr<CommandBase> command;
-    // receive some commands
-    for (int i = 0; i < 150000; i++)
-    {
-        if (!command_handler->receive_command(command))
-        {
-            ResponseData resp = execute_command(command.get());
-            command_handler->send_response(resp);
-        }
-    }
+    //TODO: run some verification on available qubits...
+    uint16_t id;
+
+    
+}
+bool SimulatorRunner::unregister_node(int16_t node_id)
+{
 }
 
 ResponseData SimulatorRunner::execute_command(CommandBase *command)
