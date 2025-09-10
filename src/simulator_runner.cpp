@@ -8,7 +8,7 @@ void SimulatorRunner::run_simulation()
 {
     std::unique_ptr<CommandBase> command;
     // receive some commands
-    for (int i = 0; i < 200; i++)
+    for (int i = 0; i < 1000; i++)
     {
         //if (event_logger != nullptr)
             //event_logger->log_event("EVENT 1", "Log before command");
@@ -18,7 +18,6 @@ void SimulatorRunner::run_simulation()
                 event_logger->pe_start("command_execution");
             ResponseData resp = execute_command(command.get());
             if (event_logger != nullptr)
-                event_logger->pe_start("command_execution");
                 event_logger->pe_stop("command_execution");
             command_handler->send_response(resp);
         }
@@ -90,7 +89,19 @@ ResponseData SimulatorRunner::execute_command(CommandBase *command)
         QubitSwap *cmd = static_cast<QubitSwap *>(command);
         simulator->qubit_swap(cmd->qubit1_address, cmd->qubit2_address);
         response.outcome_status = Outcome_Status_t::SUCCESS;
-    }
+    }break;
+    case Command_t::ENTANGLEMENT_ATTEMPT:
+    {
+        EntanglementAttempt *cmd = static_cast<EntanglementAttempt *>(command);
+        simulator->attempt_entanglement(cmd->fidelity, cmd->nghbr, cmd->qid);
+        response.outcome_status = Outcome_Status_t::SUCCESS;
+    }break;
+    case Command_t::ENTANGLEMENT_SWAP:
+    {
+        EntanglementSwap *cmd = static_cast<EntanglementSwap *>(command);
+        simulator->entanglement_swap(cmd->qubit1_address, cmd->qubit2_address);
+        response.outcome_status = Outcome_Status_t::SUCCESS;
+    }break;
     break;
     default:
         break;

@@ -22,8 +22,10 @@ public:
 private:
     void fill_mock_message(uint8_t*);
     void create_commands();
+    int latest_measure_response = -1;
     IProfiler* local_logger;
     std::vector<BaseC*> command_list;
+
     MockHandler(const MockHandler &) = delete;
     MockHandler(const MockHandler &&) = delete;
     MockHandler &operator=(MockHandler &) = delete;

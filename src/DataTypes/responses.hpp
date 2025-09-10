@@ -52,7 +52,7 @@ enum Bell_State_Measurent_t
 struct ResponseData
 {
     uint8_t cycle_count;
-    NodeStatus_t status;
+    NodeStatus_t status = NodeStatus_t::READY;
     uint8_t crc;
     uint8_t outcome_result;
     Outcome_Status_t outcome_status;
@@ -62,11 +62,11 @@ struct ResponseData
         buffer[0] = cycle_count;
         if(outcome_status & Outcome_Status_t::SUCCESS)
         {
-            buffer[1] = (0xff00 & ((uint8_t)outcome_result << 8)) + (0x00ff & (uint8_t)status);
+            buffer[1] = (0xf0 & ((uint8_t)outcome_result << 4)) | (0x0f & (uint8_t)status);
         }
         else
         {
-            buffer[1] = (0xff00 & ((uint8_t)outcome_status << 8)) + (0x00ff & (uint8_t)status);
+            buffer[1] = (0xf0 & ((uint8_t)outcome_status << 4)) | (0x0f & (uint8_t)status);
         }
         buffer[2] = (uint8_t)lp_data & 0x00ff;
         buffer[3] = crc; //TODO: calculate CRC

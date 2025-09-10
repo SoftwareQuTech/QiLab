@@ -37,6 +37,9 @@
 # debug information files
 *.dwo
 
+#drawio backup files
+*.bkp
+
 #builds
 /build
 

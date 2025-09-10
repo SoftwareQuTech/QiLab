@@ -161,13 +161,24 @@ uint8_t StimAdapter::qubit_measure(uint8_t qubit_address, bool basis)
 
     bool measurement = (stim_instance.measurement_record.storage[base] != 0);
 
-    //clear the record, no need to increase indefinitely
+    // clear the record, no need to increase indefinitely
     stim_instance.measurement_record.clear();
 
     return measurement;
 }
 uint8_t StimAdapter::attempt_entanglement(uint16_t fidelity, uint8_t neighbour_address, uint8_t qid)
 {
+    stim_instance.ensure_large_enough_for_qubits(std::max(qid, neighbour_address) + 1);
+
+    std::array<stim::GateTarget, 1> a{stim::GateTarget{qid}};
+    stim::SpanRef<stim::GateTarget> span(a.data(), a.data() + a.size());
+    stim::CircuitInstruction inst{stim::GateType::H, {}, span, ""};
+    stim_instance.do_H_XZ(inst);
+
+    std::array<stim::GateTarget, 2> b{stim::GateTarget{qid}, stim::GateTarget{neighbour_address}};
+    stim::SpanRef<stim::GateTarget> span1(b.data(), b.data() + b.size());
+    stim::CircuitInstruction inst1{stim::GateType::CX, {}, span1, ""};
+    stim_instance.do_ZCX(inst1);
     return 0;
 }
 uint8_t StimAdapter::entanglement_measure(uint16_t fidelity, uint8_t neighbour_address, bool basis, uint8_t qid, bool try_now, uint8_t repetitions)
@@ -182,8 +193,21 @@ void StimAdapter::qubit_move(uint8_t qubit1_address, uint8_t qubit2_address)
 }
 void StimAdapter::qubit_swap(uint8_t qubit1_address, uint8_t qubit2_address)
 {
+
 }
 uint8_t StimAdapter::entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_address)
 {
+    stim_instance.ensure_large_enough_for_qubits(std::max(qubit1_address, qubit2_address) + 1);
+
+    std::array<stim::GateTarget, 2> b{stim::GateTarget{qubit1_address}, stim::GateTarget{qubit2_address}};
+    stim::SpanRef<stim::GateTarget> span1(b.data(), b.data() + b.size());
+    stim::CircuitInstruction inst1{stim::GateType::CX, {}, span1, ""};
+    stim_instance.do_ZCX(inst1);
+
+    std::array<stim::GateTarget, 1> a{stim::GateTarget{qubit1_address}};
+    stim::SpanRef<stim::GateTarget> span(a.data(), a.data() + a.size());
+    stim::CircuitInstruction inst{stim::GateType::H, {}, span, ""};
+    stim_instance.do_H_XZ(inst);
+    
     return 0;
 }

@@ -21,6 +21,8 @@ public:
     /// @return number of bytes written.
     virtual std::size_t create_command(uint8_t *buff, std::size_t max_len) const = 0;
 
+    virtual bool conditional_execution(const int &cntx) { return true; }
+
 protected:
     // CRC-8/CCITT parameters.
     static constexpr uint8_t CRC8_CCITT_POLY = 0x07u;
@@ -46,6 +48,28 @@ protected:
         }
         return static_cast<uint8_t>(crc ^ CRC8_XOROUT);
     }
+};
+
+class ConditionalCommand: public BaseC
+{
+    public:
+    ConditionalCommand(std::function<bool(const int&)> p, BaseC* c)
+        : predicate(std::move(p)), actual_command(std::move(c)) {}
+
+    bool conditional_execution(const int &cntx) override
+    {
+        return predicate(cntx);
+    }
+
+    std::size_t create_command(uint8_t *buff, std::size_t max_len) const
+    {
+        actual_command->create_command(buff, max_len);
+        return 4;
+    }
+
+    private:
+    std::function<bool(const int &cntx)> predicate;
+    BaseC* actual_command;
 };
 
 struct Nop : public BaseC
