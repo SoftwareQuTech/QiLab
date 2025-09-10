@@ -39,6 +39,7 @@
 
 #drawio backup files
 *.bkp
+*.dtmp
 
 #builds
 /build
