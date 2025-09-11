@@ -7,6 +7,7 @@
 #pragma once
 #include <cstdint>
 #include <functional>
+#include <memory>
 
 #include "DataTypes/responses.hpp"
 #include "DataTypes/commands.hpp"
@@ -14,6 +15,6 @@
 struct CommandData_t
 {
     std::function<void(const ResponseData&)> response_callback;
-    CommandBase* command;
+    std::unique_ptr<CommandBase> command;   // OWN it here
     uint16_t node_id;
 };

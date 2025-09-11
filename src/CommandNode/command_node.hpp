@@ -13,8 +13,9 @@
 #include "CommandHandler/command_handler.hpp"
 class CommandNode
 {
-    CommandNode(int16_t id, CommandHandler *handler, std::function<void(const CommandData_t&)> cb);
-    CommandNode(int16_t id, CommandHandler *handler, std::function<void(const CommandData_t&)> cb, IProfiler*);
+    public:
+    CommandNode(int16_t id, CommandHandler *handler, std::function<void(CommandData_t)> cb);
+    CommandNode(int16_t id, CommandHandler *handler, std::function<void(CommandData_t)> cb, IProfiler*);
     ~CommandNode();
     
     void run_node();
@@ -22,7 +23,7 @@ class CommandNode
 
     private:
     bool abort = false;
-    std::function<void(const CommandData_t&)> simulator_command_data_notify;
+    std::function<void(CommandData_t)> simulator_command_data_notify;
     int16_t node_id = -1;
     std::mutex response_data_lock;
     ResponseData current_response;

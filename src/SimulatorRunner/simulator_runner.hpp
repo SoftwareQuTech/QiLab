@@ -6,7 +6,7 @@
 */
 
 #pragma once
-#include <map>
+#include <vector>
 
 #include "runnable.hpp"
 #include "Simulator/sim_interface.hpp"
@@ -14,7 +14,7 @@
 #include "logger/logger.hpp"
 #include "DataTypes/command_data.hpp"
 
-class SimulatorRunner final: IRunnable<CommandData_t>
+class SimulatorRunner final: public IRunnable<CommandData_t>
 {
     public:
     SimulatorRunner(ISimulator*);
@@ -30,10 +30,21 @@ class SimulatorRunner final: IRunnable<CommandData_t>
     private:
     ISimulator* simulator;
     IProfiler* event_logger;
-    std::map<int16_t, uint8_t> nodes;
+    //constrain on how much nodes to register
+    const uint16_t max_nodes_available = 20;
+    //NOTE: the tableuau stim expands automatically with requested address.
+    //no need for preallocation, just a constrain for memory
+    const uint16_t max_qubits_available = 200;
+
+    //the register of nodes. The IDs are the vector indeces,
+    //the pair represents initial qubit address(offset) and number of qubits 
+    //registered for the node
+    std::vector<std::pair<uint16_t,uint16_t>> nodes;
     uint16_t registered_qubits = 0;
 
-    ResponseData execute_command(CommandBase*);
+    bool abort = false;
+
+    ResponseData execute_command(std::unique_ptr<CommandBase> command, int16_t qubit_offset);
 
     SimulatorRunner(const SimulatorRunner&) = delete;
     SimulatorRunner(const SimulatorRunner&&) = delete;

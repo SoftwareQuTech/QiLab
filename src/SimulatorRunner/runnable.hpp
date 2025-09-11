@@ -8,24 +8,24 @@
 #include <cstdint>
 #include <mutex>
 #include <condition_variable>
-#include <queue>
+#include <deque>
 
 template <typename T>
 struct IRunnable
 {
-    std::queue<T> data_queue;
+    std::deque<T> data_queue;
     std::mutex data_lock;
     std::condition_variable data_ready;
 
-    void notify(const T& value)
+    void notify(T value)
     {
         {
             std::lock_guard<std::mutex> lock(data_lock);
-            data_queue.push(value);
+            data_queue.push_back(std::move(value));
             //std::cout << "Produced: " << value.command << "\n";
         }
         data_ready.notify_one();
     }
     virtual void on_run() = 0;
-    virtual void on_abort() = 0;
+    virtual void on_abort() = 0; 
 };
