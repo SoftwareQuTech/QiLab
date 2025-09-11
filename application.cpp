@@ -1,21 +1,33 @@
 // in a source code file
 #include <iostream>
-#include "stim.h"
 #include <random>
+#include <thread>
+#include <signal.h>
+
+#include "stim.h"
 #include "stim/circuit/gate_target.h"
 #include "stim/circuit/circuit_instruction.h"
 
 #include <Simulator/adapters/mock_adapter.hpp>
 #include <Simulator/adapters/stim_adapter.hpp>
-#include <simulator_runner.hpp>
+#include <SimulatorRunner/simulator_runner.hpp>
 #include <CommandHandler/command_handler.hpp>
+#include "CommandNode/command_node.hpp"
 #include <CommandHandler/handlers/mock_handler.hpp>
 #include "logger/logger.hpp"
 
+bool abort_sim = false;
 
+
+void signal_callback_handler(int signum) {
+   std::cout << "Caught signal " << signum << std::endl;
+   // Terminate program
+   abort_sim = true;
+}
 
 int main()
 {
+    signal(SIGINT, signal_callback_handler);
 #if defined(__linux) && defined(__GLIBCXX__) && __GLIBCXX__ >= 20200128
     // Workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=94087
     // See https://github.com/quantumlib/Stim/issues/26
@@ -24,27 +36,73 @@ int main()
     std::random_device d;
 #endif
     std::seed_seq seq{d(), d(), d(), d(), d(), d(), d(), d()};
+    std::vector<CommandNode> command_nodes;
 
     IProfiler* logger = new LocalProfiler();
-    MockAdapter* adapter = new MockAdapter();
     StimAdapter* stim_adapter = new StimAdapter(seq, 3); //the seed is problematic
-    MockHandler* handler = new MockHandler(logger);
-    CommandHandler* command_handler = new CommandHandler(handler, logger);
-    SimulatorRunner sim(stim_adapter, command_handler, logger);
+    SimulatorRunner sim(stim_adapter, logger);
+
+    MockHandler* transportA = new MockHandler(logger);
+    CommandHandler* command_handlerA = new CommandHandler(transportA, logger);
+    CommandNode* nodeA;
+    MockHandler* transportB = new MockHandler(logger);
+    CommandHandler* command_handlerB = new CommandHandler(transportB, logger);
+    CommandNode* nodeB;
+
+    int16_t node_id = sim.register_node(10);
+    if(node_id != -1)
+    {
+        nodeA = new CommandNode(node_id, command_handlerA, std::bind(&SimulatorRunner::notify, &sim, std::placeholders::_1), logger);
+    }
+
+    node_id = sim.register_node(5);
+    if(node_id != -1)
+    {
+        nodeB = new CommandNode(node_id, command_handlerB, std::bind(&SimulatorRunner::notify, &sim, std::placeholders::_1), logger);
+    }
 
     std::cout << "Starting simulation" << std::endl;
 
-    sim.run_simulation();
+    std::thread simulator_thread(&SimulatorRunner::on_run, &sim);
+
+    std::unique_ptr<std::jthread> thread_node_a;
+    std::unique_ptr<std::jthread> thread_node_b;
+    if(nodeA != nullptr)
+    {
+        thread_node_a = std::make_unique<std::jthread>([nodeA]{ nodeA->run_node(); });
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+
+    if(nodeB != nullptr)
+    {
+        thread_node_b = std::make_unique<std::jthread>([nodeB]{ nodeB->run_node(); });
+    }
+    while(!abort_sim)
+    {
+        //do nothing and wait for abort signal
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        //abort = true;
+    }
+
+    nodeA->stop_node();
+    nodeB->stop_node();
+    sim.on_abort();
+    
+    simulator_thread.join();
+    thread_node_a->join();
+    thread_node_b->join();
 
     logger->save_to_file("test_mock_sim");
 
 
     std::cout << "Executed the simulation" << std::endl;
 
-    delete adapter;
-    delete handler;
+    delete stim_adapter;
+    delete transportA;
+    delete command_handlerA;
+    delete transportB;
+    delete command_handlerB;
     delete logger;
-    delete command_handler;
     
     return 0;
 }

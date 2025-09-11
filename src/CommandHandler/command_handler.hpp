@@ -63,7 +63,7 @@ public:
      * @warning Not thread-safe unless the underlying transport is externally
      *          synchronized.
      */
-    uint8_t receive_command(std::unique_ptr<CommandBase> &cmd);
+    int8_t receive_command(std::unique_ptr<CommandBase> &cmd);
 
     /**
      * @brief Sends a response over the underlying transport.
@@ -81,7 +81,7 @@ public:
      * @warning Not thread-safe unless the underlying transport is externally
      *          synchronized.
      */
-    uint8_t send_response(const ResponseData &resp);
+    int8_t send_response(const ResponseData &resp);
 
 private:
     /// Pointer to the transport handler used for sending/receiving raw data.

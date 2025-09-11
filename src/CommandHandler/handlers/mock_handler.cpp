@@ -31,8 +31,6 @@ void MockHandler::create_commands()
 
 void MockHandler::fill_mock_message(uint8_t* output)
 {
-    static int message_num = 0;
-
     command_list[message_num++]->create_command(output, 4);
 
     if(message_num == command_list.size())
@@ -42,7 +40,7 @@ void MockHandler::fill_mock_message(uint8_t* output)
 }
 
 
-uint8_t MockHandler::send_data(const uint8_t* data_to_send, uint8_t size)
+int8_t MockHandler::send_data(const uint8_t* data_to_send, uint8_t size)
 {
     //no where to send at  the moment. so just log it
     //LOG(data to send)
@@ -51,7 +49,7 @@ uint8_t MockHandler::send_data(const uint8_t* data_to_send, uint8_t size)
 }
 
 
-uint8_t MockHandler::receive_data(uint8_t* received_data, uint8_t size)
+int8_t MockHandler::receive_data(uint8_t* received_data, uint8_t size)
 {
     if(size > EXPECTED_MESSAGE_SIZE)
     {

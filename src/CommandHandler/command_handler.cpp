@@ -8,7 +8,7 @@ CommandHandler::CommandHandler(ITransmissionHandler* transmission_handler, IProf
 
 CommandHandler::~CommandHandler() {}
 
-uint8_t CommandHandler::receive_command(std::unique_ptr<CommandBase> &cmd)
+int8_t CommandHandler::receive_command(std::unique_ptr<CommandBase> &cmd)
 {
     uint8_t data_buffer[COMMAND_MESSAGE_LENGTH] = {0};
 
@@ -27,7 +27,7 @@ uint8_t CommandHandler::receive_command(std::unique_ptr<CommandBase> &cmd)
     return 0;
 }
 
-uint8_t CommandHandler::send_response(const ResponseData &response)
+int8_t CommandHandler::send_response(const ResponseData &response)
 {
     uint8_t data_buffer[RESPONSE_MESSAGE_LENGTH];
     //response is simple, no need for extra overhead

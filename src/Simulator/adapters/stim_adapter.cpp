@@ -17,7 +17,6 @@ StimAdapter::~StimAdapter() {}
 
 bool StimAdapter::qubit_initialize(uint8_t qubit_address)
 {
-    // TODO: check if this exepts!!
     stim_instance.ensure_large_enough_for_qubits(qubit_address + 1);
 
     std::array<stim::GateTarget, 1> a{stim::GateTarget{qubit_address}};
@@ -33,7 +32,6 @@ bool StimAdapter::single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t
     {
         if (axis == Axis_t::X_AXIS)
         {
-            // TODO: check if this exepts!
             stim_instance.ensure_large_enough_for_qubits(qubit_address + 1);
             std::array<stim::GateTarget, 1> a{stim::GateTarget{qubit_address}};
             stim::SpanRef<stim::GateTarget> span(a.data(), a.data() + a.size());
@@ -43,7 +41,6 @@ bool StimAdapter::single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t
         }
         else if (axis == Axis_t::Y_AXIS)
         {
-            // TODO: check if this exepts!
             stim_instance.ensure_large_enough_for_qubits(qubit_address + 1);
             std::array<stim::GateTarget, 1> a{stim::GateTarget{qubit_address}};
             stim::SpanRef<stim::GateTarget> span(a.data(), a.data() + a.size());
@@ -53,7 +50,6 @@ bool StimAdapter::single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t
         }
         else if (axis == Axis_t::Z_AXIS)
         {
-            // TODO: check if this exepts!
             stim_instance.ensure_large_enough_for_qubits(qubit_address + 1);
             std::array<stim::GateTarget, 1> a{stim::GateTarget{qubit_address}};
             stim::SpanRef<stim::GateTarget> span(a.data(), a.data() + a.size());
@@ -68,7 +64,6 @@ bool StimAdapter::single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t
     {
         if (axis == Axis_t::X_AXIS)
         {
-            // TODO: check if this exepts!
             stim_instance.ensure_large_enough_for_qubits(qubit_address + 1);
             std::array<stim::GateTarget, 1> a{stim::GateTarget{qubit_address}};
             stim::SpanRef<stim::GateTarget> span(a.data(), a.data() + a.size());
@@ -78,7 +73,6 @@ bool StimAdapter::single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t
         }
         else if (axis == Axis_t::Y_AXIS)
         {
-            // TODO: check if this exepts!
             stim_instance.ensure_large_enough_for_qubits(qubit_address + 1);
             std::array<stim::GateTarget, 1> a{stim::GateTarget{qubit_address}};
             stim::SpanRef<stim::GateTarget> span(a.data(), a.data() + a.size());
@@ -88,7 +82,6 @@ bool StimAdapter::single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t
         }
         else if (axis == Axis_t::Z_AXIS)
         {
-            // TODO: check if this exepts!
             stim_instance.ensure_large_enough_for_qubits(qubit_address + 1);
             std::array<stim::GateTarget, 1> a{stim::GateTarget{qubit_address}};
             stim::SpanRef<stim::GateTarget> span(a.data(), a.data() + a.size());
@@ -102,7 +95,6 @@ bool StimAdapter::single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t
     {
         if (axis == Axis_t::X_AXIS)
         {
-            // TODO: check if this exepts!
             stim_instance.ensure_large_enough_for_qubits(qubit_address + 1);
             std::array<stim::GateTarget, 1> a{stim::GateTarget{qubit_address}};
             stim::SpanRef<stim::GateTarget> span(a.data(), a.data() + a.size());
@@ -112,7 +104,6 @@ bool StimAdapter::single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t
         }
         else if (axis == Axis_t::Y_AXIS)
         {
-            // TODO: check if this exepts!
             stim_instance.ensure_large_enough_for_qubits(qubit_address + 1);
             std::array<stim::GateTarget, 1> a{stim::GateTarget{qubit_address}};
             stim::SpanRef<stim::GateTarget> span(a.data(), a.data() + a.size());
@@ -122,7 +113,6 @@ bool StimAdapter::single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t
         }
         else if (axis == Axis_t::Z_AXIS)
         {
-            // TODO: check if this exepts!
             stim_instance.ensure_large_enough_for_qubits(qubit_address + 1);
             std::array<stim::GateTarget, 1> a{stim::GateTarget{qubit_address}};
             stim::SpanRef<stim::GateTarget> span(a.data(), a.data() + a.size());
