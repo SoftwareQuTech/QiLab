@@ -187,13 +187,19 @@ uint8_t StimAdapter::entanglement_measure(uint16_t fidelity, uint8_t neighbour_a
 }
 void StimAdapter::pre_measure_gates_selection(bool target, Angle_t angle_1, Angle_t angle_2, Angle_t angle_3)
 {
+    assert(("This function is not implemented", 0));
 }
 void StimAdapter::qubit_move(uint8_t qubit1_address, uint8_t qubit2_address)
 {
+    assert(("This function is not implemented", 0));
 }
 void StimAdapter::qubit_swap(uint8_t qubit1_address, uint8_t qubit2_address)
 {
-
+    stim_instance.ensure_large_enough_for_qubits(std::max(qubit1_address, qubit2_address) + 1);
+    std::array<stim::GateTarget, 2> a{stim::GateTarget{qubit1_address}, stim::GateTarget{qubit2_address}};
+    stim::SpanRef<stim::GateTarget> span(a.data(), a.data() + a.size());
+    stim::CircuitInstruction inst{stim::GateType::SWAP, {}, span, ""};
+    stim_instance.do_SWAP(inst);
 }
 uint8_t StimAdapter::entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_address)
 {

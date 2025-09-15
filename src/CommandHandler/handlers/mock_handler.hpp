@@ -16,8 +16,8 @@ public:
     MockHandler();
     MockHandler(IProfiler*);
     ~MockHandler();
-    uint8_t receive_data(uint8_t *, uint8_t) override;
-    uint8_t send_data(const uint8_t *, uint8_t) override;
+    int8_t receive_data(uint8_t *, uint8_t) override;
+    int8_t send_data(const uint8_t *, uint8_t) override;
 
 private:
     void fill_mock_message(uint8_t*);

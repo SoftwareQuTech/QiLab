@@ -34,6 +34,7 @@ void MockHandler::create_commands()
     // command_list.push_back(new QMeasure(1, 0, Axis_t::Z_AXIS));
     // command_list.push_back(new QMeasure(2, 0, Axis_t::Z_AXIS));
 
+    command_list.push_back(new QMove(1, 2));
     for(auto y = 0; y < 15; y++)
     {
         command_list.push_back(new InitQubit(y));
@@ -75,7 +76,7 @@ void MockHandler::fill_mock_message(uint8_t *output)
         message_num = 0;
 }
 
-uint8_t MockHandler::send_data(const uint8_t *data_to_send, uint8_t size)
+int8_t MockHandler::send_data(const uint8_t *data_to_send, uint8_t size)
 {
     // no where to send at  the moment. so just log it
     // local_logger->log_event("EVENT DATA", std::to_string(data_to_send[1]));
@@ -86,7 +87,7 @@ uint8_t MockHandler::send_data(const uint8_t *data_to_send, uint8_t size)
     return -1;
 }
 
-uint8_t MockHandler::receive_data(uint8_t *received_data, uint8_t size)
+int8_t MockHandler::receive_data(uint8_t *received_data, uint8_t size)
 {
     if (size > EXPECTED_MESSAGE_SIZE)
     {

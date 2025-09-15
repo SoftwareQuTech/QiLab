@@ -10,8 +10,6 @@ void SimulatorRunner::run_simulation()
     // receive some commands
     for (int i = 0; i < 1000; i++)
     {
-        //if (event_logger != nullptr)
-            //event_logger->log_event("EVENT 1", "Log before command");
         if (!command_handler->receive_command(command))
         {
             if (event_logger != nullptr)
@@ -100,6 +98,24 @@ ResponseData SimulatorRunner::execute_command(CommandBase *command)
     {
         EntanglementSwap *cmd = static_cast<EntanglementSwap *>(command);
         simulator->entanglement_swap(cmd->qubit1_address, cmd->qubit2_address);
+        response.outcome_status = Outcome_Status_t::SUCCESS;
+    }break;
+    case Command_t::ENTANGLEMENT_MEASURE:
+    {
+        EntangleMeasure *cmd = static_cast<EntangleMeasure *>(command);
+        simulator->entanglement_measure(cmd->fidelity, cmd->nghbr, cmd->basis, cmd->qid, cmd->immediate, cmd->repetitions);
+        response.outcome_status = Outcome_Status_t::SUCCESS;
+    }break;
+        case Command_t::PRE_MEASUREMENT_GATES_SELECTION:
+    {
+        PreMeasureGatesSelection *cmd = static_cast<PreMeasureGatesSelection *>(command);
+        simulator->pre_measure_gates_selection(cmd->target, cmd->angle1, cmd->angle2, cmd->angle3);
+        response.outcome_status = Outcome_Status_t::SUCCESS;
+    }break;
+        case Command_t::QUBIT_MOVE:
+    {
+        QubitMove *cmd = static_cast<QubitMove *>(command);
+        simulator->qubit_move(cmd->qubit1_address, cmd->qubit2_address);
         response.outcome_status = Outcome_Status_t::SUCCESS;
     }break;
     break;

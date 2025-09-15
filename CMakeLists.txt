@@ -20,8 +20,23 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 add_executable(stim_eval_test 
-                test/sample_test.cpp)
-target_link_libraries(stim_eval_test PRIVATE gtest_main)
+                src/CommandHandler/command_handler.cpp
+                test/sample_test.cpp
+                test/command_handler/test_command_handler.cpp
+                test/mocks/mock_transmission.hpp
+                )
+
+
+target_include_directories(stim_eval_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/test
+  ${CMAKE_SOURCE_DIR}             # if your headers are under the project root
+  ${CMAKE_SOURCE_DIR}/src         # adjust if needed
+  ${CMAKE_SOURCE_DIR}/include     # adjust if needed
+)
+
+target_link_libraries(stim_eval_test PRIVATE 
+GTest::gtest GTest::gtest_main GTest::gmock)
+
 include(GoogleTest)
 gtest_discover_tests(stim_eval_test)
 

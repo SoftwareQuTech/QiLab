@@ -184,14 +184,14 @@ struct PreMeasureGatesSelection final: public CommandBase
 {
     PreMeasureGatesSelection(const uint8_t* &data) : CommandBase(data)
     {
-        angle1 = (0x1f & data[1]);
-        angle2 = ((0x03 & data[2]) << 3) | ((0xe0 & data[1]) >> 5);
-        angle3 = (0x7c & data[2]) >> 2;
+        angle1 = static_cast<Angle_t>(0x1f & data[1]);
+        angle2 = static_cast<Angle_t>(((0x03 & data[2]) << 3) | ((0xe0 & data[1]) >> 5));
+        angle3 = static_cast<Angle_t>((0x7c & data[2]) >> 2);
         target = (0x80 & data[2]) >> 7;
     }
-    uint8_t angle1;
-    uint8_t angle2;
-    uint8_t angle3;
+    Angle_t angle1;
+    Angle_t angle2;
+    Angle_t angle3;
     bool target;
 };
 

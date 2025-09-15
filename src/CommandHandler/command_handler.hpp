@@ -63,7 +63,7 @@ public:
      * @warning Not thread-safe unless the underlying transport is externally
      *          synchronized.
      */
-    uint8_t receive_command(std::unique_ptr<CommandBase> &cmd);
+    int8_t receive_command(std::unique_ptr<CommandBase> &cmd);
 
     /**
      * @brief Sends a response over the underlying transport.
@@ -81,7 +81,7 @@ public:
      * @warning Not thread-safe unless the underlying transport is externally
      *          synchronized.
      */
-    uint8_t send_response(const ResponseData &resp);
+    int8_t send_response(const ResponseData &resp);
 
 private:
     /// Pointer to the transport handler used for sending/receiving raw data.
@@ -96,6 +96,8 @@ private:
      */
     std::unique_ptr<CommandBase> deserialize_command(const uint8_t *buffer);
 
+    bool verify_crc(const uint8_t* data, std::size_t len);
+
     /**
      * @brief Serializes a response into a raw byte array.
      *
@@ -104,7 +106,7 @@ private:
      *
      * @return status of the operation
      */
-    uint8_t serialize_response(const ResponseData &resp, uint8_t *buffer);
+    int8_t serialize_response(const ResponseData &resp, uint8_t *buffer);
 
     IProfiler* local_logger;
     // Disable copy/move

@@ -28,7 +28,7 @@ struct ITransmissionHandler
      * @param[in]  length Maximum number of bytes to receive.
      * @return Status of the operation TBD
      */
-    virtual uint8_t receive_data(uint8_t* buffer, uint8_t length) = 0;
+    virtual int8_t receive_data(uint8_t* buffer, uint8_t length) = 0;
 
     /**
      * @brief Sends data from the provided buffer.
@@ -37,5 +37,5 @@ struct ITransmissionHandler
      * @param[in] length Number of bytes to send.
      * @return Status of the operation TBD
      */
-    virtual uint8_t send_data(const uint8_t* buffer, uint8_t length) = 0;
+    virtual int8_t send_data(const uint8_t* buffer, uint8_t length) = 0;
 };
