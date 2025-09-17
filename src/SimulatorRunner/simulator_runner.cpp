@@ -43,24 +43,32 @@ void SimulatorRunner::on_run() {
         // --- CRITICAL SECTION: only take an item; do nothing else while locked.
         {
             std::unique_lock<std::mutex> lock(this->data_lock);
-            this->data_ready.wait(lock, [this]{
-                return abort || !this->data_queue.empty();
-            });
-            if (abort && this->data_queue.empty())
-                break;
+            this->data_ready.wait(lock, [this]
+                                  { return abort || !this->data_queue.empty(); });
+            //std::cout << "Unlocked mutex" << '\n';
 
             data = std::move(this->data_queue.front());
             this->data_queue.pop_front();
+            //just verify not an empty command is sent
+            if (data.response_callback == nullptr || data.command == nullptr)
+            {
+                //check for notify on abort
+                if (abort && this->data_queue.empty())
+                    break;
+                else
+                    continue;
+            }
+
         } // <-- unlock here before any heavy work or callbacks
 
         // --- PROCESS OUTSIDE THE LOCK
         ResponseData resp;
 
-        if (data.node_id < nodes.size()) {            // NOTE: '<' (not '<=')
-            std::cout << "Handling command from node: " << data.node_id << '\n';
+        if (data.node_id < nodes.size()) {      
+            //std::cout << "Handling command from node: " << data.node_id << '\n';
             resp = execute_command(std::move(data.command), nodes[data.node_id].first);
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(50)); // ok, outside lock
+            std::this_thread::sleep_for(std::chrono::milliseconds(10)); // ok, outside lock
             // Callbacks can safely enqueue new work now without deadlocking.
             data.response_callback(resp);
         } else {
@@ -73,108 +81,82 @@ void SimulatorRunner::on_run() {
 
 void SimulatorRunner::on_abort()
 {
-    // maybe run cleanup
+    // maybe run cleanup    
     abort = true;
+    this->notify(CommandData_t{});
 }
 
 ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> command, int16_t qubit_offset)
 {
     ResponseData response;
     // MAYBE a template!
-    std::cout << "Received command: [ " << command->command_type << " ] from offset: " << qubit_offset << std::endl;
+    //std::cout << "Received command: [ " << command->command_type << " ] from offset: " << qubit_offset << std::endl;
     switch (command->command_type)
     {
     case Command_t::NOP:
     {
+        if (event_logger != nullptr)
+            event_logger->pe_start("command_nop");
         NOP_Command *cmd = static_cast<NOP_Command *>(command.get());
         // actually no command
         response.outcome_status = Outcome_Status_t::SUCCESS;
+        if (event_logger != nullptr)
+            event_logger->pe_stop("command_nop");
     }
     break;
     case Command_t::QUBIT_INIT:
     {
-<<<<<<< HEAD
         if (event_logger != nullptr)
             event_logger->pe_start("command_init");
-        QubitInitialize *cmd = static_cast<QubitInitialize *>(command);
+        QubitInitialize *cmd = static_cast<QubitInitialize *>(command.get());
         auto res = simulator->qubit_initialize(cmd->qubit1_address);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
             event_logger->pe_stop("command_init");
-=======
-        QubitInitialize *cmd = static_cast<QubitInitialize *>(command.get());
-        auto res = simulator->qubit_initialize(cmd->qubit1_address + qubit_offset);
-        response.outcome_status = Outcome_Status_t::SUCCESS;
->>>>>>> 363b535 (make multithreaded work. Refactored some pointer data in order to own it properly. REMOVED static from mocked transport(bug). tested with 2 threads, they operate properly with results that are the same as one thread)
     }
     break;
     case Command_t::QUBIT_MEASUREMENT:
     {
-<<<<<<< HEAD
         if (event_logger != nullptr)
             event_logger->pe_start("command_measure");
-        QubitMeasure *cmd = static_cast<QubitMeasure *>(command);
-        auto res = simulator->qubit_measure(cmd->qubit1_address, cmd->basis);
-=======
         QubitMeasure *cmd = static_cast<QubitMeasure *>(command.get());
-        auto res = simulator->qubit_measure(cmd->qubit1_address + qubit_offset, cmd->basis);
->>>>>>> 363b535 (make multithreaded work. Refactored some pointer data in order to own it properly. REMOVED static from mocked transport(bug). tested with 2 threads, they operate properly with results that are the same as one thread)
+        auto res = simulator->qubit_measure(cmd->qubit1_address, cmd->basis);
         if (event_logger != nullptr)
             event_logger->log_event("Measured Qubit: " + std::to_string(cmd->qubit1_address + qubit_offset) + ", value [ " + std::to_string(res) + " ]");
         response.outcome_status = Outcome_Status_t::SUCCESS;
         response.outcome_result = (uint8_t)(res == true ? (Measurement_t::MEASURE_OUTCOME_MINUS_1) : (Measurement_t::MEASURE_OUTCOME_PLUS_1));
-<<<<<<< HEAD
         if (event_logger != nullptr)
             event_logger->pe_stop("command_measure");
-=======
->>>>>>> 363b535 (make multithreaded work. Refactored some pointer data in order to own it properly. REMOVED static from mocked transport(bug). tested with 2 threads, they operate properly with results that are the same as one thread)
     }
     break;
     case Command_t::SINGLE_QUBIT_GATE:
     {
-<<<<<<< HEAD
         if (event_logger != nullptr)
             event_logger->pe_start("command_single_gate");
-        SingleQubitGate *cmd = static_cast<SingleQubitGate *>(command);
+        SingleQubitGate *cmd = static_cast<SingleQubitGate *>(command.get());
         auto res = simulator->single_qubit_gate(cmd->qubit1_address, cmd->angle, cmd->axis);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
             event_logger->pe_stop("command_single_gate");
-=======
-        SingleQubitGate *cmd = static_cast<SingleQubitGate *>(command.get());
-        auto res = simulator->single_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->angle, cmd->axis);
-        response.outcome_status = Outcome_Status_t::SUCCESS;
->>>>>>> 363b535 (make multithreaded work. Refactored some pointer data in order to own it properly. REMOVED static from mocked transport(bug). tested with 2 threads, they operate properly with results that are the same as one thread)
     }
     break;
     case Command_t::TWO_QUBIT_GATE:
     {
-<<<<<<< HEAD
         if (event_logger != nullptr)
             event_logger->pe_start("command_two_q_gate");
-        TwoQubitGate *cmd = static_cast<TwoQubitGate *>(command);
+        TwoQubitGate *cmd = static_cast<TwoQubitGate *>(command.get());
         auto res = simulator->two_qubit_gate(cmd->qubit1_address, cmd->qubit2_address, cmd->angle, cmd->axis);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
             event_logger->pe_stop("command_two_q_gate");
-=======
-        TwoQubitGate *cmd = static_cast<TwoQubitGate *>(command.get());
-        auto res = simulator->two_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->qubit2_address + qubit_offset, cmd->angle, cmd->axis);
-        response.outcome_status = Outcome_Status_t::SUCCESS;
->>>>>>> 363b535 (make multithreaded work. Refactored some pointer data in order to own it properly. REMOVED static from mocked transport(bug). tested with 2 threads, they operate properly with results that are the same as one thread)
     }
     break;
     case Command_t::QUBIT_SWAP:
     {
-<<<<<<< HEAD
         if (event_logger != nullptr)
             event_logger->pe_start("command_qubit_swap");
-        QubitSwap *cmd = static_cast<QubitSwap *>(command);
-        simulator->qubit_swap(cmd->qubit1_address, cmd->qubit2_address);
-=======
         QubitSwap *cmd = static_cast<QubitSwap *>(command.get());
-        simulator->qubit_swap(cmd->qubit1_address + qubit_offset, cmd->qubit2_address + qubit_offset);
->>>>>>> 363b535 (make multithreaded work. Refactored some pointer data in order to own it properly. REMOVED static from mocked transport(bug). tested with 2 threads, they operate properly with results that are the same as one thread)
+        simulator->qubit_swap(cmd->qubit1_address, cmd->qubit2_address);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
             event_logger->pe_stop("command_qubit_swap");
@@ -184,7 +166,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
     {
         if (event_logger != nullptr)
             event_logger->pe_start("command_ent_attempt");
-        EntanglementAttempt *cmd = static_cast<EntanglementAttempt *>(command);
+        EntanglementAttempt *cmd = static_cast<EntanglementAttempt *>(command.get());
         simulator->attempt_entanglement(cmd->fidelity, cmd->nghbr, cmd->qid);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
@@ -195,7 +177,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
     {
         if (event_logger != nullptr)
             event_logger->pe_start("command_ent_swap");
-        EntanglementSwap *cmd = static_cast<EntanglementSwap *>(command);
+        EntanglementSwap *cmd = static_cast<EntanglementSwap *>(command.get());
         simulator->entanglement_swap(cmd->qubit1_address, cmd->qubit2_address);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
@@ -206,7 +188,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
     {
         if (event_logger != nullptr)
             event_logger->pe_start("command_ent_measure");
-        EntangleMeasure *cmd = static_cast<EntangleMeasure *>(command);
+        EntangleMeasure *cmd = static_cast<EntangleMeasure *>(command.get());
         simulator->entanglement_measure(cmd->fidelity, cmd->nghbr, cmd->basis, cmd->qid, cmd->immediate, cmd->repetitions);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
@@ -217,7 +199,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
     {
         if (event_logger != nullptr)
             event_logger->pe_start("command_pre_meas_gate");
-        PreMeasureGatesSelection *cmd = static_cast<PreMeasureGatesSelection *>(command);
+        PreMeasureGatesSelection *cmd = static_cast<PreMeasureGatesSelection *>(command.get());
         simulator->pre_measure_gates_selection(cmd->target, cmd->angle1, cmd->angle2, cmd->angle3);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
@@ -228,7 +210,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
     {
         if (event_logger != nullptr)
             event_logger->pe_start("command_qubit_move");
-        QubitMove *cmd = static_cast<QubitMove *>(command);
+        QubitMove *cmd = static_cast<QubitMove *>(command.get());
         simulator->qubit_move(cmd->qubit1_address, cmd->qubit2_address);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)

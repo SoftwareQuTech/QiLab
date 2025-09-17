@@ -32,18 +32,18 @@ void CommandNode::run_node()
             // add error logic
         }
         command_context.command = std::move(command);
-        //if(local_logger != nullptr)
-            //local_logger->log_event("Send command [ " + std::to_string(command_context.command->command_type) + " ] from -> " + std::to_string(node_id) );
-        if(local_logger != nullptr)
-            local_logger->pe_start("command_node_" + std::to_string(node_id));
+        // if(local_logger != nullptr)
+        //     local_logger->pe_start("command_node_" + std::to_string(node_id));
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
         simulator_command_data_notify(std::move(command_context));
         {
             std::lock_guard<std::mutex> lock(response_data_lock); //lock in case sim updates
             command_handler->send_response(current_response);
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        if(local_logger != nullptr)
-            local_logger->pe_stop("command_node_" + std::to_string(node_id));
+        // if(local_logger != nullptr)
+        //     local_logger->pe_stop("command_node_" + std::to_string(node_id));
     }
 
     //TODO: add clean exit
@@ -57,7 +57,7 @@ void CommandNode::stop_node()
 
 void CommandNode::update_response_data(const ResponseData &response_data)
 {
-    std::lock_guard<std::mutex> lock(response_data_lock); //lock while update
+    std::lock_guard<std::mutex> lock(response_data_lock); // lock while update
     current_response = response_data;
-    std::cout << "Received response from sim: " << node_id << std::endl;
+    // std::cout << "Received response from sim: " << node_id << std::endl;
 }

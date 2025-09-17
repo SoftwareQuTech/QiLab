@@ -25,12 +25,9 @@ private:
     int latest_measure_response = -1;
     IProfiler* local_logger;
     std::vector<BaseC*> command_list;
-
-<<<<<<< HEAD
-=======
+    
     int message_num = 0;
-
->>>>>>> 363b535 (make multithreaded work. Refactored some pointer data in order to own it properly. REMOVED static from mocked transport(bug). tested with 2 threads, they operate properly with results that are the same as one thread)
+    
     MockHandler(const MockHandler &) = delete;
     MockHandler(const MockHandler &&) = delete;
     MockHandler &operator=(MockHandler &) = delete;

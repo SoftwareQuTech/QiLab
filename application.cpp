@@ -71,26 +71,33 @@ int main()
     {
         thread_node_a = std::make_unique<std::jthread>([nodeA]{ nodeA->run_node(); });
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+    //std::this_thread::sleep_for(std::chrono::milliseconds(5000));
 
     if(nodeB != nullptr)
     {
-        thread_node_b = std::make_unique<std::jthread>([nodeB]{ nodeB->run_node(); });
+        //thread_node_b = std::make_unique<std::jthread>([nodeB]{ nodeB->run_node(); });
     }
     while(!abort_sim)
     {
         //do nothing and wait for abort signal
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        //abort = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(20000));
+        abort_sim = true;
     }
+    std::cout << "Timer expired" << std::endl;
 
     nodeA->stop_node();
-    nodeB->stop_node();
+    std::cout << "Node Stopped" << std::endl;
+    //nodeB->stop_node();
     sim.on_abort();
-    
+        std::cout << "Sim stopped" << std::endl;
+
     simulator_thread.join();
+        std::cout << "Join sim thread" << std::endl;
+
     thread_node_a->join();
-    thread_node_b->join();
+        std::cout << "Join node thread" << std::endl;
+
+    //thread_node_b->join();
 
     logger->save_to_file("simple_prg_10000r_3n");
 

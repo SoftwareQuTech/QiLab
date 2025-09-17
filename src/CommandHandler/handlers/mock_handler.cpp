@@ -24,18 +24,7 @@ MockHandler::~MockHandler()
 void MockHandler::create_commands()
 {
     const int number_of_nodes = 3;
-    // command_list.push_back(new InitQubit(0));
-    // command_list.push_back(new InitQubit(1));
-    // command_list.push_back(new InitQubit(2));
-    // command_list.push_back(new SingleQGate(0, Angle_t::_15_PI_16, Axis_t::X_AXIS));
-    // command_list.push_back(new SingleQGate(0, Angle_t::_8_PI_16, Axis_t::Y_AXIS));
-    // command_list.push_back(new TwoQGate(0, 1, Angle_t::_8_PI_16, Axis_t::X_AXIS));
-    // command_list.push_back(new TwoQGate(1, 2, Angle_t::_8_PI_16, Axis_t::X_AXIS));
-    // command_list.push_back(new QMeasure(0, 0, Axis_t::Z_AXIS));
-    // command_list.push_back(new QMeasure(1, 0, Axis_t::Z_AXIS));
-    // command_list.push_back(new QMeasure(2, 0, Axis_t::Z_AXIS));
 
-    //command_list.push_back(new QMove(1, 2));
     for(auto y = 0; y < (2 * number_of_nodes) - 2 ; y++)
     {
         command_list.push_back(new InitQubit(y));
@@ -63,10 +52,10 @@ void MockHandler::create_commands()
 }
 
 void MockHandler::fill_mock_message(uint8_t *output)
-{
-    static int message_num = 0;
-    static int it = 1; // simple way to count itterations
-
+{    
+    if(local_logger != nullptr)
+        local_logger->log_event("Using Response: " + std::to_string(latest_measure_response));
+        
     if (command_list[message_num]->conditional_execution(latest_measure_response))
     {
         command_list[message_num]->create_command(output, 4);
@@ -82,9 +71,11 @@ void MockHandler::fill_mock_message(uint8_t *output)
 int8_t MockHandler::send_data(const uint8_t *data_to_send, uint8_t size)
 {
     // no where to send at  the moment. so just log it
-    // local_logger->log_event("EVENT DATA", std::to_string(data_to_send[1]));
     if (size > 4)
         return -1;
+
+    if(local_logger != nullptr)
+        local_logger->log_event("Updating Response: " + std::to_string(((data_to_send[1] & 0x40) >> 6)));
 
     latest_measure_response = ((data_to_send[1] & 0x40) >> 6);
     return -1;
