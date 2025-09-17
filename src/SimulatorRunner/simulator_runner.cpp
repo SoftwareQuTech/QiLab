@@ -109,7 +109,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         if (event_logger != nullptr)
             event_logger->pe_start("command_init");
         QubitInitialize *cmd = static_cast<QubitInitialize *>(command.get());
-        auto res = simulator->qubit_initialize(cmd->qubit1_address);
+        auto res = simulator->qubit_initialize(cmd->qubit1_address + qubit_offset);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
             event_logger->pe_stop("command_init");
@@ -120,7 +120,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         if (event_logger != nullptr)
             event_logger->pe_start("command_measure");
         QubitMeasure *cmd = static_cast<QubitMeasure *>(command.get());
-        auto res = simulator->qubit_measure(cmd->qubit1_address, cmd->basis);
+        auto res = simulator->qubit_measure(cmd->qubit1_address + qubit_offset, cmd->basis);
         if (event_logger != nullptr)
             event_logger->log_event("Measured Qubit: " + std::to_string(cmd->qubit1_address + qubit_offset) + ", value [ " + std::to_string(res) + " ]");
         response.outcome_status = Outcome_Status_t::SUCCESS;
@@ -134,7 +134,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         if (event_logger != nullptr)
             event_logger->pe_start("command_single_gate");
         SingleQubitGate *cmd = static_cast<SingleQubitGate *>(command.get());
-        auto res = simulator->single_qubit_gate(cmd->qubit1_address, cmd->angle, cmd->axis);
+        auto res = simulator->single_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->angle, cmd->axis);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
             event_logger->pe_stop("command_single_gate");
@@ -145,7 +145,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         if (event_logger != nullptr)
             event_logger->pe_start("command_two_q_gate");
         TwoQubitGate *cmd = static_cast<TwoQubitGate *>(command.get());
-        auto res = simulator->two_qubit_gate(cmd->qubit1_address, cmd->qubit2_address, cmd->angle, cmd->axis);
+        auto res = simulator->two_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->qubit2_address + qubit_offset, cmd->angle, cmd->axis);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
             event_logger->pe_stop("command_two_q_gate");
@@ -156,7 +156,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         if (event_logger != nullptr)
             event_logger->pe_start("command_qubit_swap");
         QubitSwap *cmd = static_cast<QubitSwap *>(command.get());
-        simulator->qubit_swap(cmd->qubit1_address, cmd->qubit2_address);
+        simulator->qubit_swap(cmd->qubit1_address + qubit_offset, cmd->qubit2_address + qubit_offset);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
             event_logger->pe_stop("command_qubit_swap");
@@ -167,7 +167,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         if (event_logger != nullptr)
             event_logger->pe_start("command_ent_attempt");
         EntanglementAttempt *cmd = static_cast<EntanglementAttempt *>(command.get());
-        simulator->attempt_entanglement(cmd->fidelity, cmd->nghbr, cmd->qid);
+        simulator->attempt_entanglement(cmd->fidelity, cmd->nghbr + qubit_offset, cmd->qid + qubit_offset);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
             event_logger->pe_stop("command_ent_attempt");
@@ -178,7 +178,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         if (event_logger != nullptr)
             event_logger->pe_start("command_ent_swap");
         EntanglementSwap *cmd = static_cast<EntanglementSwap *>(command.get());
-        simulator->entanglement_swap(cmd->qubit1_address, cmd->qubit2_address);
+        simulator->entanglement_swap(cmd->qubit1_address + qubit_offset, cmd->qubit2_address + qubit_offset);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
             event_logger->pe_stop("command_ent_swap");
@@ -189,7 +189,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         if (event_logger != nullptr)
             event_logger->pe_start("command_ent_measure");
         EntangleMeasure *cmd = static_cast<EntangleMeasure *>(command.get());
-        simulator->entanglement_measure(cmd->fidelity, cmd->nghbr, cmd->basis, cmd->qid, cmd->immediate, cmd->repetitions);
+        simulator->entanglement_measure(cmd->fidelity, cmd->nghbr + qubit_offset, cmd->basis, cmd->qid + qubit_offset, cmd->immediate, cmd->repetitions);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
             event_logger->pe_stop("command_ent_measure");
@@ -200,7 +200,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         if (event_logger != nullptr)
             event_logger->pe_start("command_pre_meas_gate");
         PreMeasureGatesSelection *cmd = static_cast<PreMeasureGatesSelection *>(command.get());
-        simulator->pre_measure_gates_selection(cmd->target, cmd->angle1, cmd->angle2, cmd->angle3);
+        simulator->pre_measure_gates_selection(cmd->target + qubit_offset, cmd->angle1, cmd->angle2, cmd->angle3);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
             event_logger->pe_stop("command_pre_meas_gate");
@@ -211,7 +211,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         if (event_logger != nullptr)
             event_logger->pe_start("command_qubit_move");
         QubitMove *cmd = static_cast<QubitMove *>(command.get());
-        simulator->qubit_move(cmd->qubit1_address, cmd->qubit2_address);
+        simulator->qubit_move(cmd->qubit1_address + qubit_offset, cmd->qubit2_address + qubit_offset);
         response.outcome_status = Outcome_Status_t::SUCCESS;
         if (event_logger != nullptr)
             event_logger->pe_stop("command_qubit_move");

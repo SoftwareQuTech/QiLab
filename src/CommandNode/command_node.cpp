@@ -34,11 +34,11 @@ void CommandNode::run_node()
         command_context.command = std::move(command);
         // if(local_logger != nullptr)
         //     local_logger->pe_start("command_node_" + std::to_string(node_id));
-        
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
 
         simulator_command_data_notify(std::move(command_context));
         {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
             std::lock_guard<std::mutex> lock(response_data_lock); //lock in case sim updates
             command_handler->send_response(current_response);
         }

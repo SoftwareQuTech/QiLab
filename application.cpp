@@ -39,15 +39,24 @@ int main()
     std::vector<CommandNode> command_nodes;
 
     IProfiler* logger = new LocalProfiler();
-    StimAdapter* stim_adapter = new StimAdapter(seq, 3); //the seed is problematic
+    StimAdapter* stim_adapter = new StimAdapter(seq, 0); //the seed is problematic
     SimulatorRunner sim(stim_adapter, logger);
 
     MockHandler* transportA = new MockHandler(logger);
     CommandHandler* command_handlerA = new CommandHandler(transportA, logger);
     CommandNode* nodeA;
+
     MockHandler* transportB = new MockHandler(logger);
     CommandHandler* command_handlerB = new CommandHandler(transportB, logger);
     CommandNode* nodeB;
+
+    MockHandler* transportC = new MockHandler(logger);
+    CommandHandler* command_handlerC = new CommandHandler(transportC, logger);
+    CommandNode* nodeC;
+
+    MockHandler* transportD = new MockHandler(logger);
+    CommandHandler* command_handlerD = new CommandHandler(transportD, logger);
+    CommandNode* nodeD;
 
     int16_t node_id = sim.register_node(10);
     if(node_id != -1)
@@ -55,39 +64,66 @@ int main()
         nodeA = new CommandNode(node_id, command_handlerA, std::bind(&SimulatorRunner::notify, &sim, std::placeholders::_1), logger);
     }
 
-    node_id = sim.register_node(5);
+    node_id = sim.register_node(10);
     if(node_id != -1)
     {
         nodeB = new CommandNode(node_id, command_handlerB, std::bind(&SimulatorRunner::notify, &sim, std::placeholders::_1), logger);
     }
 
+    node_id = sim.register_node(10);
+    if(node_id != -1)
+    {
+        nodeC = new CommandNode(node_id, command_handlerC, std::bind(&SimulatorRunner::notify, &sim, std::placeholders::_1), logger);
+    }
+
+    node_id = sim.register_node(10);
+    if(node_id != -1)
+    {
+        nodeD = new CommandNode(node_id, command_handlerD, std::bind(&SimulatorRunner::notify, &sim, std::placeholders::_1), logger);
+    }
     std::cout << "Starting simulation" << std::endl;
 
     std::thread simulator_thread(&SimulatorRunner::on_run, &sim);
 
     std::unique_ptr<std::jthread> thread_node_a;
     std::unique_ptr<std::jthread> thread_node_b;
+    std::unique_ptr<std::jthread> thread_node_c;
+    std::unique_ptr<std::jthread> thread_node_d;
+
     if(nodeA != nullptr)
     {
         thread_node_a = std::make_unique<std::jthread>([nodeA]{ nodeA->run_node(); });
     }
-    //std::this_thread::sleep_for(std::chrono::milliseconds(5000));
 
     if(nodeB != nullptr)
     {
-        //thread_node_b = std::make_unique<std::jthread>([nodeB]{ nodeB->run_node(); });
+        thread_node_b = std::make_unique<std::jthread>([nodeB]{ nodeB->run_node(); });
+    }
+
+    if(nodeC != nullptr)
+    {
+        thread_node_c = std::make_unique<std::jthread>([nodeC]{ nodeC->run_node(); });
+    }
+
+    if(nodeD != nullptr)
+    {
+        thread_node_d = std::make_unique<std::jthread>([nodeD]{ nodeD->run_node(); });
     }
     while(!abort_sim)
     {
         //do nothing and wait for abort signal
-        std::this_thread::sleep_for(std::chrono::milliseconds(20000));
+        std::this_thread::sleep_for(std::chrono::seconds(240));
         abort_sim = true;
     }
     std::cout << "Timer expired" << std::endl;
 
     nodeA->stop_node();
+    nodeB->stop_node();
+    nodeD->stop_node();
+    nodeC->stop_node();
+
     std::cout << "Node Stopped" << std::endl;
-    //nodeB->stop_node();
+
     sim.on_abort();
         std::cout << "Sim stopped" << std::endl;
 
@@ -95,12 +131,14 @@ int main()
         std::cout << "Join sim thread" << std::endl;
 
     thread_node_a->join();
+    thread_node_b->join();
+    thread_node_c->join();
+    thread_node_d->join();
+
         std::cout << "Join node thread" << std::endl;
 
-    //thread_node_b->join();
 
     logger->save_to_file("simple_prg_10000r_3n");
-
 
     std::cout << "Executed the simulation" << std::endl;
 
@@ -109,7 +147,11 @@ int main()
     delete command_handlerA;
     delete transportB;
     delete command_handlerB;
+    delete transportC;
+    delete command_handlerC;
+    delete transportD;
+    delete command_handlerD;
     delete logger;
-    
+
     return 0;
 }

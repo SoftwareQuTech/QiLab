@@ -53,8 +53,8 @@ void MockHandler::create_commands()
 
 void MockHandler::fill_mock_message(uint8_t *output)
 {    
-    if(local_logger != nullptr)
-        local_logger->log_event("Using Response: " + std::to_string(latest_measure_response));
+    // if(local_logger != nullptr)
+    //     local_logger->log_event("Using Response: " + std::to_string(latest_measure_response));
         
     if (command_list[message_num]->conditional_execution(latest_measure_response))
     {
@@ -74,8 +74,8 @@ int8_t MockHandler::send_data(const uint8_t *data_to_send, uint8_t size)
     if (size > 4)
         return -1;
 
-    if(local_logger != nullptr)
-        local_logger->log_event("Updating Response: " + std::to_string(((data_to_send[1] & 0x40) >> 6)));
+    // if(local_logger != nullptr)
+    //     local_logger->log_event("Updating Response: " + std::to_string(((data_to_send[1] & 0x40) >> 6)));
 
     latest_measure_response = ((data_to_send[1] & 0x40) >> 6);
     return -1;
