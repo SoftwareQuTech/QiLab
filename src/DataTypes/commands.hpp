@@ -154,7 +154,9 @@ struct EntanglementAttempt final: public CommandBase
     {
         fidelity = (FIDELITY_BIT_MASK & data[1]);
         nghbr = (NGHBR_BIT_MASK & data[1]) >> 4;
-        qid = ((QID_BIT_MASK & data[2]) >> 2);
+        //TODO: Figure out how this is done in QNodeOS
+        //WORKAROUND: get the address of the qubit as a whole
+        qid = data[2];//((QID_BIT_MASK & data[2]) >> 2);
     }
     uint8_t fidelity;
     uint8_t nghbr;

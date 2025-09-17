@@ -201,7 +201,9 @@ struct Entangle : public BaseC
 
         buff[0] = Command_t::ENTANGLEMENT_ATTEMPT;
         buff[1] = ((n << 4) & NGHBR_BIT_MASK) | (FIDELITY_BIT_MASK & f);
-        buff[2] = (q << 2) & QID_BIT_MASK;
+        //TODO: Figure out how this is done in QNodeOS
+        //WORKAROUND: get the address of the qubit as a whole
+        buff[2] = q;//(q << 2) & QID_BIT_MASK;
         uint8_t crc = crc8_ccitt(buff, 3);
         buff[3] = crc;
 

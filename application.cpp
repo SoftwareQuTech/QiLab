@@ -36,7 +36,7 @@ int main()
 
     sim.run_simulation();
 
-    logger->save_to_file("test_mock_sim");
+    logger->save_to_file("simple_prg_10000r_3n");
 
 
     std::cout << "Executed the simulation" << std::endl;
