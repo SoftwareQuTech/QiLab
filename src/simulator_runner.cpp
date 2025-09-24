@@ -8,7 +8,14 @@ void SimulatorRunner::run_simulation()
 {
     std::unique_ptr<CommandBase> command;
     // receive some commands
-    for (int i = 0; i < 150000; i++)
+    constexpr int N = 200000;
+    auto t0 = std::chrono::steady_clock::now();
+    for (int i = 0; i < N; i++)
+        (void)std::chrono::steady_clock::now();
+    auto t1 = std::chrono::steady_clock::now();
+    printf("steady_clock::now() ≈ %.1f ns\n",
+           1e9 * std::chrono::duration<double>(t1 - t0).count() / N);
+    for (int i = 0; i < 1500; i++)
     {
         if (!command_handler->receive_command(command))
         {
@@ -26,9 +33,13 @@ ResponseData SimulatorRunner::execute_command(CommandBase *command)
     {
     case Command_t::NOP:
     {
+        if (event_logger != nullptr)
+            event_logger->pe_start("command_nop");
         NOP_Command *cmd = static_cast<NOP_Command *>(command);
         // actually no command
         response.outcome_status = Outcome_Status_t::SUCCESS;
+        if (event_logger != nullptr)
+            event_logger->pe_stop("command_nop");
     }
     break;
     case Command_t::QUBIT_INIT:
