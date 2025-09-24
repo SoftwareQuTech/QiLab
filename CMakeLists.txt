@@ -62,6 +62,7 @@ add_executable(stim_evaluation
   src/Simulator/adapters/mock_adapter.cpp
   src/Simulator/adapters/stim_adapter.cpp
   src/CommandNode/command_node.cpp
+  src/SimulatorRunner/entanglement_manager.cpp
   src/logger/logger.cpp
   )
 target_link_libraries(stim_evaluation PRIVATE libstim)

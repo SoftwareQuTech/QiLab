@@ -68,7 +68,7 @@ void SimulatorRunner::on_run() {
             //std::cout << "Handling command from node: " << data.node_id << '\n';
             resp = execute_command(std::move(data.command), nodes[data.node_id].first);
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(10)); // ok, outside lock
+            //std::this_thread::sleep_for(std::chrono::milliseconds(10)); // ok, outside lock
             // Callbacks can safely enqueue new work now without deadlocking.
             data.response_callback(resp);
         } else {
