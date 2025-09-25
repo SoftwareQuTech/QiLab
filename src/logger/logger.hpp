@@ -66,7 +66,7 @@ struct IProfiler
      * @param message Arbitrary label for the event; may be empty.
      * @thread_safety Thread-safe if the concrete implementation is.
      */
-    virtual void log_event(const std::string& message) = 0;
+    virtual void log_event(std::string_view message) = 0;
 
     /**
      * @brief Register (or hint) an event identifier intended for timing.
@@ -78,7 +78,7 @@ struct IProfiler
      * @return `true` on success; `false` if @p event_id is empty or rejected.
      * @thread_safety Thread-safe iff the concrete implementation is.
      */
-    virtual bool register_profiling_event(const std::string& event_id) = 0;
+    virtual bool register_profiling_event(std::string_view event_id) = 0;
 
     /**
      * @brief Start timing a region identified by @p event_id.
@@ -90,7 +90,7 @@ struct IProfiler
      * @return `true` on success; `false` if the input is invalid.
      * @thread_safety Thread-safe iff the concrete implementation is.
      */
-    virtual bool pe_start(const std::string& event_id) = 0;
+    virtual bool pe_start(std::string_view event_id) = 0;
 
     /**
      * @brief Stop timing a region identified by @p event_id and record duration.
@@ -102,7 +102,7 @@ struct IProfiler
      * @return `true` if a duration was recorded; `false` otherwise.
      * @thread_safety Thread-safe iff the concrete implementation is.
      */
-    virtual bool pe_stop(const std::string& event_id) = 0;
+    virtual bool pe_stop(std::string_view event_id) = 0;
 
     /**
      * @brief Persist recorded data to CSV files.
@@ -148,28 +148,28 @@ public:
      * @warning Large volumes of events may increase contention on the internal
      * mutex; consider batching or sampling for very hot paths.
      */
-    void log_event(const std::string &message = "") override;
+    void log_event(std::string_view message = "") override;
 
     /**
      * @copydoc IProfiler::register_profiling_event()
      *
      * @note Calling this is optional; pe_start() will implicitly create keys.
      */
-    bool register_profiling_event(const std::string& event_id) override;
+    bool register_profiling_event(std::string_view event_id) override;
 
     /**
      * @copydoc IProfiler::pe_start()
      *
      * @post A subsequent pe_stop(event_id) will emit a duration sample.
      */
-    bool pe_start(const std::string& event_id) override;
+    bool pe_start(std::string_view event_id) override;
 
     /**
      * @copydoc IProfiler::pe_stop()
      *
      * @post On success, a `(event_id, duration_ns)` sample is appended.
      */
-    bool pe_stop(const std::string& event_id) override;
+    bool pe_stop(std::string_view event_id) override;
 
     /**
      * @copydoc IProfiler::save_to_file()
@@ -193,13 +193,13 @@ private:
     ///@{
 
     /// @brief Free-form events: `(message, timestamp_ns)`.
-    std::vector<std::pair<std::string, long long>> events_;
+    std::vector<std::pair<std::string_view, long long>> events_;
 
     /// @brief Duration samples: `(event_id, duration_ns)`.
-    std::vector<std::pair<std::string, long long>> durations_;
+    std::vector<std::pair<std::string_view, long long>> durations_;
 
     /// @brief Start times per event id (steady_clock time points).
-    std::unordered_map<std::string, std::chrono::steady_clock::time_point> start_times_;
+    std::unordered_map<std::string_view, std::chrono::steady_clock::time_point> start_times_;
 
     ///@}
 

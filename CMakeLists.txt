@@ -52,6 +52,18 @@ if(NOT stim_POPULATED)
   add_subdirectory(${stim_SOURCE_DIR})
 endif()
 
+
+option(ENABLE_PROFILING "Enable fast TLS profiler" ON)
+
+if(ENABLE_PROFILING)
+  add_compile_definitions(PROF_ENABLED=1)
+  add_library(profiler STATIC src/logger/profiler.cpp)
+else()
+  add_compile_definitions(PROF_ENABLED=0)
+  # Do NOT compile profiler.cpp when disabled
+endif()
+
+
 include_directories("src")
 
 add_executable(stim_evaluation
@@ -64,6 +76,7 @@ add_executable(stim_evaluation
   src/CommandNode/command_node.cpp
   src/SimulatorRunner/entanglement_manager.cpp
   src/logger/logger.cpp
+  src/logger/profiler.cpp
   )
 target_link_libraries(stim_evaluation PRIVATE libstim)
 
