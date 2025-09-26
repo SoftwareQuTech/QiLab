@@ -4,7 +4,7 @@
 #include <vector>
 #include <cstring>
 
-#include "test/mocks/mock_transmission.hpp"
+#include "mocks/mock_transmission.hpp"
 #include "CommandHandler/command_handler.hpp"
 #include "DataTypes/commands.hpp"     // Command_t, Angle_t, Axis_t, CommandBase, masks
 

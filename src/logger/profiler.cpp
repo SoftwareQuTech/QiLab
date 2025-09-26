@@ -173,12 +173,12 @@ std::size_t Profiler::event_count() const {
     return max_events_;
 }
 
-// // RAII
-// ProfGuard::ProfGuard(std::size_t reserve_per_event) {
-//     Profiler::instance().thread_init(reserve_per_event);
-// }
-// ProfGuard::~ProfGuard() {
-//     Profiler::instance().thread_merge_data();
-// }
+// RAII
+ProfGuard::ProfGuard(std::size_t reserve_per_event) {
+    Profiler::instance().thread_init(reserve_per_event);
+}
+ProfGuard::~ProfGuard() {
+    Profiler::instance().thread_merge_data();
+}
 
 #endif // PROF_ENABLED

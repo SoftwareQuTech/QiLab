@@ -58,9 +58,9 @@ private:
     static thread_local ProfilerLocalStorage local_storage_;
 };
 
-// struct ProfGuard {
-//     explicit ProfGuard(std::size_t reserve_per_event = (1u << 15));
-//     ~ProfGuard();
-// };
+struct ProfGuard {
+    explicit ProfGuard(std::size_t reserve_per_event = (1u << 15));
+    ~ProfGuard();
+};
 
 #endif // PROF_ENABLED
