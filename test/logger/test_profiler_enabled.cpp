@@ -41,11 +41,15 @@ TEST(Registration, SameNameSameId) {
 #endif
 }
 
-TEST(LazyMacros, StartStopWorksAndRecords) {
+TEST(LazyMacros, StartStopWorksAndRecords)
+{
 #if PROF_ENABLED
-  ProfGuard guard{1024};         // RAII init/flush for THIS thread
-  PROF_START("macro_event");
-  PROF_STOP("macro_event");
+  {
+    ProfGuard guard{1024}; // RAII init/flush for THIS thread
+    PROF_START("macro_event");
+    PROF_STOP("macro_event");
+  }
+  //PROF_THREAD_FLUSH();
 
   auto base = temp_base("lazy");
   Profiler::instance().dump_csv(base.string());
@@ -54,8 +58,13 @@ TEST(LazyMacros, StartStopWorksAndRecords) {
   // Header + >=1 row for "macro_event"
   ASSERT_GE(durations.size(), 2u);
   bool found = false;
-  for (auto& ln : durations) {
-    if (ln.rfind("macro_event,", 0) == 0) { found = true; break; }
+  for (auto &ln : durations)
+  {
+    if (ln.rfind("macro_event,", 0) == 0)
+    {
+      found = true;
+      break;
+    }
   }
   EXPECT_TRUE(found);
 #else

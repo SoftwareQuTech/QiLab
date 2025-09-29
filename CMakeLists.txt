@@ -62,6 +62,7 @@ add_executable(qilab
   )
 target_link_libraries(qilab PRIVATE libstim)
 
+include(CTest)                 # defines BUILD_TESTING (default ON)
 
 # Tests live in a separate CMake; add only when requested
 if(BUILD_TESTING)

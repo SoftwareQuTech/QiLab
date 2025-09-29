@@ -12,8 +12,6 @@ include(FetchContent)
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-enable_testing()
-
 add_executable(stim_command_handler_test 
                 ${CMAKE_CURRENT_SOURCE_DIR}/command_handler/test_command_handler.cpp
                 ${CMAKE_CURRENT_SOURCE_DIR}/mocks/mock_transmission.hpp
@@ -23,16 +21,13 @@ target_link_libraries(stim_command_handler_test PRIVATE
 GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
 add_test(NAME stim_command_handler_test COMMAND stim_command_handler_test)
 
-# -------- Enabled tests (only if runtime built) --------
-if(TARGET profiler) # exists either way; only links to src/prof.cpp when enabled
-  add_executable(prof_tests_enabled 
-  ${CMAKE_CURRENT_SOURCE_DIR}/logger/test_profiler_enabled.cpp)
+add_executable(prof_tests_enabled 
+${CMAKE_CURRENT_SOURCE_DIR}/logger/test_profiler_enabled.cpp)
 target_include_directories(prof_tests_enabled PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-  target_link_libraries(prof_tests_enabled PRIVATE GTest::gtest_main profiler qilab_lib)
-  # Make sure tests see the enabled flag
-  target_compile_definitions(prof_tests_enabled PRIVATE PROF_ENABLED=1)
-  add_test(NAME prof_enabled COMMAND prof_tests_enabled)
-endif()
+target_link_libraries(prof_tests_enabled PRIVATE GTest::gtest_main profiler qilab_lib)
+# Make sure tests see the enabled flag
+target_compile_definitions(prof_tests_enabled PRIVATE PROF_ENABLED=1)
+add_test(NAME prof_enabled COMMAND prof_tests_enabled)
 
 # -------- Disabled tests (always build) --------
 add_executable(prof_tests_disabled 
