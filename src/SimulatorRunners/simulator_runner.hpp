@@ -14,18 +14,18 @@
 #include "logger/logger.hpp"
 #include "DataTypes/command_data.hpp"
 
-class SimulatorRunner final: public IRunnable<CommandData_t>
+class SimulatorRunner final: public IRunnable<TransportData<CommandBase>>
 {
     public:
     SimulatorRunner(ISimulator*);
-    SimulatorRunner(ISimulator*, IProfiler*);
     ~SimulatorRunner() = default;
 
-    void on_run() override;
+    int on_run() override;
     void on_abort() override;
 
     int16_t register_node(uint8_t num_qubits);
     bool unregister_node(int16_t node_id);
+    void set_notify_callback(std::function<void(TransportData<ResponseData>)> cb);
 
     private:
     ISimulator* simulator;
@@ -45,6 +45,7 @@ class SimulatorRunner final: public IRunnable<CommandData_t>
     bool abort = false;
 
     ResponseData execute_command(std::unique_ptr<CommandBase> command, int16_t qubit_offset);
+    std::function<void(TransportData<ResponseData>)> response_notify;
 
     SimulatorRunner(const SimulatorRunner&) = delete;
     SimulatorRunner(const SimulatorRunner&&) = delete;

@@ -25,12 +25,12 @@ class EntanglementManager: public IRunnable<CommandData_t>
     EntanglementManager(IProfiler*);
     ~EntanglementManager() = default;
 
-    void on_run() override;
+    int on_run() override;
     void on_abort() override;
 
     private:
     //checks if this pair is still valid based on timestamp
-    bool check_pair_valid(const EntanglementRequest &request);
+    inline bool check_pair_valid(const EntanglementRequest &request);
     //try to match a pair for entanglement, and if it does, issue the commands to the runner
     bool match_ent_pair(const EntanglementRequest &request);
 

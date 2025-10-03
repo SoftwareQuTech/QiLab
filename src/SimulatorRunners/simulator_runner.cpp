@@ -5,12 +5,16 @@
 #include <chrono>
 #include "logger/profiler_api.hpp"
 
+#if defined(__x86_64__) || defined(_M_X64)
+#include <immintrin.h>
+#define CPU_PAUSE() _mm_pause()
+#elif defined(__aarch64__)
+#define CPU_PAUSE() asm volatile("yield" ::: "memory")
+#else
+#define CPU_PAUSE() ((void)0)
+#endif
+
 SimulatorRunner::SimulatorRunner(ISimulator *sim) : simulator(sim)
-{
-    PROF_THREAD_INIT();
-    // PROF_EID("command_nop");
-}
-SimulatorRunner::SimulatorRunner(ISimulator *sim, IProfiler *logger) : simulator(sim), event_logger(logger)
 {
     PROF_THREAD_INIT();
     // PROF_EID("command_nop");
@@ -19,8 +23,6 @@ SimulatorRunner::SimulatorRunner(ISimulator *sim, IProfiler *logger) : simulator
 int16_t SimulatorRunner::register_node(uint8_t num_qubits)
 {
     int16_t node_id = -1;
-
-    std::lock_guard<std::mutex> lock(this->data_lock);
 
     if (nodes.size() >= max_nodes_available)
     {
@@ -46,60 +48,44 @@ bool SimulatorRunner::unregister_node(int16_t node_id)
     // TODO: Add logic for deregistration and recalculating qubit offset and addresses
     // maybe qubit reset will be needed as well in order to ensure state
 }
-
-void SimulatorRunner::on_run()
+void SimulatorRunner::set_notify_callback(std::function<void(TransportData<ResponseData>)> cb)
 {
+    response_notify = cb;
+}
+
+int SimulatorRunner::on_run()
+{
+    if (response_notify == nullptr)
+    {
+        std::cout << "No callback, Bye!" << std::endl;
+        return -1;
+    }
     while (!abort)
     {
-        CommandData_t data;
-        // --- CRITICAL SECTION: only take an item; do nothing else while locked.
-        // --- waiting is super slow when waking up the thread.
-        // --- One solution is to stay awake all the time and poll for new data
-        // --- If this is not enough a ring buffer with no locks will be the fastest
+        TransportData<CommandBase> data;
+        PROF_START("simulation_thread_log");
+        if (this->lockfree_queue.pop(data))
         {
-            std::unique_lock<std::mutex> lock(this->data_lock);
-            // this->data_ready.wait(lock, [this]
-            //                       { return abort || !this->data_queue.empty(); });
-            // std::cout << "Unlocked mutex" << '\n';
-            if (!data_queue.empty())
+            ResponseData resp;
+            if (data.node_id < nodes.size())
             {
-                data = std::move(this->data_queue.front());
-                this->data_queue.pop_front();
-                // just verify not an empty command is sent
-                if (data.response_callback == nullptr || data.command == nullptr)
-                {
-                    // check for notify on abort
-                    if (abort && this->data_queue.empty())
-                        break;
-                    else
-                        continue;
-                }
+                // std::cout << "Handling command from node: " << data.node_id << '\n';
+                resp = execute_command(std::move(data.transport), nodes[data.node_id].first);
+
+                // std::this_thread::sleep_for(std::chrono::milliseconds(10)); // ok, outside lock
+                //  Callbacks can safely enqueue new work now without deadlocking.
+                response_notify({std::make_unique<ResponseData>(resp), data.node_id});
             }
-            else
-            {
-                continue;
-            }
-
-        } // <-- unlock here before any heavy work or callbacks
-
-        // --- PROCESS OUTSIDE THE LOCK
-        ResponseData resp;
-        if (data.node_id < nodes.size())
-        {
-            // std::cout << "Handling command from node: " << data.node_id << '\n';
-            resp = execute_command(std::move(data.command), nodes[data.node_id].first);
-
-            // std::this_thread::sleep_for(std::chrono::milliseconds(10)); // ok, outside lock
-            //  Callbacks can safely enqueue new work now without deadlocking.
-            data.response_callback(resp);
         }
         else
         {
+            CPU_PAUSE();
             // handle invalid node id, maybe set an error in resp then callback
         }
+        // --- PROCESS OUTSIDE THE LOCK
+        PROF_STOP("simulation_thread_log");
     }
     PROF_THREAD_FLUSH();
-
     // optional: drain/notify when aborting
 }
 
@@ -107,7 +93,6 @@ void SimulatorRunner::on_abort()
 {
     // maybe run cleanup
     abort = true;
-    this->notify(CommandData_t{});
 }
 
 ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> command, int16_t qubit_offset)
@@ -140,7 +125,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         PROF_START("qubit_measurement");
         QubitMeasure *cmd = static_cast<QubitMeasure *>(command.get());
         auto res = simulator->qubit_measure(cmd->qubit1_address + qubit_offset, cmd->basis);
-        //PROF_EVENT("Measured Qubit: " + std::to_string(cmd->qubit1_address + qubit_offset) + ", value [ " + std::to_string(res) + " ]");
+        // PROF_EVENT("Measured Qubit: " + std::to_string(cmd->qubit1_address + qubit_offset) + ", value [ " + std::to_string(res) + " ]");
         response.outcome_status = Outcome_Status_t::SUCCESS;
         response.outcome_result = (uint8_t)(res == true ? (Measurement_t::MEASURE_OUTCOME_MINUS_1) : (Measurement_t::MEASURE_OUTCOME_PLUS_1));
         PROF_STOP("qubit_measurement");

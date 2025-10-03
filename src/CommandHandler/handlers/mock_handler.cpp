@@ -57,7 +57,6 @@ void MockHandler::fill_mock_message(uint8_t *output)
     //     local_logger->log_event("Using Response: " + std::to_string(latest_measure_response));
     if (!command_list.empty())
     {
-
         if (command_list[message_num]->conditional_execution(latest_measure_response))
         {
             command_list[message_num]->create_command(output, 4);

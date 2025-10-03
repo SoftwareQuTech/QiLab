@@ -11,23 +11,23 @@
 #include "DataTypes/command_data.hpp"
 #include "DataTypes/responses.hpp"
 #include "CommandHandler/command_handler.hpp"
-class CommandNode
+#include "DataTypes/commands.hpp"
+#include "SimulatorRunners/runnable.hpp"
+
+class CommandNode: public IRunnable<TransportData<ResponseData>>
 {
     public:
-    CommandNode(int16_t id, CommandHandler *handler, std::function<void(CommandData_t)> cb);
-    CommandNode(int16_t id, CommandHandler *handler, std::function<void(CommandData_t)> cb, IProfiler*);
+    CommandNode(int16_t id, CommandHandler *handler);
     ~CommandNode();
-    
-    void run_node();
-    void stop_node();
+    void set_notify_callback(std::function<void(TransportData<CommandBase>)> cb);
+
+    int on_run();
+    void on_abort();
 
     private:
     bool abort = false;
-    std::function<void(CommandData_t)> simulator_command_data_notify;
+    std::function<void(TransportData<CommandBase>)> simulator_command_data_notify;
     int16_t node_id = -1;
-    std::mutex response_data_lock;
     ResponseData current_response;
     CommandHandler* command_handler;
-    IProfiler* local_logger;
-    void update_response_data(const ResponseData&);
 };

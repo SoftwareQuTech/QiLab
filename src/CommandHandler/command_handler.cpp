@@ -31,11 +31,11 @@ int8_t CommandHandler::receive_command(std::unique_ptr<CommandBase> &cmd)
     return 0;
 }
 
-int8_t CommandHandler::send_response(const ResponseData &response)
+int8_t CommandHandler::send_response(std::unique_ptr<ResponseData> response)
 {
     uint8_t data_buffer[RESPONSE_MESSAGE_LENGTH];
     //response is simple, no need for extra overhead
-    response.serialize_data(data_buffer);
+    response->serialize_data(data_buffer);
     data_handler->send_data(data_buffer, RESPONSE_MESSAGE_LENGTH);
     return 0;
 }

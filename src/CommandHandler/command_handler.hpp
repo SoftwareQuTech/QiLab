@@ -81,7 +81,7 @@ public:
      * @warning Not thread-safe unless the underlying transport is externally
      *          synchronized.
      */
-    int8_t send_response(const ResponseData &resp);
+    int8_t send_response(std::unique_ptr<ResponseData> resp);
 
 private:
     /// Pointer to the transport handler used for sending/receiving raw data.

@@ -32,11 +32,11 @@ endif()
 add_library(qilab_lib STATIC
   src/CommandHandler/command_handler.cpp
   src/CommandHandler/handlers/mock_handler.cpp
-  src/SimulatorRunner/simulator_runner.cpp
+  src/SimulatorRunners/simulator_runner.cpp
   src/Simulator/adapters/mock_adapter.cpp
   src/Simulator/adapters/stim_adapter.cpp
   src/CommandNode/command_node.cpp
-  src/SimulatorRunner/entanglement_manager.cpp
+  #src/SimulatorRunner/entanglement_manager.cpp
   src/logger/logger.cpp
   src/logger/profiler.cpp
 )
@@ -52,11 +52,11 @@ add_executable(qilab
   application.cpp
   src/CommandHandler/command_handler.cpp
   src/CommandHandler/handlers/mock_handler.cpp
-  src/SimulatorRunner/simulator_runner.cpp
+  src/SimulatorRunners/simulator_runner.cpp
   src/Simulator/adapters/mock_adapter.cpp
   src/Simulator/adapters/stim_adapter.cpp
   src/CommandNode/command_node.cpp
-  src/SimulatorRunner/entanglement_manager.cpp
+  #src/SimulatorRunner/entanglement_manager.cpp
   src/logger/logger.cpp
   src/logger/profiler.cpp
   )
