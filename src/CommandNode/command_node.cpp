@@ -1,8 +1,6 @@
-#include "command_node.hpp"
-#include "thread"
-#include <iostream>
-#include "logger/profiler_api.hpp"
+#include <thread>
 
+#include "command_node.hpp"
 
 #if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
@@ -27,7 +25,7 @@ int CommandNode::on_run()
     while (!abort) 
     {
         TransportData<CommandBase> command_context;
-        PROF_START("handler_thread_timing");
+        PROF_START(prof_event_handler_thread_timing);
         std::unique_ptr<CommandBase> command;
         int ret_c = command_handler->receive_command(command);
         if (ret_c == -1)
@@ -47,9 +45,10 @@ int CommandNode::on_run()
         }
         else
         {
-            CPU_PAUSE();
+            
         }
-        PROF_STOP("handler_thread_timing");
+        PROF_STOP(prof_event_handler_thread_timing);
+        std::this_thread::yield();
     }
 
     //TODO: add clean exit

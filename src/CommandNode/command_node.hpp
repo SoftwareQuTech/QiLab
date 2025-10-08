@@ -6,13 +6,13 @@
 
 #pragma once
 #include <functional>
-#include <mutex>
 
 #include "DataTypes/command_data.hpp"
 #include "DataTypes/responses.hpp"
 #include "CommandHandler/command_handler.hpp"
 #include "DataTypes/commands.hpp"
 #include "SimulatorRunners/runnable.hpp"
+#include "logger/profiler_api.hpp"
 
 class CommandNode: public IRunnable<TransportData<ResponseData>>
 {
@@ -30,4 +30,7 @@ class CommandNode: public IRunnable<TransportData<ResponseData>>
     int16_t node_id = -1;
     ResponseData current_response;
     CommandHandler* command_handler;
+
+    //profiling event ids
+    Profiler_id prof_event_handler_thread_timing = PROF_REGISTER_EVENT("handler_thread_timing");
 };
