@@ -104,105 +104,105 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
     {
     case Command_t::NOP:
     {
-        PROF_START(prof_event_command_nop);
+        //PROF_START(prof_event_command_nop);
         NOP_Command *cmd = static_cast<NOP_Command *>(command.get());
         // actually no command
         response.outcome_status = Outcome_Status_t::SUCCESS;
-        PROF_STOP(prof_event_command_nop);
+        //PROF_STOP(prof_event_command_nop);
     }
     break;
     case Command_t::QUBIT_INIT:
     {
-        PROF_START(prof_event_qubit_init);
+        //PROF_START(prof_event_qubit_init);
         QubitInitialize *cmd = static_cast<QubitInitialize *>(command.get());
         auto res = simulator->qubit_initialize(cmd->qubit1_address + qubit_offset);
         response.outcome_status = Outcome_Status_t::SUCCESS;
-        PROF_STOP(prof_event_qubit_init);
+        //PROF_STOP(prof_event_qubit_init);
     }
     break;
     case Command_t::QUBIT_MEASUREMENT:
     {
-        PROF_START(prof_event_qubit_measurement);
+        //PROF_START(prof_event_qubit_measurement);
         QubitMeasure *cmd = static_cast<QubitMeasure *>(command.get());
         auto res = simulator->qubit_measure(cmd->qubit1_address + qubit_offset, cmd->basis);
         // PROF_EVENT("Measured Qubit: " + std::to_string(cmd->qubit1_address + qubit_offset) + ", value [ " + std::to_string(res) + " ]");
         response.outcome_status = Outcome_Status_t::SUCCESS;
         response.outcome_result = (uint8_t)(res == true ? (Measurement_t::MEASURE_OUTCOME_MINUS_1) : (Measurement_t::MEASURE_OUTCOME_PLUS_1));
-        PROF_STOP(prof_event_qubit_measurement);
+        //PROF_STOP(prof_event_qubit_measurement);
     }
     break;
     case Command_t::SINGLE_QUBIT_GATE:
     {
-        PROF_START(prof_event_single_qubit_gate);
+        //PROF_START(prof_event_single_qubit_gate);
         SingleQubitGate *cmd = static_cast<SingleQubitGate *>(command.get());
         auto res = simulator->single_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->angle, cmd->axis);
         response.outcome_status = Outcome_Status_t::SUCCESS;
-        PROF_STOP(prof_event_single_qubit_gate);
+        //PROF_STOP(prof_event_single_qubit_gate);
     }
     break;
     case Command_t::TWO_QUBIT_GATE:
     {
-        PROF_START(prof_event_two_qubit_gate);
+        //PROF_START(prof_event_two_qubit_gate);
         TwoQubitGate *cmd = static_cast<TwoQubitGate *>(command.get());
         auto res = simulator->two_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->qubit2_address + qubit_offset, cmd->angle, cmd->axis);
         response.outcome_status = Outcome_Status_t::SUCCESS;
-        PROF_STOP(prof_event_two_qubit_gate);
+        //PROF_STOP(prof_event_two_qubit_gate);
     }
     break;
     case Command_t::QUBIT_SWAP:
     {
-        PROF_START(prof_event_qubit_swap);
+        //PROF_START(prof_event_qubit_swap);
         QubitSwap *cmd = static_cast<QubitSwap *>(command.get());
         simulator->qubit_swap(cmd->qubit1_address + qubit_offset, cmd->qubit2_address + qubit_offset);
         response.outcome_status = Outcome_Status_t::SUCCESS;
-        PROF_STOP(prof_event_qubit_swap);
+        //PROF_STOP(prof_event_qubit_swap);
     }
     break;
     case Command_t::ENTANGLEMENT_ATTEMPT:
     {
-        PROF_START(prof_event_entanglement_attempt);
+        //PROF_START(prof_event_entanglement_attempt);
         EntanglementAttempt *cmd = static_cast<EntanglementAttempt *>(command.get());
         simulator->attempt_entanglement(cmd->fidelity, cmd->nghbr + qubit_offset, cmd->qid + qubit_offset);
         response.outcome_status = Outcome_Status_t::SUCCESS;
-        PROF_STOP(prof_event_entanglement_attempt);
+        //PROF_STOP(prof_event_entanglement_attempt);
     }
     break;
     case Command_t::ENTANGLEMENT_SWAP:
     {
-        PROF_START(prof_event_entanglement_swap);
+        //PROF_START(prof_event_entanglement_swap);
 
         EntanglementSwap *cmd = static_cast<EntanglementSwap *>(command.get());
         simulator->entanglement_swap(cmd->qubit1_address + qubit_offset, cmd->qubit2_address + qubit_offset);
         response.outcome_status = Outcome_Status_t::SUCCESS;
-        PROF_STOP(prof_event_entanglement_swap);
+        //PROF_STOP(prof_event_entanglement_swap);
     }
     break;
     case Command_t::ENTANGLEMENT_MEASURE:
     {
-        PROF_START(prof_event_entanglement_measure);
+        //PROF_START(prof_event_entanglement_measure);
         EntangleMeasure *cmd = static_cast<EntangleMeasure *>(command.get());
         simulator->entanglement_measure(cmd->fidelity, cmd->nghbr + qubit_offset, cmd->basis, cmd->qid + qubit_offset, cmd->immediate, cmd->repetitions);
         response.outcome_status = Outcome_Status_t::SUCCESS;
-        PROF_STOP(prof_event_entanglement_measure);
+        //PROF_STOP(prof_event_entanglement_measure);
     }
     break;
     case Command_t::PRE_MEASUREMENT_GATES_SELECTION:
     {
-        PROF_START(prof_event_pre_measure_select);
+        //PROF_START(prof_event_pre_measure_select);
         PreMeasureGatesSelection *cmd = static_cast<PreMeasureGatesSelection *>(command.get());
         simulator->pre_measure_gates_selection(cmd->target + qubit_offset, cmd->angle1, cmd->angle2, cmd->angle3);
         response.outcome_status = Outcome_Status_t::SUCCESS;
-        PROF_STOP(prof_event_pre_measure_select);
+        //PROF_STOP(prof_event_pre_measure_select);
     }
     break;
     case Command_t::QUBIT_MOVE:
     {
-        PROF_START(prof_event_qubit_move);
+        //PROF_START(prof_event_qubit_move);
 
         QubitMove *cmd = static_cast<QubitMove *>(command.get());
         simulator->qubit_move(cmd->qubit1_address + qubit_offset, cmd->qubit2_address + qubit_offset);
         response.outcome_status = Outcome_Status_t::SUCCESS;
-        PROF_STOP(prof_event_qubit_move);
+        //PROF_STOP(prof_event_qubit_move);
     }
     break;
     default:

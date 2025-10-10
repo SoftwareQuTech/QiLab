@@ -30,14 +30,18 @@ else()
 endif()
 
 add_library(qilab_lib STATIC
-  src/CommandHandler/command_handler.cpp
-  src/CommandHandler/handlers/mock_handler.cpp
+  #Data Transmission
+  src/DataTransmission/handlers/mock_handler.cpp
+  src/DataTransmission/TransmissionRunner/transmission_runner.cpp
+  src/DataTransmission/TransmissionProcessor/transmission_processor.cpp
+  #Simulator
   src/SimulatorRunners/simulator_runner.cpp
   src/Simulator/adapters/mock_adapter.cpp
   src/Simulator/adapters/stim_adapter.cpp
-  src/CommandNode/command_node.cpp
+  #Message Broker
+  src/MessageBroker/message_broker.cpp
+  #Entanglement Manager
   #src/SimulatorRunner/entanglement_manager.cpp
-  src/logger/logger.cpp
   src/logger/profiler.cpp
 )
 target_include_directories(qilab_lib PUBLIC
@@ -50,14 +54,18 @@ include_directories("src")
 
 add_executable(qilab
   application.cpp
-  src/CommandHandler/command_handler.cpp
-  src/CommandHandler/handlers/mock_handler.cpp
+  #Data Transmission
+  src/DataTransmission/handlers/mock_handler.cpp
+  src/DataTransmission/TransmissionRunner/transmission_runner.cpp
+  src/DataTransmission/TransmissionProcessor/transmission_processor.cpp
+  #Simulator
   src/SimulatorRunners/simulator_runner.cpp
   src/Simulator/adapters/mock_adapter.cpp
   src/Simulator/adapters/stim_adapter.cpp
-  src/CommandNode/command_node.cpp
+  #Message Broker
+  src/MessageBroker/message_broker.cpp
+  #Entanglement Manager
   #src/SimulatorRunner/entanglement_manager.cpp
-  src/logger/logger.cpp
   src/logger/profiler.cpp
   )
 target_link_libraries(qilab PRIVATE libstim)

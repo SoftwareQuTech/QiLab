@@ -7,10 +7,13 @@
 
 #pragma once
 #include <memory>
-#include "CommandHandler/transmision_handler.hpp"
+#include <vector>
+#include <cstdint>
+
+#include "DataTransmission/transmision_handler.hpp"
 #include "DataTypes/commands.hpp"
 #include "DataTypes/responses.hpp"
-#include "logger/logger.hpp"
+#include "logger/profiler_api.hpp"
 
 /**
  * @brief Handles the reception and transmission of commands and responses.
@@ -28,7 +31,7 @@
  * @note Copy and move operations are disabled to avoid multiple handlers
  *       owning the same transport.
  */
-class CommandHandler
+class TransmissionProcessor
 {
 public:
     /**
@@ -38,23 +41,25 @@ public:
      *                    The CommandHandler does not take ownership; the
      *                    caller must ensure the lifetime exceeds this object.
      */
-    CommandHandler(ITransmissionHandler *handler);
-    CommandHandler(ITransmissionHandler *handler, IProfiler*);
+    TransmissionProcessor(ITransmissionHandler *handler);
 
     /// Destructor. Does not delete the underlying transport handler.
-    ~CommandHandler();
+    ~TransmissionProcessor();
 
     /**
      * @brief Blocks until a command is received and decodes it.
      *
-     * This call blocks the calling thread until a complete command frame is
-     * available from the underlying transport. On success, the decoded command
-     * is written into @p cmd.
+     * This call blocks the calling thread until a complete commands frames are
+     * available from the underlying transport. On success, the decoded commands
+     * are written into @p commands.
      *
-     * @param[out] cmd  Destination for the received and decoded command.
+     * @param[out] commands  Destination for the received and decoded commands.
+     *                          They can be multiple depending on how much nodes were registered
      *
+     * @param[in] read_command_count The number of commands to receive and decode.
+     *                                  Default is 1.
      * @return Status code (implementation-defined).
-     * @retval 0 Success (command stored in @p cmd).
+     * @retval 0 Success (commands stored in @p commands).
      * @retval non-zero Error code indicating why no command was returned
      *                  (e.g., transport error, parse error, shutdown).
      *
@@ -63,7 +68,7 @@ public:
      * @warning Not thread-safe unless the underlying transport is externally
      *          synchronized.
      */
-    int8_t receive_command(std::unique_ptr<CommandBase> &cmd);
+    int8_t receive_command(std::vector<std::unique_ptr<CommandBase>> &commands, uint8_t read_command_count = 1);
 
     /**
      * @brief Sends a response over the underlying transport.
@@ -71,7 +76,7 @@ public:
      * Serializes and transmits the given response. The call returns a status
      * indicating whether the response was queued/sent successfully.
      *
-     * @param[in] resp  Response payload to serialize and send.
+     * @param[in] responses  Response payload to serialize and send.
      *
      * @return Status code (implementation-defined).
      * @retval 0 Success (response accepted/sent).
@@ -81,7 +86,7 @@ public:
      * @warning Not thread-safe unless the underlying transport is externally
      *          synchronized.
      */
-    int8_t send_response(std::unique_ptr<ResponseData> resp);
+    int8_t send_response(std::vector<std::unique_ptr<ResponseData>> responses);
 
 private:
     /// Pointer to the transport handler used for sending/receiving raw data.
@@ -108,10 +113,9 @@ private:
      */
     int8_t serialize_response(const ResponseData &resp, uint8_t *buffer);
 
-    IProfiler* local_logger;
     // Disable copy/move
-    CommandHandler(const CommandHandler &) = delete;
-    CommandHandler(const CommandHandler &&) = delete;
-    CommandHandler &operator=(CommandHandler &) = delete;
-    CommandHandler &operator=(CommandHandler &&) = delete;
+    TransmissionProcessor(const TransmissionProcessor &) = delete;
+    TransmissionProcessor(const TransmissionProcessor &&) = delete;
+    TransmissionProcessor &operator=(TransmissionProcessor &) = delete;
+    TransmissionProcessor &operator=(TransmissionProcessor &&) = delete;
 };
