@@ -56,6 +56,7 @@ add_executable(qilab
   application.cpp
   #Data Transmission
   src/DataTransmission/handlers/mock_handler.cpp
+  src/DataTransmission/handlers/spi_master_handler.cpp
   src/DataTransmission/TransmissionRunner/transmission_runner.cpp
   src/DataTransmission/TransmissionProcessor/transmission_processor.cpp
   #Simulator

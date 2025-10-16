@@ -15,6 +15,7 @@
 #include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
 #include "DataTransmission/handlers/mock_handler.hpp"
 #include "logger/profiler_api.hpp"
+#include "DataTransmission/handlers/spi_master_handler.hpp"
 //#include "SimulatorRunner/entanglement_manager.hpp"
 
 bool abort_sim = false;
@@ -41,6 +42,21 @@ int main()
     StimAdapter* stim_adapter = new StimAdapter(seq, 0); //the seed is problematic
     SimulatorRunner sim(stim_adapter);
 
+    SPIHandler spi_handler;
+    if(spi_handler.connect_spi("/dev/spidev0.0", 0, 8, 500000) != 0)
+    {
+        std::cerr << "Failed to connect to SPI device" << std::endl;
+        return -1;
+    }
+    uint8_t tx[4] = {0x01, 0x02, 0x03, 0x04};
+    uint8_t rx[4] = {0};
+    spi_handler.transfer(tx, rx, 4);
+    std::cout << "SPI received: ";
+    for(int i = 0; i < 4; i++)
+    {
+        std::cout << std::hex << static_cast<int>(rx[i]) << " ";
+    }
+    std::cout << std::dec << std::endl;
 
     std::shared_ptr<ITransmissionHandler> transportA = std::make_shared<MockHandler>();
     TransmissionProcessor* command_handlerA = new TransmissionProcessor(transportA);

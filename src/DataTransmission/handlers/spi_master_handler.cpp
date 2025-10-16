@@ -56,3 +56,47 @@ int8_t SPIHandler::connect_spi(const char* device_path, uint8_t spi_mode, uint8_
 
     return 0;
 }
+
+int8_t SPIHandler::receive_data(uint8_t* buffer, uint8_t length)
+{
+    if (read(spi_fd, buffer, length) != length) {
+        //keep this for debugging purposes only
+        std::cerr << "Failed to read from SPI device." << std::endl;
+        return -1;
+    }
+    return 0;
+}
+
+int8_t SPIHandler::send_data(const uint8_t* buffer, uint8_t length)
+{
+    if (write(spi_fd, buffer, length) != length) {
+        //keep this for debugging purposes only
+        std::cerr << "Failed to write to SPI device." << std::endl;
+        return -1;
+    }
+    return 0;
+}
+
+int8_t SPIHandler::transfer(uint8_t const* tx_buffer, uint8_t const* rx_buffer, const uint8_t length)
+{
+    struct spi_ioc_transfer tr;
+    memset(&tr, 0, sizeof(tr));
+    tr.tx_buf = reinterpret_cast<unsigned long>(tx_buffer);
+    tr.rx_buf = reinterpret_cast<unsigned long>(const_cast<uint8_t*>(rx_buffer));
+    tr.len = length;
+    tr.delay_usecs = delay;
+    tr.speed_hz = speed;
+    tr.bits_per_word = bits;
+
+    if (ioctl(spi_fd, SPI_IOC_MESSAGE(1), &tr) < 1) {
+        //keep this for debugging purposes only
+        std::cerr << "Failed to perform SPI transfer." << std::endl;
+        return -1;
+    }
+    return 0;
+}
+
+void SPIHandler::flush()
+{
+    // No specific flush operation for SPI; implement if needed.
+}
