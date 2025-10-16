@@ -1,0 +1,24 @@
+# .gitlab-ci.yml
+image: debian:stable-slim
+
+stages: [build]
+
+build:
+  stage: build
+  variables:
+    BUILD_DIR: build
+    # Helps older tools find the bundle explicitly:
+    SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+    CURL_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+  before_script:
+    - apt-get update -y
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends
+        cmake g++ make git ca-certificates curl
+    - update-ca-certificates
+    # Make git explicitly use the system bundle (belt & suspenders):
+    - git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt
+  script:
+    - cmake -S . -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
+    - cmake --build "$BUILD_DIR" --parallel
+    - ctest --test-dir "$BUILD_DIR" --output-on-failure || true
+  

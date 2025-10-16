@@ -714,7 +714,7 @@
     </mxGraphModel>
   </diagram>
   <diagram id="iY0uk9gqz4YW6Q7-eJPX" name="Data Transmission">
-    <mxGraphModel dx="1665" dy="841" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+    <mxGraphModel dx="786" dy="562" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -803,7 +803,7 @@
         <mxCell id="32OC-2kw8Y3coF4nABVd-21" value="DataTransmissionRunner" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="75" y="23" width="540" height="194" as="geometry" />
         </mxCell>
-        <mxCell id="32OC-2kw8Y3coF4nABVd-22" value="- command_handler: unique_ptr&amp;lt;TransmissionProcessor&amp;gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" parent="32OC-2kw8Y3coF4nABVd-21" vertex="1">
+        <mxCell id="32OC-2kw8Y3coF4nABVd-22" value="- transmission_processor: unique_ptr&amp;lt;TransmissionProcessor&amp;gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" parent="32OC-2kw8Y3coF4nABVd-21" vertex="1">
           <mxGeometry y="26" width="540" height="24" as="geometry" />
         </mxCell>
         <mxCell id="hmSO-FrqmfCvtCD7mGjR-1" value="- registered_nodes: vector&amp;lt;uint16&amp;gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;whiteSpace=wrap;html=1;" parent="32OC-2kw8Y3coF4nABVd-21" vertex="1">
