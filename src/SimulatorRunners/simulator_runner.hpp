@@ -10,26 +10,23 @@
 
 #include "runnable.hpp"
 #include "Simulator/sim_interface.hpp"
-#include "CommandHandler/command_handler.hpp"
 #include "logger/profiler_api.hpp"
 #include "DataTypes/command_data.hpp"
 
-class SimulatorRunner final: public IRunnable<TransportData<CommandBase>>
+class SimulatorRunner
 {
     public:
     SimulatorRunner(ISimulator*);
     ~SimulatorRunner() = default;
 
-    int on_run() override;
-    void on_abort() override;
+    int on_run();
+    void on_abort();
 
     int16_t register_node(uint8_t num_qubits);
     bool unregister_node(int16_t node_id);
-    void set_notify_callback(std::function<void(TransportData<ResponseData>)> cb);
 
     private:
     ISimulator* simulator;
-    IProfiler* event_logger;
     //constrain on how much nodes to register
     const uint16_t max_nodes_available = 20;
     //NOTE: the tableuau stim expands automatically with requested address.
@@ -45,7 +42,6 @@ class SimulatorRunner final: public IRunnable<TransportData<CommandBase>>
     bool abort = false;
 
     ResponseData execute_command(std::unique_ptr<CommandBase> command, int16_t qubit_offset);
-    std::function<void(TransportData<ResponseData>)> response_notify;
 
     //profiling event ids
     Profiler_id prof_event_command_nop = PROF_REGISTER_EVENT("command_nop");

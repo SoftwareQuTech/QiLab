@@ -47,41 +47,32 @@ bool SimulatorRunner::unregister_node(int16_t node_id)
     // TODO: Add logic for deregistration and recalculating qubit offset and addresses
     // maybe qubit reset will be needed as well in order to ensure state
 }
-void SimulatorRunner::set_notify_callback(std::function<void(TransportData<ResponseData>)> cb)
-{
-    response_notify = cb;
-}
+
 
 int SimulatorRunner::on_run()
 {
-    if (response_notify == nullptr)
-    {
-        //std::cout << "No callback, Bye!" << std::endl;
-        return -1;
-    }
     while (!abort)
     {
-        TransportData<CommandBase> data;
         PROF_START(prof_event_simulation_thread_log);
-        if (this->lockfree_queue.pop(data))
-        {
-            ResponseData resp;
-            if (data.node_id < nodes.size())
-            {
-                // std::cout << "Handling command from node: " << data.node_id << '\n';
-                resp = execute_command(std::move(data.transport), nodes[data.node_id].first);
+        // if (this->lockfree_queue.pop(data))
+        // {
+        //     ResponseData resp;
+        //     if (data.node_id < nodes.size())
+        //     {
+        //         // std::cout << "Handling command from node: " << data.node_id << '\n';
+        //         resp = execute_command(std::move(data.transport), nodes[data.node_id].first);
 
-                // std::this_thread::sleep_for(std::chrono::milliseconds(10)); // ok, outside lock
-                //  Callbacks can safely enqueue new work now without deadlocking.
-                response_notify({std::make_unique<ResponseData>(resp), data.node_id});
-            }
-        }
-        else
-        {
-            //CPU_PAUSE();
-            // handle invalid node id, maybe set an error in resp then callback
-        }
-        // --- PROCESS OUTSIDE THE LOCK
+        //         // std::this_thread::sleep_for(std::chrono::milliseconds(10)); // ok, outside lock
+        //         //  Callbacks can safely enqueue new work now without deadlocking.
+        //         response_notify({std::make_unique<ResponseData>(resp), data.node_id});
+        //     }
+        // }
+        // else
+        // {
+        //     //CPU_PAUSE();
+        //     // handle invalid node id, maybe set an error in resp then callback
+        // }
+        // // --- PROCESS OUTSIDE THE LOCK
         PROF_STOP(prof_event_simulation_thread_log);
         std::this_thread::yield();
     }

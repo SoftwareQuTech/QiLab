@@ -11,9 +11,9 @@
 #include <Simulator/adapters/mock_adapter.hpp>
 #include <Simulator/adapters/stim_adapter.hpp>
 #include <SimulatorRunners/simulator_runner.hpp>
-#include <CommandHandler/command_handler.hpp>
-#include "CommandNode/command_node.hpp"
-#include <CommandHandler/handlers/mock_handler.hpp>
+#include "DataTransmission/TransmissionRunner/transmission_runner.hpp"
+#include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
+#include "DataTransmission/handlers/mock_handler.hpp"
 #include "logger/profiler_api.hpp"
 //#include "SimulatorRunner/entanglement_manager.hpp"
 
@@ -42,19 +42,13 @@ int main()
     SimulatorRunner sim(stim_adapter);
 
 
-    MockHandler* transportA = new MockHandler();
-    CommandHandler* command_handlerA = new CommandHandler(transportA);
-    CommandNode* nodeA;
+    std::shared_ptr<ITransmissionHandler> transportA = std::make_shared<MockHandler>();
+    TransmissionProcessor* command_handlerA = new TransmissionProcessor(transportA);
+    DataTransmissionRunner* nodeA = new DataTransmissionRunner({0}, command_handlerA, nullptr);
 
 
     int16_t node_id = sim.register_node(10);
-    if(node_id != -1)
-    {
-        nodeA = new CommandNode(node_id, command_handlerA);
-    }
 
-    sim.set_notify_callback(std::bind(&CommandNode::notify, nodeA, std::placeholders::_1));
-    nodeA->set_notify_callback(std::bind(&SimulatorRunner::notify, &sim, std::placeholders::_1));
 
     std::cout << "Starting simulation" << std::endl;
 
@@ -95,7 +89,6 @@ int main()
     //logger->save_to_file("simple_prg_10000r_3n");
 
     delete stim_adapter;
-    delete transportA;
     delete command_handlerA;
     
     PROF_SAVE_DATA("test_trace");

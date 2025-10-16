@@ -93,3 +93,12 @@ int8_t MockHandler::receive_data(uint8_t *received_data, uint8_t size)
 
     return 0;
 }
+
+int8_t MockHandler::transfer(uint8_t const* tx_buffer, uint8_t const* rx_buffer, const uint8_t length)
+{
+    if(length != EXPECTED_MESSAGE_SIZE)
+    {
+        return -1;
+    }
+
+}

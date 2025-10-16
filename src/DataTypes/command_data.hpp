@@ -18,11 +18,3 @@ struct CommandData_t
     std::unique_ptr<CommandBase> command;   // OWN it here
     uint16_t node_id;
 };
-
-
-template <typename T>
-struct TransportData
-{
-    std::unique_ptr<T> transport; // OWN it here
-    uint16_t node_id;
-};

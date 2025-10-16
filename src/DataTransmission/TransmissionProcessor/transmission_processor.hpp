@@ -1,8 +1,8 @@
 /*
 ** Created on: 25.08.2025
 ** Created by: mrkolev
-** Description: Contains command handler. This serializes and
-**              deserializes the data from the communication
+** Description: Contains Transmission Processor module. This serializes and
+**              deserializes the data from the communication into vectors
 */
 
 #pragma once
@@ -16,102 +16,124 @@
 #include "logger/profiler_api.hpp"
 
 /**
- * @brief Handles the reception and transmission of commands and responses.
+ * @brief Handles reception and transmission of single commands/responses,
+ *        plus synchronous request/response exchanges.
  *
- * The CommandHandler acts as the interface between the transport layer
- * (provided by an ITransmissionHandler) and the higher-level command/
- * response abstractions. It serializes outgoing responses into raw frames,
- * and deserializes incoming frames into Command objects.
+ * The TransmissionProcessor bridges an ITransmissionHandler (transport) with
+ * command/response objects. `receive_command()` and `send_response()` operate
+ * on a **single** command/response and are **blocking** calls. For synchronous
+ * channels (e.g., SPI full-duplex) use `transmit_msg()` to **transmit and
+ * receive in one operation**.
  *
- * Typical usage:
- * - Construct with a pointer to a concrete ITransmissionHandler implementation.
- * - Call receive_command() to block until a command arrives and is decoded.
- * - Call send_response() to serialize and transmit a response.
- *
- * @note Copy and move operations are disabled to avoid multiple handlers
- *       owning the same transport.
+ * @note Copy/move disabled to avoid duplicating the transport binding.
  */
 class TransmissionProcessor
 {
 public:
     /**
-     * @brief Construct a new CommandHandler.
-     *
-     * @param[in] handler Pointer to a valid transport implementation.
-     *                    The CommandHandler does not take ownership; the
-     *                    caller must ensure the lifetime exceeds this object.
+     * @brief Bind the processor to a transport implementation.
+     * @param[in] handler Owning pointer to a valid ITransmissionHandler.
+     *                    The processor takes ownership of @p handler.
      */
-    TransmissionProcessor(ITransmissionHandler *handler);
+    TransmissionProcessor(std::shared_ptr<ITransmissionHandler> handler);
 
-    /// Destructor. Does not delete the underlying transport handler.
+    /// @brief Trivial destructor.
     ~TransmissionProcessor();
 
     /**
-     * @brief Blocks until a command is received and decodes it.
+     * @brief Blocking receive of a single command frame.
      *
-     * This call blocks the calling thread until a complete commands frames are
-     * available from the underlying transport. On success, the decoded commands
-     * are written into @p commands.
+     * Waits for one complete command, verifies CRC, decodes it, and returns it
+     * via @p command.
      *
-     * @param[out] commands  Destination for the received and decoded commands.
-     *                          They can be multiple depending on how much nodes were registered
-     *
-     * @param[in] read_command_count The number of commands to receive and decode.
-     *                                  Default is 1.
-     * @return Status code (implementation-defined).
-     * @retval 0 Success (commands stored in @p commands).
-     * @retval non-zero Error code indicating why no command was returned
-     *                  (e.g., transport error, parse error, shutdown).
-     *
-     * @note This function may block indefinitely if no data arrives and no
-     *       timeout mechanism is implemented in the transport layer.
-     * @warning Not thread-safe unless the underlying transport is externally
-     *          synchronized.
+     * @param[out] command Decoded command (reset and replaced on success).
+     * @param[in]  timeout Timeout in milliseconds; 0 may block indefinitely
+     *                     (transport-dependent).
+     * @return int8_t
+     *         - 0  on success
+     *         - -1 invalid argument(s)
+     *         - -2 transport timeout / read error
+     *         - -3 CRC or opcode decode failure
      */
-    int8_t receive_command(std::vector<std::unique_ptr<CommandBase>> &commands, uint8_t read_command_count = 1);
+    int8_t receive_command(std::unique_ptr<CommandBase> &command, uint16_t timeout);
 
     /**
-     * @brief Sends a response over the underlying transport.
+     * @brief Blocking send of a single response frame.
      *
-     * Serializes and transmits the given response. The call returns a status
-     * indicating whether the response was queued/sent successfully.
+     * Serializes one response, computes CRC, and transmits it via the transport.
      *
-     * @param[in] responses  Response payload to serialize and send.
-     *
-     * @return Status code (implementation-defined).
-     * @retval 0 Success (response accepted/sent).
-     * @retval non-zero Error code indicating failure
-     *                  (e.g., transport not ready, write error).
-     *
-     * @warning Not thread-safe unless the underlying transport is externally
-     *          synchronized.
+     * @param[in] response Response to send (must not be nullptr).
+     * @return int8_t
+     *         - 0  on success
+     *         - -1 invalid argument(s)
+     *         - -2 transport write error
      */
-    int8_t send_response(std::vector<std::unique_ptr<ResponseData>> responses);
+    int8_t send_response(const std::unique_ptr<ResponseData> &response);
+
+    /**
+     * @brief Synchronous transmit/receive for sync channels (e.g., SPI).
+     *
+     * Serializes up to @p transfer_msg_count responses and transmits them while
+     * simultaneously receiving the same number of command frames. All received
+     * commands that decode successfully are appended to @p commands.
+     * This call is **blocking**.
+     *
+     * @param[in]  responses           Responses to serialize and send (size ≥ 1).
+     * @param[out] commands            Container to append decoded commands to.
+     * @param[in]  transfer_msg_count  Number of messages to TX/RX atomically (typically
+     *                                 <= responses.size()).
+     * @return int8_t
+     *         - 0  on full success (TX done; all RX decoded)
+     *         - -1 invalid sizes/counts or null entries
+     *         - -2 transport I/O error
+     *         - -3 CRC/opcode decode failure on at least one received frame
+     */
+    int8_t transmit_msg(const std::vector<std::unique_ptr<ResponseData>> &responses,
+                        std::vector<std::unique_ptr<CommandBase>> &commands,
+                        uint8_t transfer_msg_count);
 
 private:
-    /// Pointer to the transport handler used for sending/receiving raw data.
-    ITransmissionHandler *data_handler;
+    /// Unique Pointer to the transport handler used for sending/receiving raw data.
+    std::shared_ptr<ITransmissionHandler> data_handler;
 
     /**
-     * @brief Deserializes a raw byte buffer into a Command object.
+     * @brief Decode a 4-byte command frame into a concrete CommandBase.
      *
-     * @param[in] buffer Raw bytes received from the transport.
-     * @return A unique_ptr to a decoded CommandBase instance.
-     * @retval nullptr if the buffer does not represent a valid command.
+     * Validates CRC over the first 3 bytes (byte 4 holds CRC), then dispatches by opcode.
+     *
+     * @param[in] buffer Pointer to the first byte of the 4-byte command frame.
+     * @return std::unique_ptr<CommandBase> Concrete command on success; nullptr on CRC/opcode error.
      */
     std::unique_ptr<CommandBase> deserialize_command(const uint8_t *buffer);
 
+    /**
+     * @brief Verify CRC-8/CCITT of a 4-byte frame.
+     *
+     * Computes CRC for @p data[0..len-1] (expect len==3) and compares against @p data[3].
+     *
+     * @param[in] data Pointer to frame start.
+     * @param[in] len  Number of covered bytes (expects 3).
+     * @return true if CRC matches; false otherwise.
+     */
     bool verify_crc(const uint8_t* data, std::size_t len);
 
     /**
-     * @brief Serializes a response into a raw byte array.
+     * @brief Serialize a response into a 4-byte frame.
+     *
+     * Layout:
+     * - Byte 0: platform cycle counter (set to 0 here)
+     * - Byte 1: hi-nibble = (SUCCESS ? outcome_result : outcome_status); lo-nibble = status
+     * - Byte 2: platform-defined runtime byte (set to 0 here)
+     * - Byte 3: CRC-8/CCITT of bytes [0..2]
      *
      * @param[in]  resp   Response object to serialize.
-     * @param[out] buffer Destination buffer for serialized data.
-     *
-     * @return status of the operation
+     * @param[out] buffer Destination buffer (size ≥ 4).
+     * @return int8_t 0 on success.
      */
     int8_t serialize_response(const ResponseData &resp, uint8_t *buffer);
+
+    uint32_t response_control_word = 0;
+    uint32_t command_control_word = 0;
 
     // Disable copy/move
     TransmissionProcessor(const TransmissionProcessor &) = delete;

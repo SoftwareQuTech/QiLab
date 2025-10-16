@@ -15,42 +15,45 @@ class ThreadSafeRingBuffer
     alignas(64) std::atomic<size_t> read_idx{0};
 
 public:
-    bool pop(T &item) noexcept
-    {
+    bool push(T &&item) noexcept {
         size_t current, next;
-        do
-        {
-            current = read_idx.load(std::memory_order_relaxed);
-            if (current == write_idx.load(std::memory_order_acquire))
-            {
-                return false; // Buffer empty
-            }
-
-            next = (current + 1) & SIZE_MASK;
-        } while (!read_idx.compare_exchange_weak(current, next,
-                                                 std::memory_order_release,
-                                                 std::memory_order_relaxed));
-
-        item = std::move(buffer[current]);
-        return true;
-    }
-    bool push(T &&item)
-    {
-        size_t current, next;
-        do
-        {
+        do {
             current = write_idx.load(std::memory_order_relaxed);
             next = (current + 1) & SIZE_MASK;
-
-            if (next == read_idx.load(std::memory_order_acquire))
-            {
-                return false; // Buffer full
+            
+            if (next == read_idx.load(std::memory_order_acquire)) {
+                return false;  // Buffer full
             }
-        } while (!write_idx.compare_exchange_weak(current, next,
-                                                  std::memory_order_release,
-                                                  std::memory_order_relaxed));
+            
+            buffer[current] = std::move(item);  // Write inside the loop
+            
+            if (write_idx.compare_exchange_weak(current, next,
+                                              std::memory_order_release,
+                                              std::memory_order_relaxed)) {
+                return true;  // Success
+            }
+            
+            // If CAS failed, move item back since we'll try again
+            item = std::move(buffer[current]);
+        } while (true);
+    }
 
-        buffer[current] = std::move(item);
-        return true;
+    bool pop(T& item) noexcept {
+        size_t current, next;
+        do {
+            current = read_idx.load(std::memory_order_relaxed);
+            if (current == write_idx.load(std::memory_order_acquire)) {
+                return false;  // Buffer empty
+            }
+            
+            next = (current + 1) & SIZE_MASK;
+            item = std::move(buffer[current]);  // Read inside the loop
+            
+            if (read_idx.compare_exchange_weak(current, next,
+                                             std::memory_order_release,
+                                             std::memory_order_relaxed)) {
+                return true;  // Success
+            }
+        } while (true);
     }
 };

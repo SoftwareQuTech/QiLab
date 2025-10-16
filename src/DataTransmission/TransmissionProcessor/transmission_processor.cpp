@@ -1,60 +1,47 @@
-#include "DataTransmission/transmission_processor.hpp"
+#include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
 
 #define COMMAND_MESSAGE_LENGTH      4
-#define MAX_BUFFER_LENGTH           32
+#define MAX_BUFFER_LENGTH           64
 #define RESPONSE_MESSAGE_LENGTH     4
-#define MAX_NUMBER_OF_COMMANDS     (MAX_BUFFER_LENGTH / COMMAND_MESSAGE_LENGTH)
+#define CONTROL_WORD_LEN            4
+#define MAX_NUMBER_OF_COMMANDS     ((MAX_BUFFER_LENGTH - CONTROL_WORD_LEN) / COMMAND_MESSAGE_LENGTH)
+
+#define ASSERT_INPUT_RANGE(x, min, max) \
+    if ((x) <= (min) || (x) > (max)) { \
+        return -1; \
+    } \
 
 // CRC-8/CCITT parameters.
 static constexpr uint8_t CRC8_CCITT_POLY = 0x07u;
 static constexpr uint8_t CRC8_INIT = 0x00u;
 static constexpr uint8_t CRC8_XOROUT = 0x00u;
 
-TransmissionProcessor::TransmissionProcessor(ITransmissionHandler *transmission_handler) : data_handler(transmission_handler) {}
+TransmissionProcessor::TransmissionProcessor(std::shared_ptr<ITransmissionHandler> transmission_handler) : data_handler(transmission_handler) {}
 
 TransmissionProcessor::~TransmissionProcessor() {}
 
-int8_t TransmissionProcessor::receive_command(std::vector<std::unique_ptr<CommandBase>> &commands, uint8_t read_command_count)
-{
-    uint8_t data_buffer[MAX_BUFFER_LENGTH] = {0};
 
-    if(read_command_count == 0 || read_command_count > MAX_NUMBER_OF_COMMANDS)
+int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<ResponseData>> &responses, std::vector<std::unique_ptr<CommandBase>> &commands, uint8_t transfer_msg_count)
+{
+    __attribute__((aligned(64))) uint8_t tx_buffer[MAX_BUFFER_LENGTH] = {0} ;
+    __attribute__((aligned(64))) uint8_t rx_buffer[MAX_BUFFER_LENGTH] = {0};
+    __attribute__((aligned(64))) uint8_t response_data[RESPONSE_MESSAGE_LENGTH] = {0};
+    __attribute__((aligned(64))) uint8_t command_data[RESPONSE_MESSAGE_LENGTH] = {0};
+
+    static_assert(sizeof(tx_buffer) % 64 == 0, "tx_buffer not aligned");
+    static_assert(sizeof(rx_buffer) % 64 == 0, "rx_buffer not aligned");
+
+    ASSERT_INPUT_RANGE(responses.size(), 0, MAX_NUMBER_OF_COMMANDS);
+    ASSERT_INPUT_RANGE(commands.size(), 0, MAX_NUMBER_OF_COMMANDS);
+    ASSERT_INPUT_RANGE(transfer_msg_count, 0, responses.size());
+    ASSERT_INPUT_RANGE(transfer_msg_count, 0, commands.size());
+
+    if(responses.size() != commands.size())
     {
         return -1;
     }
-
-    if(data_handler->receive_data(data_buffer, COMMAND_MESSAGE_LENGTH * read_command_count))
-    {
-        return -2;
-    }
-
-    for(uint8_t i = 0; i < read_command_count; i++)
-    {
-        std::unique_ptr<CommandBase> cmd;
-        cmd = deserialize_command(data_buffer);
-        if(cmd != nullptr)
-        {
-            commands.push_back(std::move(cmd));
-        }
-        else
-        {
-            return -3;
-        }
-    }
-
-    return 0;
-}
-
-int8_t TransmissionProcessor::send_response(std::vector<std::unique_ptr<ResponseData>> responses)
-{
-    uint8_t data_buffer[MAX_BUFFER_LENGTH] = {0};
-    uint8_t response_data[RESPONSE_MESSAGE_LENGTH] = {0};
-    if(responses.size() == 0 || responses.size() > MAX_NUMBER_OF_COMMANDS)
-    {
-        return -1;
-    }
-
-    for(auto i = 0; i < responses.size(); i++)
+    
+    for(auto i = 0; i < transfer_msg_count; i++)
     {
         auto response = responses[i].get();
         if(response == nullptr)
@@ -62,10 +49,69 @@ int8_t TransmissionProcessor::send_response(std::vector<std::unique_ptr<Response
             return -2;
         }
         serialize_response(*response, response_data);
-        std::copy(response_data, response_data + RESPONSE_MESSAGE_LENGTH, data_buffer + (i * RESPONSE_MESSAGE_LENGTH));
+        std::copy(response_data, response_data + RESPONSE_MESSAGE_LENGTH, tx_buffer + (i * RESPONSE_MESSAGE_LENGTH));
     }
 
-    data_handler->send_data(data_buffer, RESPONSE_MESSAGE_LENGTH * responses.size());
+    if(data_handler->transfer(tx_buffer, rx_buffer, RESPONSE_MESSAGE_LENGTH * transfer_msg_count))
+    {
+        return -3;
+    }
+
+    for(uint8_t i = 0; i < transfer_msg_count; i++)
+    {
+        std::copy(rx_buffer + (i * COMMAND_MESSAGE_LENGTH), rx_buffer  + ((i * COMMAND_MESSAGE_LENGTH) + COMMAND_MESSAGE_LENGTH), command_data);
+        std::unique_ptr<CommandBase> cmd;
+        cmd = deserialize_command(command_data);
+        if(cmd != nullptr)
+        {
+            commands[i].swap(cmd);
+        }
+        else
+        {
+            return -4;
+        }
+    }
+
+    return 0;
+}
+
+int8_t TransmissionProcessor::receive_command(std::unique_ptr<CommandBase> &command, uint16_t timeout)
+{
+    uint8_t data_buffer[COMMAND_MESSAGE_LENGTH] = {0};
+
+    if (data_handler->receive_data(data_buffer, COMMAND_MESSAGE_LENGTH))
+    {
+        return -2;
+    }
+    std::unique_ptr<CommandBase> cmd = deserialize_command(data_buffer);
+    
+    if (cmd != nullptr)
+    {
+        command = std::move(cmd);
+    }
+    else
+    {
+        return -3;
+    }
+
+    return 0;
+}
+
+int8_t TransmissionProcessor::send_response(const std::unique_ptr<ResponseData> &response) 
+{
+    uint8_t response_data[RESPONSE_MESSAGE_LENGTH] = {0};
+
+    if (response == nullptr)
+    {
+        return -1;
+    }
+    serialize_response(*response, response_data);
+
+    if (data_handler->send_data(response_data, RESPONSE_MESSAGE_LENGTH))
+    {
+        return -2;
+    }
+
     return 0;
 }
 
