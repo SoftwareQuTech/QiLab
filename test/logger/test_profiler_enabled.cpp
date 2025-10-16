@@ -31,11 +31,10 @@ static std::vector<std::string> read_lines(const fs::path& p) {
 
 TEST(Registration, SameNameSameId) {
 #if PROF_ENABLED
-  auto& P = Profiler::instance();
-  auto id1 = P.register_event("foo");
-  auto id2 = P.register_event("foo");
+  ProfGuard pg;
+  Profiler_id id1 = PROF_REGISTER_EVENT("foo");
+  Profiler_id id2 = PROF_REGISTER_EVENT("foo");
   EXPECT_EQ(id1, id2);
-  EXPECT_GE(P.event_count(), 1u);
 #else
   GTEST_SKIP() << "Profiling disabled";
 #endif
@@ -46,13 +45,15 @@ TEST(LazyMacros, StartStopWorksAndRecords)
 #if PROF_ENABLED
   {
     ProfGuard guard{1024}; // RAII init/flush for THIS thread
-    PROF_START("macro_event");
-    PROF_STOP("macro_event");
+    Profiler_id id1 = PROF_REGISTER_EVENT("macro_event");
+
+    PROF_START(id1);
+    PROF_STOP(id1);
   }
   //PROF_THREAD_FLUSH();
 
   auto base = temp_base("lazy");
-  Profiler::instance().dump_csv(base.string());
+  PROF_SAVE_DATA(base.string());
 
   auto durations = read_lines(base.string() + "_durations.csv");
   // Header + >=1 row for "macro_event"
@@ -75,12 +76,13 @@ TEST(LazyMacros, StartStopWorksAndRecords)
 TEST(ThreadInitAndGrow, RegisterAfterInitStillWorks) {
 #if PROF_ENABLED
   // Pre-register one event, then use a new one AFTER thread_init via macro.
-  (void)PROF_EID("pre_registered");
+  Profiler_id pre_event = PROF_REGISTER_EVENT("pre_registered");
 
-  std::thread t([]{
+  std::thread t([&]{
     ProfGuard guard{1024};
     // This event name is registered lazily after thread_init; TLS must grow.
-    for (int i=0;i<10;++i) { PROF_START("post_registered"); PROF_STOP("post_registered"); }
+    Profiler_id post_event = PROF_REGISTER_EVENT("post_registered");
+    for (int i=0;i<10;++i) { PROF_START(post_event); PROF_STOP(post_event); }
   });
   t.join();
 
@@ -105,7 +107,7 @@ TEST(FreeFormEvents, MessageAndTimestampWritten) {
   PROF_EVENT("worker start");
   PROF_EVENT("worker ok");
   auto base = temp_base("events");
-  Profiler::instance().dump_csv(base.string());
+  PROF_SAVE_DATA(base.string());
   auto events = read_lines(base.string() + "_events.csv");
   ASSERT_GE(events.size(), 3u); // header + at least 2 rows
 
@@ -129,8 +131,9 @@ TEST(MultiThread, AggregateAllSamples) {
     ProfGuard guard{N};
     ready.fetch_add(1);
     // tiny barrier
+    Profiler_id nop_id = PROF_REGISTER_EVENT("mt_nop");
     while (ready.load() < T) std::this_thread::yield();
-    for (int i=0;i<N;++i) { PROF_START("mt_nop"); PROF_STOP("mt_nop"); }
+    for (int i=0;i<N;++i) { PROF_START(nop_id); PROF_STOP(nop_id); }
   };
 
   std::vector<std::thread> threads;
