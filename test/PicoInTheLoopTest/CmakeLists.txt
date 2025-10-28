@@ -1,0 +1,26 @@
+cmake_minimum_required(VERSION 3.13)
+project(PicoInTheLoop C CXX)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+
+option(ENABLE_PROFILING "Enable fast TLS profiler" ON)
+
+if(ENABLE_PROFILING)
+  add_compile_definitions(PROF_ENABLED=1)
+  add_library(profiler STATIC logger/profiler.cpp)
+else()
+  add_compile_definitions(PROF_ENABLED=0)
+  # Do NOT compile profiler.cpp when disabled
+endif()
+
+add_executable(test_pico_messaging 
+    entry_point.cpp
+    DataHandler/mock_handler.cpp
+    )
+
+target_include_directories(test_pico_messaging PUBLIC
+  ${PROJECT_SOURCE_DIR}
+)
+
+target_link_libraries(test_pico_messaging PRIVATE profiler)
