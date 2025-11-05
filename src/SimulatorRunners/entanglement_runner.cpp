@@ -77,30 +77,7 @@ int EntanglementManager::on_run()
     }
 }
 
-inline bool EntanglementManager::check_pair_valid(const EntanglementRequest &request)
-{
-    std::chrono::duration elapsed_time = std::chrono::steady_clock::now() - request.command_issue_time;
-    if (elapsed_time.count() > entanglement_pair_expiry_timeout)
-    {
-        return false;
-    }
-    return true;
-}
 
-bool EntanglementManager::match_ent_pair(const EntanglementRequest &request)
-{
-    for (auto &ent_entry : entanglement_requests)
-    {
-        if (request.neighbour_node == ent_entry.entanglement_command.node_id)
-        {
-            if (request.entanglement_command.node_id == ent_entry.neighbour_node)
-            {
-                return true;
-            }
-        }
-    }
-    return false;
-}
 
 void EntanglementManager::on_abort()
 {

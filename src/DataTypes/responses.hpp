@@ -51,7 +51,7 @@ enum Bell_State_Measurent_t
 
 struct ResponseData
 {
-    NodeStatus_t status = NodeStatus_t::READY;
+    NodeStatus_t status;
     uint8_t outcome_result;
     Outcome_Status_t outcome_status;
 };

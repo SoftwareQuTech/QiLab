@@ -12,11 +12,12 @@
 #include "Simulator/sim_interface.hpp"
 #include "logger/profiler_api.hpp"
 #include "DataTypes/command_data.hpp"
+#include "MessageBroker/message_broker.hpp"
 
 class SimulatorRunner
 {
     public:
-    SimulatorRunner(ISimulator*);
+    SimulatorRunner(std::unique_ptr<ISimulator>, std::shared_ptr<MessageBroker>);
     ~SimulatorRunner() = default;
 
     int on_run();
@@ -26,9 +27,10 @@ class SimulatorRunner
     bool unregister_node(int16_t node_id);
 
     private:
-    ISimulator* simulator;
+    std::shared_ptr<MessageBroker> message_broker;
+    std::unique_ptr<ISimulator> simulator;
     //constrain on how much nodes to register
-    const uint16_t max_nodes_available = 20;
+    const uint16_t max_nodes_available = 4;
     //NOTE: the tableuau stim expands automatically with requested address.
     //no need for preallocation, just a constrain for memory
     const uint16_t max_qubits_available = 200;

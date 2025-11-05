@@ -1,5 +1,5 @@
 #include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
-
+#include <iostream>
 #define COMMAND_MESSAGE_LENGTH      4
 #define MAX_BUFFER_LENGTH           64
 #define RESPONSE_MESSAGE_LENGTH     4
@@ -56,6 +56,13 @@ int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<Res
     {
         return -3;
     }
+
+    // std::cout << "Received message: ";
+    // for (auto rx = 0; rx < 4; rx++)
+    // {
+    //     std::cout << std::hex << static_cast<int>(rx_buffer[rx]);
+    // }
+    // std::cout << std::endl;
 
     for(uint8_t i = 0; i < transfer_msg_count; i++)
     {
@@ -172,7 +179,7 @@ std::unique_ptr<CommandBase> TransmissionProcessor::deserialize_command(const ui
 int8_t TransmissionProcessor::serialize_response(const ResponseData &response, uint8_t *buffer)
 {
     buffer[0] = 0;//buffer[0] -> must be populated on hardware platform with actual cyclecount
-    if (response.outcome_status & Outcome_Status_t::SUCCESS)
+    if (response.outcome_status == Outcome_Status_t::SUCCESS)
     {
         buffer[1] = (0xf0 & ((uint8_t)response.outcome_result << 4)) | (0x0f & (uint8_t)response.status);
     }

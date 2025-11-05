@@ -13,7 +13,7 @@
 #define CPU_PAUSE() ((void)0)
 #endif
 
-SimulatorRunner::SimulatorRunner(ISimulator *sim) : simulator(sim)
+SimulatorRunner::SimulatorRunner(std::unique_ptr<ISimulator> sim, std::shared_ptr<MessageBroker> broker) : simulator(std::move(sim)), message_broker(broker)
 {
     PROF_THREAD_INIT();
     // PROF_EID("command_nop");
@@ -48,32 +48,61 @@ bool SimulatorRunner::unregister_node(int16_t node_id)
     // maybe qubit reset will be needed as well in order to ensure state
 }
 
-
 int SimulatorRunner::on_run()
 {
+
     while (!abort)
     {
-        PROF_START(prof_event_simulation_thread_log);
-        // if (this->lockfree_queue.pop(data))
-        // {
-        //     ResponseData resp;
-        //     if (data.node_id < nodes.size())
-        //     {
-        //         // std::cout << "Handling command from node: " << data.node_id << '\n';
-        //         resp = execute_command(std::move(data.transport), nodes[data.node_id].first);
+        TransportData<CommandBase> current_command;
+        TransportData<ResponseData> response;
+        //PROF_START(prof_event_simulation_thread_log);
 
-        //         // std::this_thread::sleep_for(std::chrono::milliseconds(10)); // ok, outside lock
-        //         //  Callbacks can safely enqueue new work now without deadlocking.
-        //         response_notify({std::make_unique<ResponseData>(resp), data.node_id});
-        //     }
-        // }
-        // else
-        // {
-        //     //CPU_PAUSE();
-        //     // handle invalid node id, maybe set an error in resp then callback
-        // }
-        // // --- PROCESS OUTSIDE THE LOCK
-        PROF_STOP(prof_event_simulation_thread_log);
+        if (message_broker->get_command(current_command))
+        {
+            if (current_command.node_id < nodes.size())
+            {
+                response.node_id = current_command.node_id;
+                response.destination = DestinationType::CommandRunner;
+                response.source = DestinationType::SimRunner;
+
+                //std::this_thread::sleep_for(std::chrono::microseconds(200));
+                std::unique_ptr<ResponseData> test_resp = std::make_unique<ResponseData>();
+                if (current_command.transport->command_type == Command_t::QUBIT_MEASUREMENT)
+                {
+                    test_resp->outcome_result = 0x11;
+                    test_resp->outcome_status = Outcome_Status_t::SUCCESS;
+                    test_resp->status = NodeStatus_t::BUSY_LINK;
+
+                    response.transport = std::move(test_resp);
+                }
+                else if (current_command.transport->command_type == Command_t::SINGLE_QUBIT_GATE)
+                {
+                    test_resp->outcome_result = 0x22;
+                    test_resp->outcome_status = Outcome_Status_t::SUCCESS;
+                    test_resp->status = NodeStatus_t::BUSY_LINK;
+
+                    response.transport = std::move(test_resp);
+                }
+                else
+                {
+                    response.transport = std::move(test_resp);
+                }
+                auto resp = execute_command(std::move(current_command.transport), nodes[current_command.node_id].first);
+
+                // response.transport = std::make_unique<ResponseData>(resp);
+                if (message_broker->route_response(std::move(response)))
+                {
+                    // error
+                }
+            }
+        }
+        else
+        {
+            // interleave a bit
+            //std::this_thread::yield();
+        }
+        //PROF_STOP(prof_event_simulation_thread_log);
+        //std::this_thread::sleep_for(std::chrono::milliseconds(1));
         std::this_thread::yield();
     }
     PROF_THREAD_FLUSH();

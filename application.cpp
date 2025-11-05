@@ -17,6 +17,7 @@
 #include "logger/profiler_api.hpp"
 #include "DataTransmission/handlers/spi_master_handler.hpp"
 //#include "SimulatorRunner/entanglement_manager.hpp"
+#include "MessageBroker/message_broker.hpp"
 
 bool abort_sim = false;
 
@@ -39,25 +40,36 @@ int main()
 #endif
     std::seed_seq seq{d(), d(), d(), d(), d(), d(), d(), d()};
 
-    StimAdapter* stim_adapter = new StimAdapter(seq, 0); //the seed is problematic
-    SimulatorRunner sim(stim_adapter);
+    std::shared_ptr<MessageBroker> broker = std::make_shared<MessageBroker>();
+    
+    std::unique_ptr<StimAdapter> stim_adapter =  std::make_unique<StimAdapter>(seq, 0); //the seed is problematic
+    SimulatorRunner sim(std::move(stim_adapter), broker);
+    int16_t node_id = sim.register_node(10);
 
-    SPIHandler spi_handler;
-    if(spi_handler.connect_spi("/dev/spidev0.0", 0, 8, 500000) != 0)
-    {
-        std::cerr << "Failed to connect to SPI device" << std::endl;
-        return -1;
-    }
-    uint8_t tx[4] = {0x01, 0x02, 0x03, 0x04};
-    uint8_t rx[4] = {0};
-    spi_handler.transfer(tx, rx, 4);
-    std::cout << "SPI received: ";
-    for(int i = 0; i < 4; i++)
-    {
-        std::cout << std::hex << static_cast<int>(rx[i]) << " ";
-    }
-    std::cout << std::dec << std::endl;
+    std::shared_ptr<ITransmissionHandler> transportA = std::make_shared<SPIHandler>();
+    std::shared_ptr<TransmissionProcessor> command_handlerA = std::make_unique<TransmissionProcessor>(transportA);
+    DataTransmissionRunner nodeA({node_id}, command_handlerA, broker);
 
+
+    std::cout << "Starting simulation" << std::endl;
+
+    std::jthread simulator_thread(&SimulatorRunner::on_run, &sim);
+    std::jthread thread_node_a(&DataTransmissionRunner::on_run, &nodeA);
+
+
+    while(!abort_sim)
+    {
+        //do nothing and wait for abort signal
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        //abort_sim = true;
+    }
+
+    sim.on_abort();
+    simulator_thread.join();
+    
+    nodeA.on_abort();    
+    thread_node_a.join();
+/*
     std::shared_ptr<ITransmissionHandler> transportA = std::make_shared<MockHandler>();
     TransmissionProcessor* command_handlerA = new TransmissionProcessor(transportA);
     DataTransmissionRunner* nodeA = new DataTransmissionRunner({0}, command_handlerA, nullptr);
@@ -106,7 +118,7 @@ int main()
 
     delete stim_adapter;
     delete command_handlerA;
-    
+    */
     PROF_SAVE_DATA("test_trace");
     std::cout << "Executed the simulation" << std::endl;
 

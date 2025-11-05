@@ -17,7 +17,7 @@
 class DataTransmissionRunner
 {
     public:
-    DataTransmissionRunner(std::vector<int16_t> nodes, TransmissionProcessor *processor, std::shared_ptr<MessageBroker> broker); 
+    DataTransmissionRunner(std::vector<int16_t> nodes, std::shared_ptr<TransmissionProcessor> processor, std::shared_ptr<MessageBroker> broker); 
     ~DataTransmissionRunner();
 
     int on_run();
@@ -27,7 +27,7 @@ class DataTransmissionRunner
     std::shared_ptr<MessageBroker> message_broker;
     std::vector<int16_t> registered_nodes;
     bool abort = false;
-    std::unique_ptr<TransmissionProcessor> transmission_processor;
+    std::shared_ptr<TransmissionProcessor> transmission_processor;
 
     //profiling event ids
     Profiler_id prof_event_handler_thread_timing = PROF_REGISTER_EVENT("handler_thread_timing");

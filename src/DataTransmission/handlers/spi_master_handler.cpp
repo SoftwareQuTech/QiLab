@@ -9,7 +9,9 @@
 #include "DataTransmission/handlers/spi_master_handler.hpp"
 
 
-SPIHandler::SPIHandler(){}
+SPIHandler::SPIHandler(){
+    connect_spi(device, mode, bits, speed);
+}
 
 SPIHandler::~SPIHandler()
 {
@@ -81,18 +83,25 @@ int8_t SPIHandler::transfer(uint8_t const* tx_buffer, uint8_t const* rx_buffer, 
 {
     struct spi_ioc_transfer tr;
     memset(&tr, 0, sizeof(tr));
+    // std::cout << "Sending message: ";
+    // for (auto rx = 0; rx < length; rx++)
+    // {
+    //     std::cout << std::hex << static_cast<int>(tx_buffer[rx]);
+    // }
+    // std::cout << std::endl;
     tr.tx_buf = reinterpret_cast<unsigned long>(tx_buffer);
     tr.rx_buf = reinterpret_cast<unsigned long>(const_cast<uint8_t*>(rx_buffer));
     tr.len = length;
-    tr.delay_usecs = delay;
+    tr.delay_usecs = 1;
     tr.speed_hz = speed;
     tr.bits_per_word = bits;
-
-    if (ioctl(spi_fd, SPI_IOC_MESSAGE(1), &tr) < 1) {
-        //keep this for debugging purposes only
-        std::cerr << "Failed to perform SPI transfer." << std::endl;
-        return -1;
-    }
+    ioctl(spi_fd, SPI_IOC_MESSAGE(1), &tr);
+    // if (ioctl(spi_fd, SPI_IOC_MESSAGE(1), &tr) < 1) {
+    //     //keep this for debugging purposes only
+    //     std::cerr << "Failed to perform SPI transfer." << std::endl;
+    //     return -1;
+    // }
+    
     return 0;
 }
 

@@ -7,40 +7,30 @@
 */
 
 #pragma once
+#include <cstdint>
 
-#include "runnable.hpp"
+#include <MessageBroker/message_broker.hpp>
 #include "DataTypes/command_data.hpp"
-#include "logger/logger.hpp"
+#include "Simulator/entanglement/entanglement_manager.hpp"
 
-struct EntanglementRequest
-{
-    int neighbour_node;
-    CommandData_t entanglement_command;
-    std::chrono::steady_clock::time_point command_issue_time;
-};
 
-class EntanglementManager: public IRunnable<CommandData_t>
+class EntanglementRunner:
 {
     public:
-    EntanglementManager(IProfiler*);
-    ~EntanglementManager() = default;
+    EntanglementRunner(std::shared_ptr<MessageBroker>);
+    ~EntanglementRunner() = default;
 
-    int on_run() override;
-    void on_abort() override;
+    int on_run();
+    void on_abort();
 
     private:
-    //checks if this pair is still valid based on timestamp
-    inline bool check_pair_valid(const EntanglementRequest &request);
-    //try to match a pair for entanglement, and if it does, issue the commands to the runner
-    bool match_ent_pair(const EntanglementRequest &request);
-
-    std::vector<EntanglementRequest> entanglement_requests;
-    IProfiler* event_logger;
+    std::shared_ptr<MessageBroker> message_broker;
+    EntanglementManager entanglement_manager;
 
     bool abort = false;
-    const int entanglement_pair_expiry_timeout = 500000; //[ns]
-    EntanglementManager(const EntanglementManager&) = delete;
-    EntanglementManager(const EntanglementManager&&) = delete;
-    EntanglementManager& operator=(EntanglementManager&) = delete;
-    EntanglementManager& operator=(EntanglementManager&&) = delete;
+    
+    EntanglementRunner(const EntanglementRunner&) = delete;
+    EntanglementRunner(const EntanglementRunner&&) = delete;
+    EntanglementRunner& operator=(EntanglementRunner&) = delete;
+    EntanglementRunner& operator=(EntanglementRunner&&) = delete;
 };
