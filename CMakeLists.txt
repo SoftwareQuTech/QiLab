@@ -1,46 +1,34 @@
 cmake_minimum_required(VERSION 3.14)
-set(CMAKE_C_COMPILER "/usr/bin/gcc")
-set(CMAKE_CXX_COMPILER "/usr/bin/g++")
+
+## Only set cross-compilers if a compiler has not been provided by the user
+# This allows CI jobs (or local users) to override compilers by passing
+# -DCMAKE_C_COMPILER / -DCMAKE_CXX_COMPILER on the cmake command line.
+if (NOT CMAKE_C_COMPILER)
+  set(CMAKE_C_COMPILER "/usr/bin/aarch64-linux-gnu-gcc")
+endif()
+
+if (NOT CMAKE_CXX_COMPILER)
+  set(CMAKE_CXX_COMPILER "/usr/bin/aarch64-linux-gnu-g++")
+endif()
 set(CMAKE_CXX_STANDARD 20)
 
-set(CMAKE_CXX_FLAGS "-O0")
+# Set default build type if not specified
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release")
+endif()
+
+# Debug build flags
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -fsanitize=address -fno-omit-frame-pointer")
+set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+
+# Release build flags
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+
+# RelWithDebInfo
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -DNDEBUG")
 project(QILab)
 
-
-
-# ---- Tests ----
-include(FetchContent)
-  FetchContent_Declare(
-    googletest
-    # Specify the commit you depend on and update it regularly.
-    URL https://github.com/google/googletest/archive/5376968f6948923e2411081fd9372e71a59d8e77.zip
-  )
-  # For Windows: Prevent overriding the parent project's compiler/linker settings
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
-
-add_executable(stim_eval_test 
-                src/CommandHandler/command_handler.cpp
-                test/sample_test.cpp
-                test/command_handler/test_command_handler.cpp
-                test/mocks/mock_transmission.hpp
-                )
-
-
-target_include_directories(stim_eval_test PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/test
-  ${CMAKE_SOURCE_DIR}             # if your headers are under the project root
-  ${CMAKE_SOURCE_DIR}/src         # adjust if needed
-  ${CMAKE_SOURCE_DIR}/include     # adjust if needed
-)
-
-target_link_libraries(stim_eval_test PRIVATE 
-GTest::gtest GTest::gtest_main GTest::gmock)
-
-include(GoogleTest)
-gtest_discover_tests(stim_eval_test)
-
-
+# ---- Project compilation ----
 #get the stim library
 include(FetchContent)
 FetchContent_Declare(stim
@@ -52,17 +40,61 @@ if(NOT stim_POPULATED)
   add_subdirectory(${stim_SOURCE_DIR})
 endif()
 
-include_directories("src")
 
-add_executable(stim_evaluation
-  application.cpp
-  src/CommandHandler/command_handler.cpp
-  src/CommandHandler/handlers/mock_handler.cpp
-  src/simulator_runner.cpp
+option(ENABLE_PROFILING "Enable fast TLS profiler" ON)
+
+if(ENABLE_PROFILING)
+  add_compile_definitions(PROF_ENABLED=1)
+  add_library(profiler STATIC src/logger/profiler.cpp)
+else()
+  add_compile_definitions(PROF_ENABLED=0)
+  # Do NOT compile profiler.cpp when disabled
+endif()
+
+add_library(qilab_lib STATIC
+  #Data Transmission
+  src/DataTransmission/handlers/mock_handler.cpp
+  src/DataTransmission/TransmissionRunner/transmission_runner.cpp
+  src/DataTransmission/TransmissionProcessor/transmission_processor.cpp
+  #Simulator
+  src/SimulatorRunners/simulator_runner.cpp
   src/Simulator/adapters/mock_adapter.cpp
   src/Simulator/adapters/stim_adapter.cpp
-  src/logger/logger.cpp
-  )
-target_link_libraries(stim_evaluation PRIVATE libstim)
+  #Message Broker
+  src/MessageBroker/message_broker.cpp
+  #Entanglement Manager
+  #src/SimulatorRunner/entanglement_manager.cpp
+)
 
+target_include_directories(qilab_lib PUBLIC
+  ${PROJECT_SOURCE_DIR}/include
+  ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(qilab_lib PRIVATE libstim)
 
+include_directories("src")
+
+add_executable(qilab
+  application.cpp
+  #Data Transmission
+  src/DataTransmission/handlers/mock_handler.cpp
+  src/DataTransmission/handlers/spi_master_handler.cpp
+  src/DataTransmission/TransmissionRunner/transmission_runner.cpp
+  src/DataTransmission/TransmissionProcessor/transmission_processor.cpp
+  #Simulator
+  src/SimulatorRunners/simulator_runner.cpp
+  src/Simulator/adapters/mock_adapter.cpp
+  src/Simulator/adapters/stim_adapter.cpp
+  #Message Broker
+  src/MessageBroker/message_broker.cpp
+  #Entanglement Manager
+  #src/SimulatorRunner/entanglement_manager.cpp
+    )
+target_link_libraries(qilab PRIVATE libstim profiler)
+
+include(CTest)                 # defines BUILD_TESTING (default ON)
+
+# Tests live in a separate CMake; add only when requested
+if(BUILD_TESTING)
+  add_subdirectory(test)
+endif()

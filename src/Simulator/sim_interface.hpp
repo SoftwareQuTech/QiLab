@@ -197,4 +197,7 @@ struct ISimulator
      */
     virtual uint8_t entanglement_swap(uint8_t qubit1_address,
                                       uint8_t qubit2_address) = 0;
+
+    virtual bool allocate_qubits(uint8_t num_qubits) = 0;
+
 };

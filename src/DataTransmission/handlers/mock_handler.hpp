@@ -6,7 +6,7 @@
 */
 
 #pragma once
-#include "CommandHandler/transmision_handler.hpp"
+#include "DataTransmission/transmision_handler.hpp"
 #include "logger/logger.hpp"
 #include "command_helper.hpp"
 
@@ -18,14 +18,17 @@ public:
     ~MockHandler();
     int8_t receive_data(uint8_t *, uint8_t) override;
     int8_t send_data(const uint8_t *, uint8_t) override;
-
+    void flush() override {};
+    int8_t transfer(uint8_t const* tx_buffer, uint8_t const* rx_buffer, const uint8_t length) override;
 private:
     void fill_mock_message(uint8_t*);
     void create_commands();
     int latest_measure_response = -1;
     IProfiler* local_logger;
     std::vector<BaseC*> command_list;
-
+    
+    int message_num = 0;
+    
     MockHandler(const MockHandler &) = delete;
     MockHandler(const MockHandler &&) = delete;
     MockHandler &operator=(MockHandler &) = delete;

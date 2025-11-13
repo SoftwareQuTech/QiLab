@@ -1,0 +1,42 @@
+# .gitlab-ci.yml
+image: ubuntu:22.04
+
+stages:
+  - build
+  - test
+
+build:
+  stage: build
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+  before_script:
+    - apt-get update -y
+    - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git
+    - mkdir -p build && cd build
+  script:
+    - cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++
+    - cmake --build . -- -j$(nproc)
+  artifacts:
+    paths:
+      - build/
+    expire_in: 1 hour
+
+test:
+  stage: test
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+  dependencies:
+    - build
+  before_script:
+    - apt-get update -y
+    - apt-get install -y --no-install-recommends ca-certificates cmake
+  script:
+    - cd build
+    - echo "Running ctest and producing junit report..."
+    - ctest --output-on-failure --parallel $(nproc) --output-junit junit.xml || true
+  artifacts:
+    reports:
+      junit: build/junit.xml
+    paths:
+      - build/junit.xml
+    when: always

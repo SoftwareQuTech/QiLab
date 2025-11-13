@@ -9,7 +9,7 @@ LocalProfiler::LocalProfiler() : initial_time_(std::chrono::steady_clock::now())
     durations_.reserve(initial_number_of_logs_);
 }
 
-void LocalProfiler::log_event(const std::string &message)
+void LocalProfiler::log_event(std::string_view message)
 {
     using namespace std::chrono;
     const auto t = duration_cast<nanoseconds>(steady_clock::now() - initial_time_).count();
@@ -18,7 +18,7 @@ void LocalProfiler::log_event(const std::string &message)
     events_.emplace_back(message, t);
 }
 
-bool LocalProfiler::register_profiling_event(const std::string &event_id)
+bool LocalProfiler::register_profiling_event(std::string_view event_id)
 {
     if (event_id.empty())
         return false;
@@ -33,7 +33,7 @@ bool LocalProfiler::register_profiling_event(const std::string &event_id)
     return true;
 }
 
-bool LocalProfiler::pe_start(const std::string &event_id)
+bool LocalProfiler::pe_start(std::string_view event_id)
 {
     if (event_id.empty())
         return false;
@@ -43,7 +43,7 @@ bool LocalProfiler::pe_start(const std::string &event_id)
     return true;
 }
 
-bool LocalProfiler::pe_stop(const std::string &event_id)
+bool LocalProfiler::pe_stop(std::string_view event_id)
 {
     if (event_id.empty())
         return false;
@@ -55,6 +55,7 @@ bool LocalProfiler::pe_stop(const std::string &event_id)
         return false;
 
     const auto dur_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now - it->second).count();
+
     durations_.emplace_back(event_id, dur_ns);
     return true;
 }

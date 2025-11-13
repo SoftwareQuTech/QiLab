@@ -82,41 +82,49 @@ enum Command_t
 
 struct CommandBase
 {
-    CommandBase(const uint8_t* &data)
-    {
-        // check bit order
-        crc = data[3];
-        command_type = static_cast<Command_t>(data[0]);
-    }
-    virtual ~CommandBase() {}
+    explicit CommandBase(const uint8_t* data) noexcept
+        : crc(data[3])
+        , command_type(static_cast<Command_t>(data[0]))
+    {}
+
+    virtual ~CommandBase() = default;
     Command_t command_type;
     uint8_t crc;
+
+protected:
+    // Utility functions for derived classes
+    static constexpr uint8_t get_qubit1(uint8_t data) noexcept { return QUBIT_1_BIT_MASK & data; }
+    static constexpr uint8_t get_qubit2(uint8_t data) noexcept { return (QUBIT_2_BIT_MASK & data) >> 4; }
+    static constexpr Angle_t get_angle(uint8_t data) noexcept { return static_cast<Angle_t>(ANGLE_BIT_MASK & data); }
+    static constexpr Axis_t get_axis(uint8_t data) noexcept { return static_cast<Axis_t>((AXIS_BIT_MASK & data) >> 5); }
 };
 
-struct NOP_Command final: public CommandBase
+struct NOP_Command final: public CommandBase 
 {
-    NOP_Command(const uint8_t* &data) : CommandBase(data)
-    {
-    }
+    explicit NOP_Command(const uint8_t* data) noexcept 
+        : CommandBase(data) 
+    {} // Empty constructor since NOP needs no additional data
 };
 
 struct QubitInitialize final: public CommandBase
 {
-    QubitInitialize(const uint8_t* &data) : CommandBase(data)
-    {
-        qubit1_address = QUBIT_1_BIT_MASK & data[1];
-    }
+    explicit QubitInitialize(const uint8_t* data) noexcept
+        : CommandBase(data)
+        , qubit1_address(get_qubit1(data[1]))
+    {}
+    
     uint8_t qubit1_address;
 };
 
 struct SingleQubitGate final: public CommandBase
 {
-    SingleQubitGate(const uint8_t* &data) : CommandBase(data)
-    {
-        qubit1_address = (QUBIT_1_BIT_MASK & data[1]);
-        angle = static_cast<Angle_t>((ANGLE_BIT_MASK & data[2]));
-        axis = static_cast<Axis_t>((AXIS_BIT_MASK & data[2]) >> 5); //check
-    }
+    explicit SingleQubitGate(const uint8_t* data) noexcept 
+        : CommandBase(data)
+        , qubit1_address(get_qubit1(data[1]))
+        , angle(get_angle(data[2]))
+        , axis(get_axis(data[2]))
+    {}
+
     uint8_t qubit1_address;
     Angle_t angle;
     Axis_t axis;
@@ -124,13 +132,14 @@ struct SingleQubitGate final: public CommandBase
 
 struct TwoQubitGate final: public CommandBase
 {
-    TwoQubitGate(const uint8_t* &data) : CommandBase(data)
-    {
-        qubit1_address = (QUBIT_1_BIT_MASK & data[1]);
-        qubit2_address = (QUBIT_2_BIT_MASK & data[1]) >> 4;
-        angle = static_cast<Angle_t>((ANGLE_BIT_MASK & data[2]));
-        axis = static_cast<Axis_t>((AXIS_BIT_MASK & data[2]) >> 5);
-    }
+    explicit TwoQubitGate(const uint8_t* data) noexcept
+        : CommandBase(data)
+        , qubit1_address(get_qubit1(data[1]))
+        , qubit2_address(get_qubit2(data[1]))
+        , angle(get_angle(data[2]))
+        , axis(get_axis(data[2]))
+    {}
+    
     uint8_t qubit1_address;
     uint8_t qubit2_address;
     Angle_t angle;
@@ -139,25 +148,27 @@ struct TwoQubitGate final: public CommandBase
 
 struct QubitMeasure final: public CommandBase
 {
-    QubitMeasure(const uint8_t* &data) : CommandBase(data)
-    {
-        qubit1_address = QUBIT_1_BIT_MASK & data[1];
-        basis = (BASIS_BIT_MASK & data[2]);
-    }
+    explicit QubitMeasure(const uint8_t* data) noexcept
+        : CommandBase(data)
+        , qubit1_address(get_qubit1(data[1]))
+        , basis(BASIS_BIT_MASK & data[2])
+    {}
+    
     uint8_t qubit1_address;
     uint8_t basis;
 };
 
 struct EntanglementAttempt final: public CommandBase
 {
-    EntanglementAttempt(const uint8_t* &data) : CommandBase(data)
-    {
-        fidelity = (FIDELITY_BIT_MASK & data[1]);
-        nghbr = (NGHBR_BIT_MASK & data[1]) >> 4;
+    explicit EntanglementAttempt(const uint8_t* data) noexcept
+        : CommandBase(data)
+        , fidelity(FIDELITY_BIT_MASK & data[1])
+        , nghbr((NGHBR_BIT_MASK & data[1]) >> 4)
         //TODO: Figure out how this is done in QNodeOS
         //WORKAROUND: get the address of the qubit as a whole
-        qid = data[2];//((QID_BIT_MASK & data[2]) >> 2);
-    }
+        , qid(data[2]) // ((QID_BIT_MASK & data[2]) >> 2)
+    {}
+    
     uint8_t fidelity;
     uint8_t nghbr;
     uint8_t qid;
@@ -165,15 +176,16 @@ struct EntanglementAttempt final: public CommandBase
 
 struct EntangleMeasure final: public CommandBase
 {
-    EntangleMeasure(const uint8_t* &data) : CommandBase(data)
-    {
-        fidelity = (FIDELITY_BIT_MASK & data[1]);
-        nghbr = (NGHBR_BIT_MASK & data[1]) >> 4;
-        qid = ((QID_BIT_MASK & data[2]) >> 2);
-        basis = (BASIS_BIT_MASK & data[2]);
-        immediate = (0x02 & data[2]) >> 1;
-        repetitions = (0xf0 & data[2]) >> 4;
-    }
+    explicit EntangleMeasure(const uint8_t* data) noexcept
+        : CommandBase(data)
+        , fidelity(FIDELITY_BIT_MASK & data[1])
+        , nghbr((NGHBR_BIT_MASK & data[1]) >> 4)
+        , qid((QID_BIT_MASK & data[2]) >> 2)
+        , basis(BASIS_BIT_MASK & data[2])
+        , immediate((0x02 & data[2]) >> 1)
+        , repetitions((0xf0 & data[2]) >> 4)
+    {}
+    
     uint8_t fidelity;
     uint8_t nghbr;
     uint8_t qid;
@@ -184,13 +196,14 @@ struct EntangleMeasure final: public CommandBase
 
 struct PreMeasureGatesSelection final: public CommandBase
 {
-    PreMeasureGatesSelection(const uint8_t* &data) : CommandBase(data)
-    {
-        angle1 = static_cast<Angle_t>(0x1f & data[1]);
-        angle2 = static_cast<Angle_t>(((0x03 & data[2]) << 3) | ((0xe0 & data[1]) >> 5));
-        angle3 = static_cast<Angle_t>((0x7c & data[2]) >> 2);
-        target = (0x80 & data[2]) >> 7;
-    }
+    explicit PreMeasureGatesSelection(const uint8_t* data) noexcept
+        : CommandBase(data)
+        , angle1(static_cast<Angle_t>(0x1f & data[1]))
+        , angle2(static_cast<Angle_t>(((0x03 & data[2]) << 3) | ((0xe0 & data[1]) >> 5)))
+        , angle3(static_cast<Angle_t>((0x7c & data[2]) >> 2))
+        , target((0x80 & data[2]) >> 7)
+    {}
+    
     Angle_t angle1;
     Angle_t angle2;
     Angle_t angle3;
@@ -199,33 +212,36 @@ struct PreMeasureGatesSelection final: public CommandBase
 
 struct QubitMove final: public CommandBase
 {
-    QubitMove(const uint8_t* &data) : CommandBase(data)
-    {
-        qubit1_address = QUBIT_1_BIT_MASK & data[1];
-        qubit2_address = (QUBIT_2_BIT_MASK & data[1]) >> 4;
-    }
+    explicit QubitMove(const uint8_t* data) noexcept
+        : CommandBase(data)
+        , qubit1_address(get_qubit1(data[1]))
+        , qubit2_address(get_qubit2(data[1]))
+    {}
+    
     uint8_t qubit1_address;
     uint8_t qubit2_address;
 };
 
 struct QubitSwap final: public CommandBase
 {
-    QubitSwap(const uint8_t* &data) : CommandBase(data)
-    {
-        qubit1_address = QUBIT_1_BIT_MASK & data[1];
-        qubit2_address = (QUBIT_2_BIT_MASK & data[1]) >> 4;
-    }
+    explicit QubitSwap(const uint8_t* data) noexcept
+        : CommandBase(data)
+        , qubit1_address(get_qubit1(data[1]))
+        , qubit2_address(get_qubit2(data[1]))
+    {}
+    
     uint8_t qubit1_address;
     uint8_t qubit2_address;
 };
 
 struct EntanglementSwap final: public CommandBase
 {
-    EntanglementSwap(const uint8_t* &data) : CommandBase(data)
-    {
-        qubit1_address = QUBIT_1_BIT_MASK & data[1];
-        qubit2_address = (QUBIT_2_BIT_MASK & data[1]) >> 4;
-    }
+    explicit EntanglementSwap(const uint8_t* data) noexcept
+        : CommandBase(data)
+        , qubit1_address(get_qubit1(data[1]))
+        , qubit2_address(get_qubit2(data[1]))
+    {}
+    
     uint8_t qubit1_address;
     uint8_t qubit2_address;
 };

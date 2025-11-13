@@ -38,4 +38,7 @@ struct ITransmissionHandler
      * @return Status of the operation TBD
      */
     virtual int8_t send_data(const uint8_t* buffer, uint8_t length) = 0;
+    
+    virtual void flush() = 0;
+    virtual int8_t transfer(uint8_t const* tx_buffer, uint8_t const* rx_buffer, const uint8_t length) = 0;
 };
