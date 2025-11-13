@@ -2,18 +2,20 @@
 image: debian:stable-slim
 
 build:arm64:
-  # Use native aarch64 Debian image (requires runner with arm64 support or qemu)
-  image: arm64v8/debian:stable-slim
+  # Cross-compile for aarch64 on x86_64 runner
+  image: ubuntu:22.04
   stage: build
   variables:
     DEBIAN_FRONTEND: noninteractive
   before_script:
     - apt-get update -y
-    - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git
+    - apt-get install -y software-properties-common
+    - add-apt-repository universe
+    - apt-get update -y
+    - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
     - mkdir -p build && cd build
   script:
-    # Native aarch64 build using system gcc/g++
-    - cmake .. -DCMAKE_BUILD_TYPE=Release
+    - cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=/usr/bin/aarch64-linux-gnu-g++
     - cmake --build . -- -j$(nproc)
   artifacts:
     paths:
