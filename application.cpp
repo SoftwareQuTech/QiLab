@@ -46,15 +46,35 @@ int main()
     SimulatorRunner sim(std::move(stim_adapter), broker);
     int16_t node_id = sim.register_node(10);
 
-    std::shared_ptr<ITransmissionHandler> transportA = std::make_shared<SPIHandler>();
-    std::shared_ptr<TransmissionProcessor> command_handlerA = std::make_unique<TransmissionProcessor>(transportA);
-    DataTransmissionRunner nodeA({node_id}, command_handlerA, broker);
+    std::unique_ptr<ITransmissionHandler> transportA = std::make_unique<SPIHandler>();
+    std::unique_ptr<TransmissionProcessor> command_handlerA = std::make_unique<TransmissionProcessor>(std::move(transportA));
+    DataTransmissionRunner nodeA({node_id}, std::move(command_handlerA), broker);
 
 
     std::cout << "Starting simulation" << std::endl;
 
-    std::jthread simulator_thread(&SimulatorRunner::on_run, &sim);
-    std::jthread thread_node_a(&DataTransmissionRunner::on_run, &nodeA);
+    // Pre-define core assignments
+    constexpr int SIMULATOR_CORE = 2;
+    constexpr int TRANSMISSION_CORE = 3;
+
+    // Start simulator thread with affinity check
+    std::cout << "Starting simulator thread on core " << SIMULATOR_CORE << std::endl;
+    std::jthread simulator_thread([&sim, SIMULATOR_CORE]() {
+        // Set name for easier identification
+        pthread_setname_np(pthread_self(), "simulator");
+        return sim.on_run(SIMULATOR_CORE);
+    });
+
+    // Small delay to ensure first thread is settled
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    // Start transmission thread with affinity check
+    std::cout << "Starting transmission thread on core " << TRANSMISSION_CORE << std::endl;
+    std::jthread thread_node_a([&nodeA, TRANSMISSION_CORE]() {
+        // Set name for easier identification
+        pthread_setname_np(pthread_self(), "transmit");
+        return nodeA.on_run(TRANSMISSION_CORE);
+    });
 
 
     while(!abort_sim)

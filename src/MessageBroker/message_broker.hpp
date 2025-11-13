@@ -50,7 +50,15 @@ private:
 public:
     bool route_command(TransportData<CommandBase>&& cmd) noexcept;
     bool route_response(TransportData<ResponseData>&& resp) noexcept;
-    bool get_command(TransportData<CommandBase>& cmd) noexcept;
+    /**
+     * @brief Get a command for the specified runner type
+     * 
+     * @param cmd Output parameter that will receive the command
+     * @param runner_type Type of runner requesting the command
+     * @return true if a command was available and retrieved
+     * @return false if no command was available
+     */
+    bool get_command(TransportData<CommandBase> &cmd, DestinationType runner_type) noexcept;
     bool get_response(TransportData<ResponseData>& resp) noexcept;
 };
 

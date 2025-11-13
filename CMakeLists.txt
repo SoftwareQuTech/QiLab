@@ -4,8 +4,20 @@ set(CMAKE_C_COMPILER "/usr/bin/aarch64-linux-gnu-gcc")
 set(CMAKE_CXX_COMPILER "/usr/bin/aarch64-linux-gnu-g++")
 set(CMAKE_CXX_STANDARD 20)
 
-set(CMAKE_CXX_FLAGS "-O0 -fsanitize=address -fno-omit-frame-pointer")
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+# Set default build type if not specified
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release")
+endif()
+
+# Debug build flags
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -fsanitize=address -fno-omit-frame-pointer")
+set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+
+# Release build flags
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+
+# RelWithDebInfo
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -DNDEBUG")
 project(QILab)
 
 # ---- Project compilation ----
@@ -44,8 +56,8 @@ add_library(qilab_lib STATIC
   src/MessageBroker/message_broker.cpp
   #Entanglement Manager
   #src/SimulatorRunner/entanglement_manager.cpp
-  src/logger/profiler.cpp
 )
+
 target_include_directories(qilab_lib PUBLIC
   ${PROJECT_SOURCE_DIR}/include
   ${PROJECT_SOURCE_DIR}/src
@@ -69,9 +81,8 @@ add_executable(qilab
   src/MessageBroker/message_broker.cpp
   #Entanglement Manager
   #src/SimulatorRunner/entanglement_manager.cpp
-  src/logger/profiler.cpp
-  )
-target_link_libraries(qilab PRIVATE libstim)
+    )
+target_link_libraries(qilab PRIVATE libstim profiler)
 
 include(CTest)                 # defines BUILD_TESTING (default ON)
 

@@ -20,7 +20,14 @@ class SimulatorRunner
     SimulatorRunner(std::unique_ptr<ISimulator>, std::shared_ptr<MessageBroker>);
     ~SimulatorRunner() = default;
 
-    int on_run();
+    /**
+     * @brief Start the simulator runner thread
+     * 
+     * @param core_id The CPU core to pin this thread to (-1 for no affinity)
+     * @return int Return status
+     */
+    int on_run(int core_id = -1);
+    
     void on_abort();
 
     int16_t register_node(uint8_t num_qubits);
@@ -46,6 +53,7 @@ class SimulatorRunner
     ResponseData execute_command(std::unique_ptr<CommandBase> command, int16_t qubit_offset);
 
     //profiling event ids
+    Profiler_id prof_event_execute_command = PROF_REGISTER_EVENT("execute_command");
     Profiler_id prof_event_command_nop = PROF_REGISTER_EVENT("command_nop");
     Profiler_id prof_event_qubit_init = PROF_REGISTER_EVENT("qubit_init");
     Profiler_id prof_event_qubit_measurement = PROF_REGISTER_EVENT("qubit_measurement");

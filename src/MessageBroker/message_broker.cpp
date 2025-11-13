@@ -34,9 +34,9 @@ bool MessageBroker::route_response(TransportData<ResponseData> &&resp) noexcept
     return cmd_responses_.push(std::move(resp));
 }
 
-bool MessageBroker::get_command(TransportData<CommandBase> &cmd) noexcept
+bool MessageBroker::get_command(TransportData<CommandBase> &cmd, DestinationType runner_type) noexcept
 {
-    switch (cmd.destination)
+    switch (runner_type)
     {
     case DestinationType::SimRunner:
         return sim_commands_.pop(cmd);

@@ -17,18 +17,28 @@
 class DataTransmissionRunner
 {
     public:
-    DataTransmissionRunner(std::vector<int16_t> nodes, std::shared_ptr<TransmissionProcessor> processor, std::shared_ptr<MessageBroker> broker); 
+    DataTransmissionRunner(std::vector<int16_t> nodes, std::unique_ptr<TransmissionProcessor> processor, std::shared_ptr<MessageBroker> broker); 
     ~DataTransmissionRunner();
 
-    int on_run();
+    /**
+     * @brief Start the transmission runner thread
+     * 
+     * @param core_id The CPU core to pin this thread to (-1 for no affinity)
+     * @return int Return status
+     */
+    int on_run(int core_id = -1);
     void on_abort();
 
     private:
     std::shared_ptr<MessageBroker> message_broker;
     std::vector<int16_t> registered_nodes;
     bool abort = false;
-    std::shared_ptr<TransmissionProcessor> transmission_processor;
+    std::unique_ptr<TransmissionProcessor> transmission_processor;
 
     //profiling event ids
     Profiler_id prof_event_handler_thread_timing = PROF_REGISTER_EVENT("handler_thread_timing");
+    Profiler_id prof_event_serialize = PROF_REGISTER_EVENT("handler_thread_serialize");
+    Profiler_id prof_event_spi_transfer = PROF_REGISTER_EVENT("handler_thread_transfer");
+    Profiler_id prof_event_deserialize = PROF_REGISTER_EVENT("handler_thread_deserialize");
+
 };

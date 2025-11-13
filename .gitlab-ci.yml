@@ -1,24 +1,19 @@
 # .gitlab-ci.yml
 image: debian:stable-slim
 
-stages: [build]
-
-build:
+build:arm64:
+  image: ubuntu:22.04
   stage: build
   variables:
-    BUILD_DIR: build
-    # Helps older tools find the bundle explicitly:
-    SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
-    CURL_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+    DEBIAN_FRONTEND: noninteractive
   before_script:
     - apt-get update -y
-    - DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends
-        cmake g++ make git ca-certificates curl
-    - update-ca-certificates
-    # Make git explicitly use the system bundle (belt & suspenders):
-    - git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt
+    - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git \
+        gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+    - mkdir -p build && cd build
   script:
-    - cmake -S . -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
-    - cmake --build "$BUILD_DIR" --parallel
-    - ctest --test-dir "$BUILD_DIR" --output-on-failure || true
-  
+    - cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=/usr/bin/aarch64-linux-gnu-g++
+    - cmake --build . -- -j$(nproc)
+  artifacts:
+    paths:
+      - build/qilab

@@ -8,6 +8,8 @@
 #include <memory>
 #include <vector>
 #include <cstdint>
+#include <sys/ioctl.h>
+#include <linux/spi/spidev.h>
 
 #include "DataTransmission/transmision_handler.hpp"
 
@@ -28,4 +30,7 @@ private:
     uint8_t bits = 8;
     uint32_t speed = 15000000;
     uint16_t delay = 0;
+    
+    // Pre-allocated transfer structure
+    struct spi_ioc_transfer transfer_template;
 };

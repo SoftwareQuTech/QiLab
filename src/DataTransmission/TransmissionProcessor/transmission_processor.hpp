@@ -15,6 +15,12 @@
 #include "DataTypes/responses.hpp"
 #include "logger/profiler_api.hpp"
 
+#define COMMAND_MESSAGE_LENGTH      4
+#define MAX_BUFFER_LENGTH          64
+#define RESPONSE_MESSAGE_LENGTH     4
+#define CONTROL_WORD_LEN           4
+#define MAX_NUMBER_OF_COMMANDS     ((MAX_BUFFER_LENGTH - CONTROL_WORD_LEN) / COMMAND_MESSAGE_LENGTH)
+
 /**
  * @brief Handles reception and transmission of single commands/responses,
  *        plus synchronous request/response exchanges.
@@ -29,13 +35,19 @@
  */
 class TransmissionProcessor
 {
+private:
+    // Static buffers to avoid stack allocation overhead
+    // Aligned buffers for DMA efficiency
+    __attribute__((aligned(64))) static uint8_t tx_buffer[MAX_BUFFER_LENGTH];
+    __attribute__((aligned(64))) static uint8_t rx_buffer[MAX_BUFFER_LENGTH];
+
 public:
     /**
      * @brief Bind the processor to a transport implementation.
      * @param[in] handler Owning pointer to a valid ITransmissionHandler.
      *                    The processor takes ownership of @p handler.
      */
-    TransmissionProcessor(std::shared_ptr<ITransmissionHandler> handler);
+    TransmissionProcessor(std::unique_ptr<ITransmissionHandler> handler);
 
     /// @brief Trivial destructor.
     ~TransmissionProcessor();
@@ -94,7 +106,7 @@ public:
 
 private:
     /// Unique Pointer to the transport handler used for sending/receiving raw data.
-    std::shared_ptr<ITransmissionHandler> data_handler;
+    std::unique_ptr<ITransmissionHandler> data_handler;
 
     /**
      * @brief Decode a 4-byte command frame into a concrete CommandBase.
@@ -131,9 +143,6 @@ private:
      * @return int8_t 0 on success.
      */
     int8_t serialize_response(const ResponseData &resp, uint8_t *buffer);
-
-    uint32_t response_control_word = 0;
-    uint32_t command_control_word = 0;
 
     // Disable copy/move
     TransmissionProcessor(const TransmissionProcessor &) = delete;

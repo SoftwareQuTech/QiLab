@@ -12,6 +12,7 @@
 #include <unordered_map>
 
 class ProfilerLocalStorage;
+struct EventData;
 
 class Profiler
 {
@@ -47,7 +48,8 @@ private:
 
     // Sink for durations (merge at flush/dump)
     std::mutex merge_lock_;
-    std::vector<std::vector<std::int64_t>> common_container_; // [event_id] -> durations (ns)
+    //std::vector<std::vector<std::int64_t>> common_container_; // [event_id] -> durations (ns)
+    std::vector<EventData> common_container_;
 
     // Free-form messages (not hot path)
     std::mutex events_lock_;

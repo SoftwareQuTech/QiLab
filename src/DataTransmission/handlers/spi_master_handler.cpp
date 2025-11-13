@@ -49,6 +49,12 @@ int8_t SPIHandler::connect_spi(const char* device_path, uint8_t spi_mode, uint8_
         return -1;
     }
 
+    // Initialize transfer template
+    memset(&transfer_template, 0, sizeof(transfer_template));
+    transfer_template.speed_hz = speed;
+    transfer_template.bits_per_word = bits;
+    transfer_template.delay_usecs = 0;  // No delay between transfers
+
     if (ioctl(spi_fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed) == -1) {
         //keep this for debugging purposes only
         std::cerr << "Failed to set max speed." << std::endl;
@@ -66,7 +72,7 @@ int8_t SPIHandler::receive_data(uint8_t* buffer, uint8_t length)
         std::cerr << "Failed to read from SPI device." << std::endl;
         return -1;
     }
-    return 0;
+    return -1; //Not Implemented
 }
 
 int8_t SPIHandler::send_data(const uint8_t* buffer, uint8_t length)
@@ -76,31 +82,24 @@ int8_t SPIHandler::send_data(const uint8_t* buffer, uint8_t length)
         std::cerr << "Failed to write to SPI device." << std::endl;
         return -1;
     }
-    return 0;
+    return -1; //Not Implemented
 }
 
 int8_t SPIHandler::transfer(uint8_t const* tx_buffer, uint8_t const* rx_buffer, const uint8_t length)
 {
-    struct spi_ioc_transfer tr;
-    memset(&tr, 0, sizeof(tr));
-    // std::cout << "Sending message: ";
-    // for (auto rx = 0; rx < length; rx++)
-    // {
-    //     std::cout << std::hex << static_cast<int>(tx_buffer[rx]);
-    // }
-    // std::cout << std::endl;
+    // Use pre-initialized template for better performance
+    struct spi_ioc_transfer tr = transfer_template;
     tr.tx_buf = reinterpret_cast<unsigned long>(tx_buffer);
     tr.rx_buf = reinterpret_cast<unsigned long>(const_cast<uint8_t*>(rx_buffer));
     tr.len = length;
-    tr.delay_usecs = 1;
-    tr.speed_hz = speed;
-    tr.bits_per_word = bits;
-    ioctl(spi_fd, SPI_IOC_MESSAGE(1), &tr);
-    // if (ioctl(spi_fd, SPI_IOC_MESSAGE(1), &tr) < 1) {
-    //     //keep this for debugging purposes only
-    //     std::cerr << "Failed to perform SPI transfer." << std::endl;
-    //     return -1;
-    // }
+
+    // Perform transfer with error checking
+    int ret = ioctl(spi_fd, SPI_IOC_MESSAGE(1), &tr);
+    if (ret != length) {
+        std::cerr << "SPI transfer failed. Expected " << length 
+                  << " bytes, transferred " << ret << std::endl;
+        return -1;
+    }
     
     return 0;
 }
