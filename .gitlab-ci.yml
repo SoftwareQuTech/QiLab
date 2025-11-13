@@ -15,7 +15,7 @@ build:arm64:
     - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
     - mkdir -p build && cd build
   script:
-    - cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=/usr/bin/aarch64-linux-gnu-g++
+    - cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=/usr/bin/aarch64-linux-gnu-g++ -DCMAKE_CXX_FLAGS="-march=armv8-a"
     - cmake --build . -- -j$(nproc)
   artifacts:
     paths:
