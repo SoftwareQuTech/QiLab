@@ -1,7 +1,15 @@
 cmake_minimum_required(VERSION 3.14)
 
-set(CMAKE_C_COMPILER "/usr/bin/aarch64-linux-gnu-gcc")
-set(CMAKE_CXX_COMPILER "/usr/bin/aarch64-linux-gnu-g++")
+## Only set cross-compilers if a compiler has not been provided by the user
+# This allows CI jobs (or local users) to override compilers by passing
+# -DCMAKE_C_COMPILER / -DCMAKE_CXX_COMPILER on the cmake command line.
+if (NOT CMAKE_C_COMPILER)
+  set(CMAKE_C_COMPILER "/usr/bin/aarch64-linux-gnu-gcc")
+endif()
+
+if (NOT CMAKE_CXX_COMPILER)
+  set(CMAKE_CXX_COMPILER "/usr/bin/aarch64-linux-gnu-g++")
+endif()
 set(CMAKE_CXX_STANDARD 20)
 
 # Set default build type if not specified

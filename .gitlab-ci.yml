@@ -2,18 +2,39 @@
 image: debian:stable-slim
 
 build:arm64:
-  image: ubuntu:22.04
+  # Use a prebuilt cross-toolchain image so the aarch64 cross-compiler is available
+  image: dockcross/linux-aarch64
   stage: build
-  variables:
-    DEBIAN_FRONTEND: noninteractive
   before_script:
-    - apt-get update -y
-    - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git \
-        gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
     - mkdir -p build && cd build
   script:
+    # Use the cross compilers provided in the image
     - cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=/usr/bin/aarch64-linux-gnu-g++
     - cmake --build . -- -j$(nproc)
   artifacts:
     paths:
-      - build/qilab
+      - build/
+    expire_in: 1 hour
+
+# Host build + tests: uses the CI runner's native GCC (no cross-compiler required)
+test:host:
+  image: ubuntu:22.04
+  stage: test
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+  before_script:
+    - apt-get update -y
+    - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git
+    - mkdir -p build && cd build
+  script:
+    - cd build || exit 1
+  - cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++
+    - cmake --build . -- -j$(nproc)
+    - echo "Running host ctest and producing junit report..."
+    - ctest --output-on-failure --parallel $(nproc) --output-junit junit.xml || true
+  artifacts:
+    reports:
+      junit: build/junit.xml
+    paths:
+      - build/junit.xml
+    when: always
