@@ -1,31 +1,12 @@
 # .gitlab-ci.yml
-image: debian:stable-slim
+image: ubuntu:22.04
 
-build:arm64:
-  # Cross-compile for aarch64 on x86_64 runner
-  image: ubuntu:22.04
+stages:
+  - build
+  - test
+
+build:
   stage: build
-  variables:
-    DEBIAN_FRONTEND: noninteractive
-  before_script:
-    - apt-get update -y
-    - apt-get install -y software-properties-common
-    - add-apt-repository universe
-    - apt-get update -y
-    - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-    - mkdir -p build && cd build
-  script:
-    - cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=/usr/bin/aarch64-linux-gnu-g++ -DCMAKE_CXX_FLAGS="-march=armv8-a"
-    - cmake --build . -- -j$(nproc)
-  artifacts:
-    paths:
-      - build/
-    expire_in: 1 hour
-
-# Host build + tests: uses the CI runner's native GCC (no cross-compiler required)
-test:host:
-  image: ubuntu:22.04
-  stage: test
   variables:
     DEBIAN_FRONTEND: noninteractive
   before_script:
@@ -33,10 +14,25 @@ test:host:
     - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git
     - mkdir -p build && cd build
   script:
-    - cd build || exit 1
-    - cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++
+    - cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++
     - cmake --build . -- -j$(nproc)
-    - echo "Running host ctest and producing junit report..."
+  artifacts:
+    paths:
+      - build/
+    expire_in: 1 hour
+
+test:
+  stage: test
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+  dependencies:
+    - build
+  before_script:
+    - apt-get update -y
+    - apt-get install -y --no-install-recommends ca-certificates cmake
+  script:
+    - cd build
+    - echo "Running ctest and producing junit report..."
     - ctest --output-on-failure --parallel $(nproc) --output-junit junit.xml || true
   artifacts:
     reports:
