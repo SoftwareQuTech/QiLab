@@ -8,24 +8,31 @@
 
 #pragma once
 #include <cstdint>
+#include <memory>
 
 #include <MessageBroker/message_broker.hpp>
 #include "DataTypes/command_data.hpp"
 #include "Simulator/entanglement/entanglement_manager.hpp"
 
 
-class EntanglementRunner:
+class EntanglementRunner
 {
     public:
     EntanglementRunner(std::shared_ptr<MessageBroker>);
     ~EntanglementRunner() = default;
 
-    int on_run();
+    int on_run(int core_id = -1);
     void on_abort();
+
+    protected:
+    //callback for sending response back to the node runner from manager
+    void send_response_async(int node_id, Outcome_Status_t status);
+    //callback for sending command back to the node runner from manager
+    void send_command_async(int node_id, std::unique_ptr<CommandBase> cmd);
 
     private:
     std::shared_ptr<MessageBroker> message_broker;
-    EntanglementManager entanglement_manager;
+    std::unique_ptr<EntanglementManager> entanglement_manager;
 
     bool abort = false;
     

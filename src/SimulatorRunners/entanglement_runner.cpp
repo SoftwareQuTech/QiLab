@@ -1,87 +1,100 @@
-#include <memory>
+#include <thread>
 
 #include "entanglement_runner.hpp"
 #include "DataTypes/commands.hpp"
+#include "utils/thread_utils.hpp"
 
-EntanglementManager::EntanglementManager(IProfiler *logger) : event_logger(logger) {}
+EntanglementRunner::EntanglementRunner(std::shared_ptr<MessageBroker> mb)
+    : message_broker(mb), entanglement_manager(std::make_unique<EntanglementManager>(
+                              [this](int node_id, Outcome_Status_t status)
+                              {
+                                  send_response_async(node_id, status);
+                              },
+                              [this](int node_id, std::unique_ptr<CommandBase> cmd)
+                              {
+                                  send_command_async(node_id, std::move(cmd));
+                              })) {}
 
-int EntanglementManager::on_run()
+int EntanglementRunner::on_run(int core_id)
 {
-    while (!abort)
+    // Set affinity at the very start
+    if (core_id >= 0)
     {
-        // CommandData_t data;
-        std::unique_ptr<CommandData_t> ent_request;
-        // --- CRITICAL SECTION: only take an item; do nothing else while locked.
+        // Try to pin thread and verify success
+        if (!thread_utils::pin_current_thread_to_core(core_id))
         {
-            std::unique_lock<std::mutex> lock(this->data_lock);
-            // this->data_ready.wait_for(lock, std::chrono::microseconds(10000), [this]
-            //                           { return abort || !this->data_queue.empty(); }); // wait for 10 micro or until new data
-
-            if (!this->data_queue.empty())
-            {
-                // decide what to do with new data
-                ent_request = std::make_unique<CommandData_t>(std::move(this->data_queue.front()));
-                this->data_queue.pop_front();
-
-                // just verify not an empty command is sent
-                if (ent_request->response_callback == nullptr || ent_request->command == nullptr)
-                {
-                    // check for notify on abort
-                    if (abort && this->data_queue.empty())
-                        break;
-                    else
-                        continue;
-                }
-            }
-            else
-            {
-                ent_request = nullptr;
-            }
-        } // <-- unlock here before any heavy work or callbacks
-        
-        run_manager(ent_request);
-
-        ResponseData dta;
-        for (auto i = 0; i < entanglement_requests.size(); i++)
-        {
-            if (!check_pair_valid(entanglement_requests[i]))
-            {
-                // prepare the response data
-                // TODO: prepare data
-                // call response with ent sync event and discard
-                entanglement_requests[i].entanglement_command.response_callback(dta);
-                // remove from vector
-                entanglement_requests.erase(entanglement_requests.begin() + i);
-            }
+            std::cerr << "WARNING: Failed to properly pin SimulatorRunner to core "
+                      << core_id << std::endl;
         }
-        if (ent_request.entanglement_command.response_callback != nullptr && ent_request.entanglement_command.command != nullptr)
-        {
-            // form the entanglemnt request
-            EntanglementAttempt *cmd = static_cast<EntanglementAttempt *>(ent_request.entanglement_command.command.get());
-            ent_request.neighbour_node = cmd->nghbr;
-            ent_request.command_issue_time = std::chrono::steady_clock::now();
 
-            if (match_ent_pair(ent_request))
-            {
-                // send the commands
-                // notify_runner(ent)
-                // notify_runner(ent_request)
-                // TODO: add notodication callback
-                break;
-            }
-            else
-            {
-                entanglement_requests.push_back(std::move(ent_request));
-            }
+        // Double check after a small delay
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        int current_core = sched_getcpu();
+        if (current_core != core_id)
+        {
+            std::cerr << "WARNING: SimulatorRunner still not on correct core. "
+                      << "Expected " << core_id << " but on " << current_core
+                      << std::endl;
         }
     }
+    TransportData<CommandBase> command; // Command from message broker
+
+    while (!abort)
+    {
+        if(message_broker->get_command(/*out*/ command, DestinationType::EntanglementRunner))
+        {
+            //process command
+            auto cmd = std::move(command.transport);
+            uint16_t node_id = command.node_id;
+            uint16_t neighbour_node = 0; // TODO: extract from cmd
+
+            //extract neighbour node from command - placeholder here
+            if(cmd->command_type == Command_t::ENTANGLEMENT_ATTEMPT)
+            {
+                neighbour_node = static_cast<EntanglementAttempt*>(cmd.get())->nghbr;
+            }
+            else if(cmd->command_type == Command_t::ENTANGLEMENT_MEASURE)
+            {
+                neighbour_node = static_cast<EntangleMeasure*>(cmd.get())->nghbr;
+            }
+            else
+            {
+                continue; // not an entanglement command
+            }
+
+            entanglement_manager->add_new_request(std::move(cmd), node_id, neighbour_node);
+        }
+
+        //entanglement_manager->update_requests();
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    return 0;
 }
 
-
-
-void EntanglementManager::on_abort()
+void EntanglementRunner::on_abort()
 {
     // maybe run cleanup
     abort = true;
-    this->notify(CommandData_t{});
+}
+
+void EntanglementRunner::send_response_async(int node_id, Outcome_Status_t status)
+{
+    TransportData<ResponseData> transport_data;
+    transport_data.node_id = node_id;
+    transport_data.destination = DestinationType::CommandRunner;
+    transport_data.source = DestinationType::EntanglementRunner;
+    transport_data.transport = std::make_unique<ResponseData>();
+    transport_data.transport->outcome_status = status;
+    message_broker->route_response(std::move(transport_data));
+}
+
+// callback for sending command back to the node runner from manager
+void EntanglementRunner::send_command_async(int node_id, std::unique_ptr<CommandBase> cmd)
+{
+    TransportData<CommandBase> transport_data;
+    transport_data.node_id = node_id;
+    transport_data.destination = DestinationType::SimRunner;
+    transport_data.source = DestinationType::EntanglementRunner;
+    transport_data.transport = std::move(cmd);
+    message_broker->route_command(std::move(transport_data));
 }

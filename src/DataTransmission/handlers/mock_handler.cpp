@@ -23,35 +23,42 @@ MockHandler::~MockHandler()
 
 void MockHandler::create_commands()
 {
-    const int number_of_nodes = 3;
+    const int number_of_nodes = 1;
 
-    for (auto y = 0; y < (2 * number_of_nodes) - 2; y++)
-    {
-        command_list.push_back(new InitQubit(y));
-    }
-    command_list.push_back(new SingleQGate(1, Angle_t::_15_PI_16, Axis_t::X_AXIS));
-    command_list.push_back(new Entangle(1, 1, 0));
-    int i = 0;
-    for (i = 1; i < (number_of_nodes - 1); i++)
-    {
-        // run the loop here with commands
-        command_list.push_back(new SingleQGate(2 * i + 1, Angle_t::_15_PI_16, Axis_t::X_AXIS));
-        command_list.push_back(new Entangle(1, 2 * i + 1, 2 * i));
-        command_list.push_back(new EntangleSwap(2 * i - 1, 2 * i));
-        command_list.push_back(new QMeasure(2 * i - 1, 0, Axis_t::Z_AXIS));
-        command_list.push_back(new ConditionalCommand([](const int &latest_measure_response)
-                                                      { return latest_measure_response == 1; },
-                                                      new SingleQGate(2 * i + 1, Angle_t::_15_PI_16, Axis_t::Z_AXIS)));
-        command_list.push_back(new QMeasure(2 * i, 0, Axis_t::Z_AXIS));
-        command_list.push_back(new ConditionalCommand([](const int &latest_measure_response)
-                                                      { return latest_measure_response == 0; },
-                                                      new SingleQGate(2 * i + 1, Angle_t::_15_PI_16, Axis_t::X_AXIS)));
-    }
-    command_list.push_back(new QMeasure(2 * i - 1, 0, Axis_t::Z_AXIS));
-    command_list.push_back(new QMeasure(0, 0, Axis_t::Z_AXIS));
+    // for (auto y = 0; y < (2 * number_of_nodes) - 2; y++)
+    // {
+    //     command_list.push_back(new InitQubit(y));
+    // }
+    // command_list.push_back(new SingleQGate(1, Angle_t::_15_PI_16, Axis_t::X_AXIS));
+    // command_list.push_back(new Entangle(1, 1, 0));
+    // int i = 0;
+    // for (i = 1; i < (number_of_nodes - 1); i++)
+    // {
+    //     // run the loop here with commands
+    //     command_list.push_back(new SingleQGate(2 * i + 1, Angle_t::_15_PI_16, Axis_t::X_AXIS));
+    //     command_list.push_back(new Entangle(1, 2 * i + 1, 2 * i));
+    //     command_list.push_back(new EntangleSwap(2 * i - 1, 2 * i));
+    //     command_list.push_back(new QMeasure(2 * i - 1, 0, Axis_t::Z_AXIS));
+    //     command_list.push_back(new ConditionalCommand([](const int &latest_measure_response)
+    //                                                   { return latest_measure_response == 1; },
+    //                                                   new SingleQGate(2 * i + 1, Angle_t::_15_PI_16, Axis_t::Z_AXIS)));
+    //     command_list.push_back(new QMeasure(2 * i, 0, Axis_t::Z_AXIS));
+    //     command_list.push_back(new ConditionalCommand([](const int &latest_measure_response)
+    //                                                   { return latest_measure_response == 0; },
+    //                                                   new SingleQGate(2 * i + 1, Angle_t::_15_PI_16, Axis_t::X_AXIS)));
+    // }
+    // command_list.push_back(new QMeasure(2 * i - 1, 0, Axis_t::Z_AXIS));
+    // command_list.push_back(new QMeasure(0, 0, Axis_t::Z_AXIS));
+
+    command_list.push_back(new Entangle(1, 1, 3));
+    command_list.push_back(new Entangle(1, 0, 3));
+    command_list.push_back(new Entangle(1, 3, 3));
+    command_list.push_back(new Entangle(1, 2, 3));
+
+    //command_list.push_back(new EntanMeasure(1, 2, 3, true, false, 1));
 }
 
-void MockHandler::fill_mock_message(uint8_t *output)
+void MockHandler::fill_mock_message(uint8_t const* output)
 {
     // if(local_logger != nullptr)
     //     local_logger->log_event("Using Response: " + std::to_string(latest_measure_response));
@@ -59,7 +66,7 @@ void MockHandler::fill_mock_message(uint8_t *output)
     {
         if (command_list[message_num]->conditional_execution(latest_measure_response))
         {
-            command_list[message_num]->create_command(output, 4);
+            command_list[message_num]->create_command((uint8_t*)output, 4);
         }
 
         message_num++;
@@ -96,9 +103,14 @@ int8_t MockHandler::receive_data(uint8_t *received_data, uint8_t size)
 
 int8_t MockHandler::transfer(uint8_t const* tx_buffer, uint8_t const* rx_buffer, const uint8_t length)
 {
-    if(length != EXPECTED_MESSAGE_SIZE)
+    // if(length != EXPECTED_MESSAGE_SIZE)
+    // {
+    //     return -1;
+    // }
+    for(int i = 0; i < length/4; i++)
     {
-        return -1;
+        fill_mock_message(rx_buffer + i * EXPECTED_MESSAGE_SIZE);
     }
 
+    return 0;
 }

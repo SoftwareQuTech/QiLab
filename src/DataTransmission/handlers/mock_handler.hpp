@@ -21,7 +21,7 @@ public:
     void flush() override {};
     int8_t transfer(uint8_t const* tx_buffer, uint8_t const* rx_buffer, const uint8_t length) override;
 private:
-    void fill_mock_message(uint8_t*);
+    void fill_mock_message(uint8_t const*);
     void create_commands();
     int latest_measure_response = -1;
     IProfiler* local_logger;

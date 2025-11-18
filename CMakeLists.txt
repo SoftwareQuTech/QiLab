@@ -63,7 +63,8 @@ add_library(qilab_lib STATIC
   #Message Broker
   src/MessageBroker/message_broker.cpp
   #Entanglement Manager
-  #src/SimulatorRunner/entanglement_manager.cpp
+  src/Simulator/entanglement/entanglement_manager.cpp
+  src/SimulatorRunners/entanglement_runner.cpp
 )
 
 target_include_directories(qilab_lib PUBLIC
@@ -88,7 +89,8 @@ add_executable(qilab
   #Message Broker
   src/MessageBroker/message_broker.cpp
   #Entanglement Manager
-  #src/SimulatorRunner/entanglement_manager.cpp
+  src/Simulator/entanglement/entanglement_manager.cpp
+  src/SimulatorRunners/entanglement_runner.cpp
     )
 target_link_libraries(qilab PRIVATE libstim profiler)
 

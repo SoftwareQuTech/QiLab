@@ -22,6 +22,15 @@ target_link_libraries(transmission_processor_test PRIVATE
 GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
 add_test(NAME transmission_processor_test COMMAND transmission_processor_test)
 
+add_executable(entanglement_manager_test
+                ${CMAKE_CURRENT_SOURCE_DIR}/Entanglement/test_entanglement_manager.cpp
+                )
+target_include_directories(entanglement_manager_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(entanglement_manager_test PRIVATE 
+GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
+add_test(NAME entanglement_manager_test COMMAND entanglement_manager_test)
+
+# -------- Enabled tests (only build if PROF_ENABLED is set) --------
 add_executable(prof_tests_enabled 
 ${CMAKE_CURRENT_SOURCE_DIR}/logger/test_profiler_enabled.cpp)
 target_include_directories(prof_tests_enabled PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

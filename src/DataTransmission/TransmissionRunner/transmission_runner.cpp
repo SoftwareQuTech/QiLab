@@ -104,7 +104,7 @@ int DataTransmissionRunner::on_run(int core_id)
             message_broker->route_command(std::move(command_context));
         }
         //CPU_PAUSE();
-        std::this_thread::sleep_for(std::chrono::microseconds(50));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
         PROF_STOP(prof_event_deserialize);
         //std::this_thread::yield();
     }
