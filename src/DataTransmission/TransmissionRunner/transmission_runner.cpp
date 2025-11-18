@@ -3,15 +3,8 @@
 #include <chrono>
 
 #include "transmission_runner.hpp"
+#include "logger/logger_api.hpp"
 
-#if defined(__x86_64__) || defined(_M_X64)
-#include <immintrin.h>
-#define CPU_PAUSE() _mm_pause()
-#elif defined(__aarch64__)
-#define CPU_PAUSE() asm volatile("yield" ::: "memory")
-#else
-#define CPU_PAUSE() ((void)0)
-#endif
 
 DataTransmissionRunner::DataTransmissionRunner(std::vector<int16_t> nodes, std::unique_ptr<TransmissionProcessor> processor, std::shared_ptr<MessageBroker> broker) : transmission_processor(std::move(processor)), registered_nodes(nodes), message_broker(broker) {}
 
@@ -24,18 +17,17 @@ int DataTransmissionRunner::on_run(int core_id)
     // Set affinity at the very start
     if (core_id >= 0) {
         // Try to pin thread and verify success
-        if (!thread_utils::pin_current_thread_to_core(core_id)) {
-            std::cerr << "WARNING: Failed to properly pin TransmissionRunner to core " 
-                      << core_id << std::endl;
+        if (!thread_utils::pin_current_thread_to_core(core_id)) 
+        {
+            LOG_ERROR("Failed to properly pin TransmissionRunner to core " + std::to_string(core_id) + ".");
         }
 
         // Double check after a small delay
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         int current_core = sched_getcpu();
-        if (current_core != core_id) {
-            std::cerr << "WARNING: TransmissionRunner still not on correct core. "
-                      << "Expected " << core_id << " but on " << current_core 
-                      << std::endl;
+        if (current_core != core_id) 
+        {
+            LOG_WARNING("TransmissionRunner still not on correct core. Expected " + std::to_string(core_id) + " but on " + std::to_string(current_core) + ".");
         }
     }
 
@@ -67,22 +59,16 @@ int DataTransmissionRunner::on_run(int core_id)
                 responses[response.node_id] = std::move(response.transport);
             }
         }
-        else
-        {
-            // responses[0] = std::move(test_resp);
-        }
+
         PROF_STOP(prof_event_serialize);
         PROF_START(prof_event_spi_transfer);
 
-        int ret_c = transmission_processor->transmit_msg(responses, commands, registered_nodes.size());
-        if (ret_c == -1)
+        if(transmission_processor->transmit_msg(responses, commands, registered_nodes.size()) != 0)
         {
-            // add error logic
+            LOG_ERROR("Transmission Failed during SPI transfer.");
+            continue;
         }
-        else if (ret_c == -2)
-        {
-            // add error logic
-        }
+
         PROF_STOP(prof_event_spi_transfer);
         command_context.source = DestinationType::CommandRunner;
         PROF_START(prof_event_deserialize);
@@ -109,12 +95,13 @@ int DataTransmissionRunner::on_run(int core_id)
         //std::this_thread::yield();
     }
     PROF_THREAD_FLUSH();
-    // TODO: add clean exit
+    LOG_INFO("Ending Transmission Runner.");
     return 0;
 }
 
 void DataTransmissionRunner::on_abort()
 {
     // TODO: see if some cleanup is needed!
+    LOG_INFO("Abort request received on Transmission Runner!");
     abort = true;
 }

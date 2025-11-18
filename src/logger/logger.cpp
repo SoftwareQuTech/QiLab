@@ -1,88 +1,53 @@
-#include <fstream>
-#include <mutex>
+#include <iostream>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
 
 #include "logger/logger.hpp"
 
-LocalProfiler::LocalProfiler() : initial_time_(std::chrono::steady_clock::now())
+StandardLogger::StandardLogger() {}
+
+StandardLogger& StandardLogger::instance()
 {
-    events_.reserve(initial_number_of_logs_);
-    durations_.reserve(initial_number_of_logs_);
+    static StandardLogger instance;
+    return instance;
 }
 
-void LocalProfiler::log_event(std::string_view message)
+std::string StandardLogger::get_timestamp()
 {
-    using namespace std::chrono;
-    const auto t = duration_cast<nanoseconds>(steady_clock::now() - initial_time_).count();
-
-    std::lock_guard<std::mutex> lk(mu_);
-    events_.emplace_back(message, t);
+    auto now = std::chrono::system_clock::now();
+    auto now_time_t = std::chrono::system_clock::to_time_t(now);
+    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()) % 1000;
+    
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&now_time_t), "%H:%M:%S");
+    ss << '.' << std::setfill('0') << std::setw(3) << now_ms.count();
+    
+    return ss.str();
 }
 
-bool LocalProfiler::register_profiling_event(std::string_view event_id)
+void StandardLogger::log_info(const std::string_view message)
 {
-    if (event_id.empty())
-        return false;
-    const auto now = std::chrono::steady_clock::now();
-    std::lock_guard<std::mutex> lk(mu_);
-    auto [it, inserted] = start_times_.emplace(event_id, now);
-    if (!inserted)
-    {
-        // already present; refresh to now (or return false if you prefer)
-        it->second = now;
-    }
-    return true;
+    std::lock_guard<std::mutex> lock(logging_lock_);
+    std::clog << "[" << get_timestamp() << "] [INFO]: " << message << std::endl;
+}
+void StandardLogger::log_warning(const std::string_view message)
+{
+    std::lock_guard<std::mutex> lock(logging_lock_);
+    std::clog << "[" << get_timestamp() << "] [WARNING]: " << message << std::endl;
+}
+void StandardLogger::log_error(const std::string_view message)
+{
+    std::lock_guard<std::mutex> lock(logging_lock_);
+    std::cerr << "[" << get_timestamp() << "] [ERROR]: " << message << std::endl;
 }
 
-bool LocalProfiler::pe_start(std::string_view event_id)
-{
-    if (event_id.empty())
-        return false;
-    const auto now = std::chrono::steady_clock::now();
-    std::lock_guard<std::mutex> lk(mu_);
-    start_times_[event_id] = now; // auto-registers if absent
-    return true;
-}
-
-bool LocalProfiler::pe_stop(std::string_view event_id)
-{
-    if (event_id.empty())
-        return false;
-
-    const auto now = std::chrono::steady_clock::now();
-    std::lock_guard<std::mutex> lk(mu_);
-    auto it = start_times_.find(event_id);
-    if (it == start_times_.end())
-        return false;
-
-    const auto dur_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now - it->second).count();
-
-    durations_.emplace_back(event_id, dur_ns);
-    return true;
-}
-
-// Writes two CSVs:
-//   <base_path>_events.csv:    "Message,TimestampNs"
-//   <base_path>_durations.csv: "EventID,DurationNs"
-void LocalProfiler::save_to_file(const std::string &base_path)
-{
-    std::lock_guard<std::mutex> lk(mu_);
-
-    // events
-    {
-        std::ofstream ofs(base_path + "_events.csv");
-        ofs << "Message,TimestampNs\n";
-        for (const auto &event : events_)
-        {
-            ofs << event.first << "," << event.second << "\n";
-        }
-    }
-    // durations
-    {
-        std::ofstream ofs(base_path + "_durations.csv");
-        ofs << "EventID,DurationNs\n";
-        for (const auto &duration: durations_)
-        {
-            ofs << duration.first << "," << duration.second << "\n";
-        }
-    }
-}
+// LoggerGuard::LoggerGuard()
+// {
+//     StandardLogger::instance().log_info("LoggerGuard created");
+// }
+// LoggerGuard::~LoggerGuard()
+// {
+//     StandardLogger::instance().log_info("LoggerGuard destroyed");
+// }

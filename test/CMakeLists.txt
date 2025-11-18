@@ -17,6 +17,7 @@ add_executable(transmission_processor_test
                 ${CMAKE_CURRENT_SOURCE_DIR}/DataTransmission/TransmissionProcessor/test_transmission_processor_simple.cpp                
                 #${CMAKE_CURRENT_SOURCE_DIR}/mocks/mock_transmission.hpp
                 )
+target_compile_definitions(transmission_processor_test PRIVATE PROF_ENABLED=0 LOGGING_ENABLED=0)
 target_include_directories(transmission_processor_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(transmission_processor_test PRIVATE 
 GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
@@ -25,9 +26,11 @@ add_test(NAME transmission_processor_test COMMAND transmission_processor_test)
 add_executable(entanglement_manager_test
                 ${CMAKE_CURRENT_SOURCE_DIR}/Entanglement/test_entanglement_manager.cpp
                 )
+target_compile_definitions(entanglement_manager_test PRIVATE PROF_ENABLED=0 LOGGING_ENABLED=0)
 target_include_directories(entanglement_manager_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(entanglement_manager_test PRIVATE 
 GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
+target_compile_definitions(entanglement_manager_test PRIVATE LOGGING_ENABLED=0)
 add_test(NAME entanglement_manager_test COMMAND entanglement_manager_test)
 
 # -------- Enabled tests (only build if PROF_ENABLED is set) --------
@@ -48,5 +51,9 @@ target_link_libraries(prof_tests_disabled PRIVATE GTest::gtest_main qilab_lib)
 add_test(NAME prof_disabled COMMAND prof_tests_disabled)
 
 include(GoogleTest)
-gtest_discover_tests(transmission_processor_test prof_tests_disabled prof_tests_enabled)
+gtest_discover_tests(
+  transmission_processor_test 
+  prof_tests_disabled 
+  prof_tests_enabled
+  entanglement_manager_test)
 

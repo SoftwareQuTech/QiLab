@@ -1,19 +1,11 @@
 #include <memory>
 #include <chrono>
 #include <thread>
-#include <iostream>
 
 #include "simulator_runner.hpp"
 #include "utils/thread_utils.hpp"
+#include "logger/logger_api.hpp"
 
-#if defined(__x86_64__) || defined(_M_X64)
-#include <immintrin.h>
-#define CPU_PAUSE() _mm_pause()
-#elif defined(__aarch64__)
-#define CPU_PAUSE() asm volatile("yield" ::: "memory")
-#else
-#define CPU_PAUSE() ((void)0)
-#endif
 
 SimulatorRunner::SimulatorRunner(std::unique_ptr<ISimulator> sim, std::shared_ptr<MessageBroker> broker) : simulator(std::move(sim)), message_broker(broker)
 {
@@ -27,11 +19,13 @@ int16_t SimulatorRunner::register_node(uint8_t num_qubits)
 
     if (nodes.size() >= max_nodes_available)
     {
+        LOG_ERROR("Maximum number of nodes reached. Cannot register more nodes.");
         return -1;
     }
 
     if (registered_qubits + num_qubits > max_qubits_available)
     {
+        LOG_ERROR("Not enough qubit capacity to register node with " + std::to_string(num_qubits) + " qubits.");
         return -1;
     }
 
@@ -42,12 +36,14 @@ int16_t SimulatorRunner::register_node(uint8_t num_qubits)
 
     registered_qubits += num_qubits;
 
+    LOG_INFO("Registered node " + std::to_string(node_id) + " with " + std::to_string(num_qubits) + " qubits at offset " + std::to_string(nodes.back().first) + ".");
     return node_id;
 }
 bool SimulatorRunner::unregister_node(int16_t node_id)
 {
     // TODO: Add logic for deregistration and recalculating qubit offset and addresses
     // maybe qubit reset will be needed as well in order to ensure state
+    LOG_WARNING("Unregistering nodes is not yet implemented.");
     return false;
 }
 
@@ -58,17 +54,15 @@ int SimulatorRunner::on_run(int core_id)
     if (core_id >= 0) {
         // Try to pin thread and verify success
         if (!thread_utils::pin_current_thread_to_core(core_id)) {
-            std::cerr << "WARNING: Failed to properly pin SimulatorRunner to core " 
-                      << core_id << std::endl;
+            LOG_ERROR("WARNING: Failed to properly pin SimulatorRunner to core " + std::to_string(core_id) + ".");
         }
 
         // Double check after a small delay
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         int current_core = sched_getcpu();
         if (current_core != core_id) {
-            std::cerr << "WARNING: SimulatorRunner still not on correct core. "
-                      << "Expected " << core_id << " but on " << current_core 
-                      << std::endl;
+            LOG_WARNING("SimulatorRunner still not on correct core. "
+                      "Expected " + std::to_string(core_id) + " but on " + std::to_string(current_core) + ".");
         }
     }
 
@@ -98,20 +92,22 @@ int SimulatorRunner::on_run(int core_id)
                 if (message_broker->route_response(std::move(response)))
                 {
                     // error
+                    LOG_ERROR("Failed to route response for node " + std::to_string(command.node_id) + ".");
                 }
             }
+            else
+            {
+                LOG_ERROR("Received command for invalid node ID " + std::to_string(command.node_id) + ".");
+            }
         }
-        else
-        {
-            // interleave a bit
-            //std::this_thread::yield();
-        }
+
         std::this_thread::sleep_for(std::chrono::microseconds(10));
         PROF_STOP(prof_event_simulation_thread_log);
         //CPU_PAUSE();
         //std::this_thread::yield();
     }
     PROF_THREAD_FLUSH();
+    LOG_INFO("Ending Simulator Runner.");
     // optional: drain/notify when aborting
     return 1;
 }
@@ -119,6 +115,7 @@ int SimulatorRunner::on_run(int core_id)
 void SimulatorRunner::on_abort()
 {
     // maybe run cleanup
+    LOG_INFO("SimulatorRunner abort requested.");
     abort = true;
 }
 

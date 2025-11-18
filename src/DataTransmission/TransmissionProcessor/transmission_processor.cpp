@@ -1,8 +1,9 @@
-#include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
 #include <iostream>
+
+#include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
+#include "logger/logger_api.hpp"
+
 #define COMMAND_MESSAGE_LENGTH      4
-
-
 #define MAX_BUFFER_LENGTH           64
 #define RESPONSE_MESSAGE_LENGTH     4
 #define CONTROL_WORD_LEN            4
@@ -71,6 +72,7 @@ int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<Res
         auto response = responses[i].get();
         if(response == nullptr)
         {
+            LOG_ERROR("Null response data provided.");
             return -2;
         }
         uint8_t* dest = TransmissionProcessor::tx_buffer + (i * RESPONSE_MESSAGE_LENGTH);
@@ -89,7 +91,7 @@ int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<Res
 
     if(data_handler->transfer(tx_buffer, rx_buffer, RESPONSE_MESSAGE_LENGTH * transfer_msg_count))
     {
-        std::cerr << "Failed to transfer data." << std::endl;
+        LOG_ERROR("Failed to transfer data.");
         return -3;
     }
 
@@ -99,7 +101,7 @@ int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<Res
         const uint8_t* cmd_data = rx_buffer + (i * COMMAND_MESSAGE_LENGTH);
         if(!verify_crc(cmd_data, 3))
         {
-            std::cerr << "CRC verification failed." << std::endl;
+            LOG_ERROR("CRC verification failed.");
             return -4;
         }
         auto cmd = deserialize_command(cmd_data);
@@ -109,7 +111,7 @@ int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<Res
         }
         else
         {
-            std::cerr << "Command is not recognized." << std::endl;
+            LOG_ERROR("Command deserialization failed.");
             return -4;
         }
     }

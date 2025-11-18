@@ -3,6 +3,7 @@
 #include "entanglement_runner.hpp"
 #include "DataTypes/commands.hpp"
 #include "utils/thread_utils.hpp"
+#include "logger/logger_api.hpp"
 
 EntanglementRunner::EntanglementRunner(std::shared_ptr<MessageBroker> mb)
     : message_broker(mb), entanglement_manager(std::make_unique<EntanglementManager>(
@@ -23,8 +24,7 @@ int EntanglementRunner::on_run(int core_id)
         // Try to pin thread and verify success
         if (!thread_utils::pin_current_thread_to_core(core_id))
         {
-            std::cerr << "WARNING: Failed to properly pin SimulatorRunner to core "
-                      << core_id << std::endl;
+            LOG_ERROR("Failed to properly pin SimulatorRunner to core " + std::to_string(core_id) + ".");
         }
 
         // Double check after a small delay
@@ -32,16 +32,14 @@ int EntanglementRunner::on_run(int core_id)
         int current_core = sched_getcpu();
         if (current_core != core_id)
         {
-            std::cerr << "WARNING: SimulatorRunner still not on correct core. "
-                      << "Expected " << core_id << " but on " << current_core
-                      << std::endl;
+            LOG_WARNING("SimulatorRunner still not on correct core. Expected " + std::to_string(core_id) + " but on " + std::to_string(current_core) + ".");
         }
     }
     TransportData<CommandBase> command; // Command from message broker
 
     while (!abort)
     {
-        if(message_broker->get_command(/*out*/ command, DestinationType::EntanglementRunner))
+        if(message_broker->get_command(command, DestinationType::EntanglementRunner))
         {
             //process command
             auto cmd = std::move(command.transport);
@@ -59,21 +57,27 @@ int EntanglementRunner::on_run(int core_id)
             }
             else
             {
+                LOG_WARNING("Received non-entanglement command in EntanglementRunner. Ignoring.");
                 continue; // not an entanglement command
             }
 
-            entanglement_manager->add_new_request(std::move(cmd), node_id, neighbour_node);
+            if(!entanglement_manager->add_new_request(std::move(cmd), node_id, neighbour_node))
+            {
+                LOG_ERROR("Failed to add new entanglement request from node " + std::to_string(node_id) + " to neighbour " + std::to_string(neighbour_node) + ".");
+            }
         }
 
         //entanglement_manager->update_requests();
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+    LOG_INFO("Ending Entanglement Runner.");
     return 0;
 }
 
 void EntanglementRunner::on_abort()
 {
     // maybe run cleanup
+    LOG_INFO("Aborting EntanglementRunner.");
     abort = true;
 }
 

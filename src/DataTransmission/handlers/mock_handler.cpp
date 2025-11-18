@@ -2,6 +2,7 @@
 
 #include "mock_handler.hpp"
 #include "DataTypes/commands.hpp"
+#include "logger/logger_api.hpp"
 
 #define EXPECTED_MESSAGE_SIZE 4
 
@@ -9,10 +10,7 @@ MockHandler::MockHandler()
 {
     create_commands();
 }
-MockHandler::MockHandler(IProfiler *logger) : local_logger(logger)
-{
-    create_commands();
-}
+
 MockHandler::~MockHandler()
 {
     for (auto c : command_list)
@@ -60,8 +58,7 @@ void MockHandler::create_commands()
 
 void MockHandler::fill_mock_message(uint8_t const* output)
 {
-    // if(local_logger != nullptr)
-    //     local_logger->log_event("Using Response: " + std::to_string(latest_measure_response));
+
     if (!command_list.empty())
     {
         if (command_list[message_num]->conditional_execution(latest_measure_response))
@@ -83,9 +80,6 @@ int8_t MockHandler::send_data(const uint8_t *data_to_send, uint8_t size)
     if (size > 4)
         return -1;
 
-    // if(local_logger != nullptr)
-    //     local_logger->log_event("Updating Response: " + std::to_string(((data_to_send[1] & 0x40) >> 6)));
-
     latest_measure_response = ((data_to_send[1] & 0x40) >> 6);
     return -1;
 }
@@ -94,6 +88,7 @@ int8_t MockHandler::receive_data(uint8_t *received_data, uint8_t size)
 {
     if (size > EXPECTED_MESSAGE_SIZE)
     {
+        LOG_ERROR("MockHandler: receive_data called with size larger than expected");
         return -1;
     }
     fill_mock_message(received_data);

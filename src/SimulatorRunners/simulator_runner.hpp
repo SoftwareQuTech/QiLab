@@ -8,7 +8,6 @@
 #pragma once
 #include <vector>
 
-#include "runnable.hpp"
 #include "Simulator/sim_interface.hpp"
 #include "logger/profiler_api.hpp"
 #include "DataTypes/command_data.hpp"

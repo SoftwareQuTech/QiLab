@@ -1,5 +1,4 @@
 #pragma once
-#include "profiler_config.hpp"
 
 #if PROF_ENABLED
 

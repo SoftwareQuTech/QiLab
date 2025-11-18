@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "Simulator/entanglement/entanglement_manager.hpp"
+#include "logger/logger_api.hpp"
 
 #define EXPECTED_MAX_REQUESTS 100
 #define EXPECTED_MAX_PAIRS 50
@@ -16,10 +17,11 @@ bool EntanglementManager::check_request_is_expired(const EntanglementRequest &re
     std::chrono::duration elapsed_time = std::chrono::steady_clock::now() - request.command_issue_time;
     if (std::chrono::microseconds(elapsed_time.count()) > ENTANGLEMENT_TIMEOUT)
     {
-        return false;
+        LOG_WARNING("Entanglement request from node " + std::to_string(request.node_id) + " to neighbour " + std::to_string(request.neighbour_node) + " has expired.");
+        return true;
     }
 
-    return true;
+    return false;
 }
 
 bool EntanglementManager::match_request(const EntanglementRequest &request)
@@ -55,6 +57,7 @@ int EntanglementManager::update_requests()
                 //this returns data to the runner and adds the reponse to the message broker
                 response_callback(pending_requests[i].node_id, Outcome_Status_t::ENTANGLEMENT_SYNC_FAILURE);
                 pending_requests.erase(pending_requests.begin() + i);
+                LOG_INFO("Entanglement request from node " + std::to_string(pending_requests[i].node_id) + " has been marked as failed due to timeout.");
             }
         }
     }
@@ -69,6 +72,7 @@ int EntanglementManager::update_requests()
                 command_callback(matched_pairs[i].node_id_1, std::move(matched_pairs[i].command1));
                 command_callback(matched_pairs[i].node_id_2, std::move(matched_pairs[i].command2));
                 matched_pairs.erase(matched_pairs.begin() + i);
+                LOG_INFO("Entanglement commands sent to nodes " + std::to_string(matched_pairs[i].node_id_1) + " and " + std::to_string(matched_pairs[i].node_id_2) + ".");
             }
         }
     }
@@ -90,7 +94,7 @@ bool EntanglementManager::add_new_request(std::unique_ptr<CommandBase> command, 
                 .calculated_success_time_delay = DEFAULT_SUCCESS_DELAY_NS // Placeholder for actual calculation
             });
             pending_requests.erase(it);
-            std::cout << "Matched entanglement request between node " << node_id << " and neighbour " << neighbour_node << std::endl;
+            LOG_INFO("Entanglement request matched between node " + std::to_string(node_id) + " and neighbour " + std::to_string(neighbour_node) + ".");
             return true;
         }
     }
@@ -103,8 +107,6 @@ bool EntanglementManager::add_new_request(std::unique_ptr<CommandBase> command, 
 
     // If a matching request is not found, add it to the pending requests
     pending_requests.push_back(std::move(new_request));
-
-    std::cout << "Added new entanglement request from node " << node_id << " to neighbour " << neighbour_node << std::endl;
+    LOG_INFO("Added new entanglement request from node " + std::to_string(node_id) + " to neighbour " + std::to_string(neighbour_node) + ".");
     return true;
-
 }
