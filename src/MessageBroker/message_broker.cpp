@@ -3,7 +3,7 @@
     
 bool MessageBroker::route_command(TransportData<CommandBase> &&cmd) noexcept
 {
-    if (!cmd.is_valid_route())
+    if (!cmd.is_valid_cmd_route())
     {
         LOG_ERROR("Invalid command route in MessageBroker.");
         return false;
@@ -23,14 +23,7 @@ bool MessageBroker::route_command(TransportData<CommandBase> &&cmd) noexcept
 
 bool MessageBroker::route_response(TransportData<ResponseData> &&resp) noexcept
 {
-    if (!resp.is_valid_route())
-    {
-        LOG_ERROR("Invalid response route in MessageBroker.");
-        return false;
-    }
-
-    if (resp.source != DestinationType::SimRunner ||
-        resp.destination != DestinationType::CommandRunner)
+    if (!resp.is_valid_rsp_route())
     {
         LOG_ERROR("Invalid response route in MessageBroker.");
         return false;

@@ -17,7 +17,7 @@ struct MessageRoute {
     DestinationType source;
     DestinationType destination;
     
-    bool is_valid_route() const noexcept {
+    bool is_valid_cmd_route() const noexcept {
         // Define valid routes
         if (source == DestinationType::CommandRunner) {
             return destination == DestinationType::SimRunner ||
@@ -26,7 +26,16 @@ struct MessageRoute {
         if (source == DestinationType::EntanglementRunner) {
             return destination == DestinationType::SimRunner;
         }
-        if (source == DestinationType::SimRunner) {
+        return false;
+    }
+    bool is_valid_rsp_route() const noexcept
+    {
+        if (source == DestinationType::EntanglementRunner)
+        {
+            return destination == DestinationType::CommandRunner;
+        }
+        if (source == DestinationType::SimRunner)
+        {
             return destination == DestinationType::CommandRunner;
         }
         return false;

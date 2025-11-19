@@ -82,9 +82,11 @@ int EntanglementManager::update_requests()
 
 bool EntanglementManager::add_new_request(std::unique_ptr<CommandBase> command, uint16_t node_id, uint16_t neighbour_node)
 {
-    //check if a request is already pending from this node to the neighbour
-    for (auto it = pending_requests.begin(); it != pending_requests.end(); ++it) {
-        if (it->neighbour_node == node_id && it->node_id == neighbour_node) {
+    // check if a request is already pending from this node to the neighbour
+    for (auto it = pending_requests.begin(); it != pending_requests.end(); ++it)
+    {
+        if (it->neighbour_node == node_id && it->node_id == neighbour_node)
+        {
             matched_pairs.push_back(EntanglementPair{
                 .command1 = std::move(it->command),
                 .command2 = std::move(command),
@@ -97,7 +99,14 @@ bool EntanglementManager::add_new_request(std::unique_ptr<CommandBase> command, 
             LOG_INFO("Entanglement request matched between node " + std::to_string(node_id) + " and neighbour " + std::to_string(neighbour_node) + ".");
             return true;
         }
+        else if (it->node_id == node_id && it->neighbour_node == neighbour_node)
+        {
+            // Duplicate request from same node to same neighbour
+            LOG_WARNING("Duplicate entanglement request from node " + std::to_string(node_id) + " to neighbour " + std::to_string(neighbour_node) + " ignored.");
+            return false;
+        }
     }
+
     //else we add a new pending request
     EntanglementRequest new_request;
     new_request.command = std::move(command);

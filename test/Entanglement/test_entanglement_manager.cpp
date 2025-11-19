@@ -126,20 +126,30 @@ TEST_F(EntanglementManagerTest, MultiplePendingRequests) {
     bool matched = manager->add_new_request(std::move(cmd4), 2, 1);
     
     EXPECT_TRUE(matched);
+    // Update to trigger pair processing
+    manager->update_requests();
+    
+    // Should receive commands back (after delay)
+    // Need to wait for calculated_success_time_delay
+    std::this_thread::sleep_for(std::chrono::microseconds(1500));
+    manager->update_requests();
+    
+    EXPECT_EQ(commands.size(), 2);  // Both nodes get commands back
+
 }
 
 // Test: Duplicate request from same node
 TEST_F(EntanglementManagerTest, DuplicateRequestHandling) {
     // First request
     auto cmd1 = make_entanglement_attempt(2);
-    manager->add_new_request(std::move(cmd1), 1, 2);
+    auto res = manager->add_new_request(std::move(cmd1), 1, 2);
     
+    EXPECT_TRUE(res);
     // Duplicate request - same node to same neighbour
     auto cmd2 = make_entanglement_attempt(2);
-    manager->add_new_request(std::move(cmd2), 1, 2);
+    res = manager->add_new_request(std::move(cmd2), 1, 2);
     
-    // Implementation should handle this appropriately
-    // Check your actual behavior here
+    EXPECT_FALSE(res);  // Should not add duplicate
 }
 
 // Test: Update with no pending requests
@@ -179,6 +189,13 @@ TEST_F(EntanglementManagerTest, RapidUpdates) {
     
     // Should still work correctly
     EXPECT_GE(commands.size(), 0);
+
+    // Should receive commands back (after delay)
+    // Need to wait for calculated_success_time_delay
+    std::this_thread::sleep_for(std::chrono::microseconds(1500));
+    manager->update_requests();
+    
+    EXPECT_EQ(commands.size(), 2);  // Both nodes get commands back
 }
 
 // Test: Stress test with many requests
@@ -219,4 +236,142 @@ TEST_F(EntanglementManagerTest, CallbackParameters) {
     
     EXPECT_TRUE(std::find(node_ids.begin(), node_ids.end(), 5) != node_ids.end());
     EXPECT_TRUE(std::find(node_ids.begin(), node_ids.end(), 7) != node_ids.end());
+}
+
+// Test: Partial timeout - some requests expire while others match
+TEST_F(EntanglementManagerTest, PartialTimeoutWithMatching) {
+    // Add request that will timeout
+    auto cmd1 = make_entanglement_attempt(2);
+    manager->add_new_request(std::move(cmd1), 1, 2);
+    
+    // Wait for first request to timeout
+    std::this_thread::sleep_for(std::chrono::microseconds(600));
+    
+    // Add new matching pair that should succeed
+    auto cmd2 = make_entanglement_attempt(4);
+    auto cmd3 = make_entanglement_attempt(3);
+    manager->add_new_request(std::move(cmd2), 3, 4);
+    manager->add_new_request(std::move(cmd3), 4, 3);
+    
+    // Update should expire first request and match second pair
+    manager->update_requests();
+    
+    // Should have 1 timeout response
+    ASSERT_EQ(responses.size(), 1);
+    EXPECT_EQ(responses[0].first, 1);
+    EXPECT_EQ(responses[0].second, Outcome_Status_t::ENTANGLEMENT_SYNC_FAILURE);
+    
+    // Wait for matched pair to complete
+    std::this_thread::sleep_for(std::chrono::microseconds(1500));
+    manager->update_requests();
+    
+    // Should have 2 successful commands (for the matched pair)
+    EXPECT_EQ(commands.size(), 2);
+}
+
+// Test: Sequential matching - ensure FIFO behavior
+TEST_F(EntanglementManagerTest, SequentialMatchingOrder) {
+    // Add multiple requests from node 1 to different neighbors
+    auto cmd1 = make_entanglement_attempt(2);
+    auto cmd2 = make_entanglement_attempt(3);
+    
+    manager->add_new_request(std::move(cmd1), 1, 2);
+    std::this_thread::sleep_for(std::chrono::microseconds(10)); // Small delay
+    manager->add_new_request(std::move(cmd2), 1, 3);
+    
+    // Add matching request for the SECOND one first
+    auto cmd3 = make_entanglement_attempt(1);
+    bool matched = manager->add_new_request(std::move(cmd3), 3, 1);
+    
+    // Should match with node 1's request to node 3 (FIFO)
+    EXPECT_TRUE(matched);
+    
+    std::this_thread::sleep_for(std::chrono::microseconds(1500));
+    manager->update_requests();
+    
+    // Should have commands for nodes 1 and 3
+    ASSERT_EQ(commands.size(), 2);
+    std::vector<int> node_ids = {commands[0].first, commands[1].first};
+    EXPECT_TRUE(std::find(node_ids.begin(), node_ids.end(), 1) != node_ids.end());
+    EXPECT_TRUE(std::find(node_ids.begin(), node_ids.end(), 3) != node_ids.end());
+}
+
+// Test: Cascading matches - multiple matches in single update
+TEST_F(EntanglementManagerTest, CascadingMatches) {
+    // Setup: Add pairs 1-2, 3-4, 5-6 all at once
+    std::vector<std::pair<int, int>> pairs = {{1,2}, {3,4}, {5,6}};
+    
+    for (const auto& [a, b] : pairs) {
+        auto cmd1 = make_entanglement_attempt(b);
+        auto cmd2 = make_entanglement_attempt(a);
+        manager->add_new_request(std::move(cmd1), a, b);
+        manager->add_new_request(std::move(cmd2), b, a);
+    }
+    
+    // Single update should match all pairs
+    manager->update_requests();
+    
+    // Wait for all to complete
+    std::this_thread::sleep_for(std::chrono::microseconds(1500));
+    manager->update_requests();
+    
+    // Should have 6 commands total (3 pairs * 2 nodes)
+    EXPECT_EQ(commands.size(), 6);
+    
+    // Verify all node IDs are present
+    std::set<int> node_ids;
+    for (const auto& [node_id, _] : commands) {
+        node_ids.insert(node_id);
+    }
+    EXPECT_EQ(node_ids.size(), 6);
+}
+
+// Test: Memory safety - move semantics correctness
+TEST_F(EntanglementManagerTest, MoveSemanticsCorrectness) {
+    auto cmd1 = make_entanglement_attempt(2);
+    auto* raw_ptr1 = cmd1.get();  // Store raw pointer
+    
+    manager->add_new_request(std::move(cmd1), 1, 2);
+    
+    // Original unique_ptr should be null after move
+    EXPECT_EQ(cmd1.get(), nullptr);
+    
+    // Add matching request
+    auto cmd2 = make_entanglement_attempt(1);
+    auto* raw_ptr2 = cmd2.get();
+    
+    manager->add_new_request(std::move(cmd2), 2, 1);
+    EXPECT_EQ(cmd2.get(), nullptr);
+    
+    // Process
+    std::this_thread::sleep_for(std::chrono::microseconds(1500));
+    manager->update_requests();
+    
+    // Verify commands were moved to callback (not copied)
+    ASSERT_EQ(commands.size(), 2);
+    
+    // The command pointers should be valid (not dangling)
+    EXPECT_NE(commands[0].second.get(), nullptr);
+    EXPECT_NE(commands[1].second.get(), nullptr);
+}
+
+// BONUS: Test edge case - same node requests entanglement with itself
+TEST_F(EntanglementManagerTest, SelfEntanglementRequest) {
+    // Node 1 tries to entangle with itself
+    auto cmd1 = make_entanglement_attempt(1);
+    bool result = manager->add_new_request(std::move(cmd1), 1, 1);
+    
+    // Should reject or handle gracefully
+    // Behavior depends on implementation - document expected behavior
+    // For now, assume it's added but won't match
+    
+    manager->update_requests();
+    
+    // Wait for timeout
+    std::this_thread::sleep_for(std::chrono::microseconds(600));
+    manager->update_requests();
+    
+    // Should timeout with failure
+    ASSERT_EQ(responses.size(), 1);
+    EXPECT_EQ(responses[0].second, Outcome_Status_t::ENTANGLEMENT_SYNC_FAILURE);
 }

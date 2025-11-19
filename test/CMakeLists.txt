@@ -33,6 +33,17 @@ GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
 target_compile_definitions(entanglement_manager_test PRIVATE LOGGING_ENABLED=0)
 add_test(NAME entanglement_manager_test COMMAND entanglement_manager_test)
 
+add_executable(message_broker_test
+                ${CMAKE_CURRENT_SOURCE_DIR}/MessageBroker/test_message_broker.cpp
+                ${CMAKE_CURRENT_SOURCE_DIR}/MessageBroker/test_ring_buffer.cpp
+                )
+target_compile_definitions(message_broker_test PRIVATE PROF_ENABLED=0 LOGGING_ENABLED=0)
+target_include_directories(message_broker_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(message_broker_test PRIVATE 
+GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
+target_compile_definitions(message_broker_test PRIVATE LOGGING_ENABLED=0)
+add_test(NAME message_broker_test COMMAND message_broker_test)
+
 # -------- Enabled tests (only build if PROF_ENABLED is set) --------
 add_executable(prof_tests_enabled 
 ${CMAKE_CURRENT_SOURCE_DIR}/logger/test_profiler_enabled.cpp)
@@ -55,5 +66,7 @@ gtest_discover_tests(
   transmission_processor_test 
   prof_tests_disabled 
   prof_tests_enabled
-  entanglement_manager_test)
+  entanglement_manager_test
+  message_broker_test
+)
 
