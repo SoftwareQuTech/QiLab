@@ -25,7 +25,11 @@ build:
     - cmake --build . -- -j$(nproc)
   artifacts:
     paths:
-      - build/
+      - build/test/*_tests           # Only your test executables
+      - build/**/*.gcno
+      - build/CMakeCache.txt
+    exclude:
+      - build/_deps/
     expire_in: 1 hour
 
 test:
@@ -34,16 +38,20 @@ test:
     - build
   before_script:
     - apt-get update -y
-    - apt-get install -y --no-install-recommends ca-certificates cmake
-  script:
+    - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git
     - cd build
-    - echo "Running ctest and producing junit report..."
+    # Rebuild only Stim if needed
+    - cmake --build . --target libstim -- -j$(nproc)
+  script:
     - ctest --output-on-failure --parallel $(nproc) --output-junit junit.xml || true
   artifacts:
     reports:
       junit: build/junit.xml
     paths:
-      - build/
+      - build/**/*.gcda
+      - build/**/*.gcno
+    exclude:
+      - build/_deps/
     when: always
 
 coverage:
