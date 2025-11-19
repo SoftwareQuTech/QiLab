@@ -4,17 +4,24 @@ image: ubuntu:22.04
 stages:
   - build
   - test
+  - coverage
+
+variables:
+  DEBIAN_FRONTEND: noninteractive
 
 build:
   stage: build
-  variables:
-    DEBIAN_FRONTEND: noninteractive
   before_script:
     - apt-get update -y
     - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git
     - mkdir -p build && cd build
   script:
-    - cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++
+    - cmake .. -DCMAKE_BUILD_TYPE=Debug 
+        -DCMAKE_C_COMPILER=/usr/bin/gcc 
+        -DCMAKE_CXX_COMPILER=/usr/bin/g++ 
+        -DCMAKE_CXX_FLAGS="--coverage" 
+        -DCMAKE_C_FLAGS="--coverage"
+        -DBUILD_TESTING=ON
     - cmake --build . -- -j$(nproc)
   artifacts:
     paths:
@@ -23,8 +30,6 @@ build:
 
 test:
   stage: test
-  variables:
-    DEBIAN_FRONTEND: noninteractive
   dependencies:
     - build
   before_script:
@@ -38,5 +43,45 @@ test:
     reports:
       junit: build/junit.xml
     paths:
-      - build/junit.xml
+      - build/
     when: always
+
+coverage:
+  stage: coverage
+  dependencies:
+    - test
+  before_script:
+    - apt-get update -y
+    - apt-get install -y --no-install-recommends lcov
+  script:
+    - cd build
+    # Capture coverage data
+    - lcov --capture --directory . --output-file coverage.info
+    # Remove system headers and test files from coverage
+    - lcov --remove coverage.info '/usr/*' '*/test/*' '*/googletest/*' --output-file coverage_filtered.info
+    # Generate HTML report
+    - genhtml coverage_filtered.info --output-directory coverage_html
+    # Print summary
+    - lcov --list coverage_filtered.info
+    # Move to public directory for GitLab Pages
+    - mkdir -p ../public
+    - mv coverage_html/* ../public/
+  coverage: '/lines\.*: \d+\.\d+%/'
+  artifacts:
+    paths:
+      - public
+      - build/coverage_filtered.info
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: build/coverage.xml
+
+pages:
+  stage: coverage
+  dependencies:
+    - coverage
+  script:
+    - echo "Deploying coverage report to GitLab Pages"
+  artifacts:
+    paths:
+      - public
