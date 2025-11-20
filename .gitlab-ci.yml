@@ -72,7 +72,7 @@ coverage:
     # Capture coverage data
     - lcov --capture --directory . --output-file coverage.info
     # Remove system headers and test files from coverage
-    - lcov --remove coverage.info '/usr/*' '*/test/*' '*/googletest/*' --output-file coverage_filtered.info
+    - lcov --remove coverage.info '/usr/*' '*/test/*' '*/googletest/*' '*/gmock/*' 'src/gmock*' '*/gmock*' --output-file coverage_filtered.info
     # Generate HTML report
     - genhtml coverage_filtered.info --output-directory coverage_html
     # Print summary
