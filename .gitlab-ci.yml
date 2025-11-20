@@ -40,8 +40,8 @@ test:
     - apt-get update -y
     - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git
     - cd build
-    # Rebuild only Stim if needed
-    - cmake --build . --target libstim -- -j$(nproc)
+    # Rebuild only Stim if needed as stim is 1gb and too big to be an artifact
+    - cmake --build . -- -j$(nproc)
   script:
     - ctest --output-on-failure --parallel $(nproc) --output-junit junit.xml || true
   artifacts:

@@ -125,6 +125,11 @@ int8_t TransmissionProcessor::receive_command(std::unique_ptr<CommandBase> &comm
 
     if (data_handler->receive_data(data_buffer, COMMAND_MESSAGE_LENGTH))
     {
+        return -1;
+    }
+    if (!verify_crc(data_buffer, 3))
+    {
+        LOG_ERROR("CRC verification failed.");
         return -2;
     }
     std::unique_ptr<CommandBase> cmd = deserialize_command(data_buffer);
@@ -135,6 +140,7 @@ int8_t TransmissionProcessor::receive_command(std::unique_ptr<CommandBase> &comm
     }
     else
     {
+        LOG_ERROR("Command deserialization failed.");
         return -3;
     }
 

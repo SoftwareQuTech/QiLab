@@ -123,7 +123,7 @@ TEST(TransmissionProcessor_Receive, BadCrcReturnsMinus3) {
 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::unique_ptr<CommandBase> cmd;
-    EXPECT_EQ(tp.receive_command(cmd, 100), -3);
+    EXPECT_EQ(tp.receive_command(cmd, 100), -2);
     EXPECT_EQ(cmd, nullptr);
 }
 
@@ -136,7 +136,7 @@ TEST(TransmissionProcessor_Receive, TransportTimeoutOrErrorReturnsMinus2) {
 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::unique_ptr<CommandBase> cmd;
-    EXPECT_EQ(tp.receive_command(cmd, 5), -2);
+    EXPECT_EQ(tp.receive_command(cmd, 5), -1);
     EXPECT_EQ(cmd, nullptr);
 }
 
@@ -319,5 +319,5 @@ TEST(TransmissionProcessor_Sequence, ReceiveTwiceThenTransportError) {
     ASSERT_NE(cmd, nullptr);
     EXPECT_EQ(cmd->command_type, Command_t::QUBIT_INIT);
 
-    EXPECT_EQ(tp.receive_command(cmd, 10), -2);
+    EXPECT_EQ(tp.receive_command(cmd, 10), -1);
 }
