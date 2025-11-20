@@ -16,7 +16,7 @@ build:
     - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git
     - mkdir -p build && cd build
   script:
-    - cmake .. -DCMAKE_BUILD_TYPE=Debug 
+    - cmake .. -DCMAKE_BUILD_TYPE=Release 
         -DCMAKE_C_COMPILER=/usr/bin/gcc 
         -DCMAKE_CXX_COMPILER=/usr/bin/g++ 
         -DCMAKE_CXX_FLAGS="--coverage" 
@@ -40,6 +40,12 @@ test:
     - apt-get update -y
     - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git
     - cd build
+    - cmake .. -DCMAKE_BUILD_TYPE=Release 
+      -DCMAKE_C_COMPILER=/usr/bin/gcc 
+      -DCMAKE_CXX_COMPILER=/usr/bin/g++ 
+      -DCMAKE_CXX_FLAGS="--coverage" 
+      -DCMAKE_C_FLAGS="--coverage"
+      -DBUILD_TESTING=ON
     # Rebuild only Stim if needed as stim is 1gb and too big to be an artifact
     - cmake --build . -- -j$(nproc)
   script:
