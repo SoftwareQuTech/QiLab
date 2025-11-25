@@ -232,6 +232,7 @@ TEST(ThreadSafeRingBufferThreadTest, SingleProducerMultipleConsumers) {
                 if (buffer.pop(value)) {
                     per_consumer_count[c]++;
                     consumed_count++;
+                    std::this_thread::yield();
                 }
             }
         });

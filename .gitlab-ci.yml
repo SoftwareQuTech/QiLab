@@ -49,7 +49,7 @@ test:
     # Rebuild only Stim if needed as stim is 1gb and too big to be an artifact
     - cmake --build . -- -j$(nproc)
   script:
-    - ctest --output-on-failure --parallel $(nproc) --output-junit junit.xml || true
+    - ctest --output-on-failure --parallel $(nproc) --output-junit junit.xml
   artifacts:
     reports:
       junit: build/junit.xml

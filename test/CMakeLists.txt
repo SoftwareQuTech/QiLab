@@ -62,11 +62,9 @@ target_link_libraries(prof_tests_disabled PRIVATE GTest::gtest_main qilab_lib)
 add_test(NAME prof_disabled COMMAND prof_tests_disabled)
 
 include(GoogleTest)
-gtest_discover_tests(
-  transmission_processor_test 
-  prof_tests_disabled 
-  prof_tests_enabled
-  entanglement_manager_test
-  message_broker_test
-)
+gtest_discover_tests(transmission_processor_test)
+gtest_discover_tests(prof_tests_disabled)
+gtest_discover_tests(prof_tests_enabled)
+gtest_discover_tests(entanglement_manager_test)
+gtest_discover_tests(message_broker_test)
 
