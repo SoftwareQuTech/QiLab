@@ -44,10 +44,10 @@ private:
 public:
     /**
      * @brief Bind the processor to a transport implementation.
-     * @param[in] handler Shared pointer to a valid ITransmissionHandler.
-     *                    The processor maintains a shared reference to @p handler.
+     * @param[in] handler Unique pointer to a valid ITransmissionHandler.
+     *                    The processor maintains a unique ownership of @p handler.
      */
-    TransmissionProcessor(std::shared_ptr<ITransmissionHandler> handler);
+    TransmissionProcessor(std::unique_ptr<ITransmissionHandler> handler);
 
     /// @brief Trivial destructor.
     ~TransmissionProcessor();
