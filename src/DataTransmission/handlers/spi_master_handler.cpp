@@ -1,11 +1,9 @@
 #include <fcntl.h>
 #include <unistd.h>
-#include <sys/ioctl.h>
-#include <linux/spi/spidev.h>
 #include <cstring>
-#include <iostream>
 
 #include "logger/profiler_api.hpp"
+#include "logger/logger_api.hpp"
 #include "DataTransmission/handlers/spi_master_handler.hpp"
 
 
@@ -30,21 +28,18 @@ int8_t SPIHandler::connect_spi(const char* device_path, uint8_t spi_mode, uint8_
 
     spi_fd = open(device, O_RDWR);
     if (spi_fd < 0) {
-        //keep this for debugging purposes only
-        std::cerr << "Failed to open SPI device: " << device << std::endl;
+        LOG_ERROR("Failed to open SPI device: " + std::string(device));
         return -1;
     }
 
     if (ioctl(spi_fd, SPI_IOC_WR_MODE, &mode) == -1) {
-        //keep this for debugging purposes only
-        std::cerr << "Failed to set SPI mode." << std::endl;
+        LOG_ERROR("Failed to set SPI mode.");
         close(spi_fd);
         return -1;
     }
 
     if (ioctl(spi_fd, SPI_IOC_WR_BITS_PER_WORD, &bits) == -1) {
-        //keep this for debugging purposes only
-        std::cerr << "Failed to set bits per word." << std::endl;
+        LOG_ERROR("Failed to set bits per word.");
         close(spi_fd);
         return -1;
     }
@@ -56,8 +51,7 @@ int8_t SPIHandler::connect_spi(const char* device_path, uint8_t spi_mode, uint8_
     transfer_template.delay_usecs = 0;  // No delay between transfers
 
     if (ioctl(spi_fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed) == -1) {
-        //keep this for debugging purposes only
-        std::cerr << "Failed to set max speed." << std::endl;
+        LOG_ERROR("Failed to set max speed.");
         close(spi_fd);
         return -1;
     }
@@ -68,8 +62,7 @@ int8_t SPIHandler::connect_spi(const char* device_path, uint8_t spi_mode, uint8_
 int8_t SPIHandler::receive_data(uint8_t* buffer, uint8_t length)
 {
     if (read(spi_fd, buffer, length) != length) {
-        //keep this for debugging purposes only
-        std::cerr << "Failed to read from SPI device." << std::endl;
+        LOG_ERROR("Failed to read from SPI device.");
         return -1;
     }
     return -1; //Not Implemented
@@ -78,8 +71,7 @@ int8_t SPIHandler::receive_data(uint8_t* buffer, uint8_t length)
 int8_t SPIHandler::send_data(const uint8_t* buffer, uint8_t length)
 {
     if (write(spi_fd, buffer, length) != length) {
-        //keep this for debugging purposes only
-        std::cerr << "Failed to write to SPI device." << std::endl;
+        LOG_ERROR("Failed to write to SPI device.");
         return -1;
     }
     return -1; //Not Implemented
@@ -96,8 +88,7 @@ int8_t SPIHandler::transfer(uint8_t const* tx_buffer, uint8_t const* rx_buffer, 
     // Perform transfer with error checking
     int ret = ioctl(spi_fd, SPI_IOC_MESSAGE(1), &tr);
     if (ret != length) {
-        std::cerr << "SPI transfer failed. Expected " << length 
-                  << " bytes, transferred " << ret << std::endl;
+        LOG_ERROR("SPI transfer failed. Length is wrong");
         return -1;
     }
     
@@ -107,4 +98,5 @@ int8_t SPIHandler::transfer(uint8_t const* tx_buffer, uint8_t const* rx_buffer, 
 void SPIHandler::flush()
 {
     // No specific flush operation for SPI; implement if needed.
+    LOG_WARNING("SPI flush() called, but no operation is defined.");
 }

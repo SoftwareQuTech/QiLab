@@ -52,6 +52,7 @@ static uint8_t crc8_ccitt(const uint8_t *data, std::size_t len) noexcept
 
 int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<ResponseData>> &responses, std::vector<std::unique_ptr<CommandBase>> &commands, uint8_t transfer_msg_count)
 {
+    static uint8_t cnt = 0;
     // Using class-level buffers, no need to reallocate or zero
     static_assert(sizeof(TransmissionProcessor::tx_buffer) % 64 == 0, "tx_buffer not aligned");
     static_assert(sizeof(TransmissionProcessor::rx_buffer) % 64 == 0, "rx_buffer not aligned");
@@ -76,17 +77,22 @@ int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<Res
             return -2;
         }
         uint8_t* dest = TransmissionProcessor::tx_buffer + (i * RESPONSE_MESSAGE_LENGTH);
-        dest[0] = 0; // cycle count placeholder
-        if (response->outcome_status == Outcome_Status_t::SUCCESS)
-        {
-            dest[1] = (0xf0 & ((uint8_t)response->outcome_result << 4)) | (0x0f & (uint8_t)response->status);
-        }
-        else
-        {
-            dest[1] = (0xf0 & ((uint8_t)response->outcome_status << 4)) | (0x0f & (uint8_t)response->status);
-        }
-        dest[2] = 0; // data placeholder
-        dest[3] = crc8_ccitt(dest, 3); // CRC for this message
+        // dest[0] = 0; // cycle count placeholder
+        // if (response->outcome_status == Outcome_Status_t::SUCCESS)
+        // {
+        //     dest[1] = (0xf0 & ((uint8_t)response->outcome_result << 4)) | (0x0f & (uint8_t)response->status);
+        // }
+        // else
+        // {
+        //     dest[1] = (0xf0 & ((uint8_t)response->outcome_status << 4)) | (0x0f & (uint8_t)response->status);
+        // }
+        // dest[2] = 0; // data placeholder
+        // dest[3] = crc8_ccitt(dest, 3); // CRC for this message
+        dest[0] = 0xDE;
+        dest[1] = 0xAD;
+        dest[2] = 0xBE;
+        dest[3] = cnt++;
+        
     }
 
     if(data_handler->transfer(tx_buffer, rx_buffer, RESPONSE_MESSAGE_LENGTH * transfer_msg_count))

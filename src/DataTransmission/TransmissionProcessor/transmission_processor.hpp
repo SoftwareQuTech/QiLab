@@ -44,10 +44,10 @@ private:
 public:
     /**
      * @brief Bind the processor to a transport implementation.
-     * @param[in] handler Owning pointer to a valid ITransmissionHandler.
-     *                    The processor takes ownership of @p handler.
+     * @param[in] handler Shared pointer to a valid ITransmissionHandler.
+     *                    The processor maintains a shared reference to @p handler.
      */
-    TransmissionProcessor(std::unique_ptr<ITransmissionHandler> handler);
+    TransmissionProcessor(std::shared_ptr<ITransmissionHandler> handler);
 
     /// @brief Trivial destructor.
     ~TransmissionProcessor();
@@ -83,30 +83,32 @@ public:
     int8_t send_response(const std::unique_ptr<ResponseData> &response);
 
     /**
-     * @brief Synchronous transmit/receive for sync channels (e.g., SPI).
+     * @brief Synchronous transmit/receive for full-duplex channels (e.g., SPI).
      *
-     * Serializes up to @p transfer_msg_count responses and transmits them while
-     * simultaneously receiving the same number of command frames. All received
-     * commands that decode successfully are appended to @p commands.
-     * This call is **blocking**.
+     * Serializes up to @p transfer_msg_count responses into a pre-allocated aligned buffer,
+     * transmits them via SPI, and simultaneously receives the same number of command frames.
+     * Received commands are decoded and swapped into @p commands at their respective indices.
+     * This call is **blocking** and **atomic** at the SPI protocol level.
      *
-     * @param[in]  responses           Responses to serialize and send (size ≥ 1).
-     * @param[out] commands            Container to append decoded commands to.
-     * @param[in]  transfer_msg_count  Number of messages to TX/RX atomically (typically
-     *                                 <= responses.size()).
+     * Performance: Uses pre-allocated static buffers (tx_buffer, rx_buffer) aligned for
+     * DMA efficiency. Commands are deserialized with minimal allocation overhead.
+     *
+     * @param[in]  responses           Responses to serialize and send (size must match transfer_msg_count).
+     * @param[out] commands            Command vector; successfully decoded commands swap into indices [0..transfer_msg_count-1].
+     * @param[in]  transfer_msg_count  Number of messages to TX/RX atomically (≤ responses.size(), ≤ commands.size()).
      * @return int8_t
-     *         - 0  on full success (TX done; all RX decoded)
+     *         - 0  on full success (TX/RX complete; all commands decoded)
      *         - -1 invalid sizes/counts or null entries
      *         - -2 transport I/O error
-     *         - -3 CRC/opcode decode failure on at least one received frame
+     *         - -3 CRC or opcode decode failure
      */
     int8_t transmit_msg(const std::vector<std::unique_ptr<ResponseData>> &responses,
                         std::vector<std::unique_ptr<CommandBase>> &commands,
                         uint8_t transfer_msg_count);
 
 private:
-    /// Unique Pointer to the transport handler used for sending/receiving raw data.
-    std::unique_ptr<ITransmissionHandler> data_handler;
+    /// Shared pointer to the transport handler used for sending/receiving raw data.
+    std::shared_ptr<ITransmissionHandler> data_handler;
 
     /**
      * @brief Decode a 4-byte command frame into a concrete CommandBase.
@@ -133,14 +135,14 @@ private:
      * @brief Serialize a response into a 4-byte frame.
      *
      * Layout:
-     * - Byte 0: platform cycle counter (set to 0 here)
-     * - Byte 1: hi-nibble = (SUCCESS ? outcome_result : outcome_status); lo-nibble = status
-     * - Byte 2: platform-defined runtime byte (set to 0 here)
+     * - Byte 0: platform cycle counter (set to 0; platform should populate at runtime)
+     * - Byte 1: hi-nibble = (outcome_status==SUCCESS ? outcome_result : outcome_status); lo-nibble = status
+     * - Byte 2: platform-defined runtime byte (set to 0; platform should populate at runtime)
      * - Byte 3: CRC-8/CCITT of bytes [0..2]
      *
      * @param[in]  resp   Response object to serialize.
      * @param[out] buffer Destination buffer (size ≥ 4).
-     * @return int8_t 0 on success.
+     * @return int8_t 0 on success; -1 on invalid input.
      */
     int8_t serialize_response(const ResponseData &resp, uint8_t *buffer);
 

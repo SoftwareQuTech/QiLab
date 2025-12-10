@@ -55,7 +55,6 @@ int DataTransmissionRunner::on_run(int core_id)
         {
             if (response.node_id < responses.size())
             {
-                // std::cout<< "Sending response [ "  << std::to_string(response.node_id) << " ] : "<< std::to_string(response.transport->outcome_result) << std::endl;
                 responses[response.node_id] = std::move(response.transport);
             }
         }
@@ -80,17 +79,25 @@ int DataTransmissionRunner::on_run(int core_id)
             }
 
             command_context.node_id = registered_nodes[i];
-            command_context.destination =
-                (commands[i]->command_type == Command_t::ENTANGLEMENT_ATTEMPT ||
-                 commands[i]->command_type == Command_t::ENTANGLEMENT_MEASURE)
-                    ? DestinationType::EntanglementRunner
-                    : DestinationType::SimRunner;
+            if(commands[i]->command_type == Command_t::ENTANGLEMENT_ATTEMPT ||
+               commands[i]->command_type == Command_t::ENTANGLEMENT_MEASURE)
+            {
+                command_context.destination = DestinationType::EntanglementRunner;
+                responses[i]->status = NodeStatus_t::BUSY_LINK;
+            }
+            else
+            {
+                responses[i]->status = NodeStatus_t::BUSY_CMD;
+                command_context.destination = DestinationType::SimRunner;
+            }
             command_context.transport = std::move(commands[i]);
 
             message_broker->route_command(std::move(command_context));
         }
+
+        //
         //CPU_PAUSE();
-        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
         PROF_STOP(prof_event_deserialize);
         //std::this_thread::yield();
     }
