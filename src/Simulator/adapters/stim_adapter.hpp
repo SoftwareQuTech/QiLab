@@ -91,7 +91,7 @@ public:
      * @note Consider aligning return coding with the rest of the API via a
      *       strong enum in the future.
      */
-    uint8_t attempt_entanglement(uint16_t fidelity, uint8_t neighbour_address, uint8_t qid) override;
+    uint8_t attempt_entanglement(uint16_t fidelity, uint8_t local_qubit, uint8_t neighbour_address, uint8_t qid) override;
 
     /**
      * @copydoc ISimulator::entanglement_measure

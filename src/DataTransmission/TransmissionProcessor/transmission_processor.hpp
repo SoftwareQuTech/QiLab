@@ -20,7 +20,7 @@
 #define RESPONSE_MESSAGE_LENGTH     4
 #define CONTROL_WORD_LEN           4
 #define MAX_NUMBER_OF_COMMANDS     ((MAX_BUFFER_LENGTH - CONTROL_WORD_LEN) / COMMAND_MESSAGE_LENGTH)
-
+#define LP_DATA_BUFFER_LENGTH      32   
 /**
  * @brief Handles reception and transmission of single commands/responses,
  *        plus synchronous request/response exchanges.
@@ -40,7 +40,8 @@ private:
     // Aligned buffers for DMA efficiency
     __attribute__((aligned(64))) static uint8_t tx_buffer[MAX_BUFFER_LENGTH];
     __attribute__((aligned(64))) static uint8_t rx_buffer[MAX_BUFFER_LENGTH];
-
+    static uint32_t lp_data_buffer[LP_DATA_BUFFER_LENGTH];
+    uint64_t cycle_count_ = 0;
 public:
     /**
      * @brief Bind the processor to a transport implementation.
@@ -108,7 +109,7 @@ public:
 
 private:
     /// Shared pointer to the transport handler used for sending/receiving raw data.
-    std::shared_ptr<ITransmissionHandler> data_handler;
+    std::unique_ptr<ITransmissionHandler> data_handler;
 
     /**
      * @brief Decode a 4-byte command frame into a concrete CommandBase.

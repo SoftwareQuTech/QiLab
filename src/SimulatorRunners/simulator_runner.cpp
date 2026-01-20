@@ -103,7 +103,7 @@ int SimulatorRunner::on_run(int core_id)
             }
         }
 
-        std::this_thread::sleep_for(std::chrono::microseconds(10));
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
         PROF_STOP(prof_event_simulation_thread_log);
         // CPU_PAUSE();
         // std::this_thread::yield();
@@ -142,7 +142,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         auto *cmd = static_cast<QubitInitialize *>(command.get());
         simulator->qubit_initialize(cmd->qubit1_address + qubit_offset);
         response.outcome_status = Outcome_Status_t::SUCCESS;
-        response.status = NodeStatus_t::READY;
+        response.status = NodeStatus_t::OUTCOME_READY | NodeStatus_t::READY;
         PROF_STOP(prof_event_qubit_init);
     }
     break;
@@ -152,7 +152,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         PROF_START(prof_event_qubit_measurement);
         auto *cmd = static_cast<QubitMeasure *>(command.get());
         auto res = simulator->qubit_measure(cmd->qubit1_address + qubit_offset, cmd->basis);
-        response.status = NodeStatus_t::READY;
+        response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         response.outcome_result = res ? Measurement_t::MEASURE_OUTCOME_MINUS_1
                                       : Measurement_t::MEASURE_OUTCOME_PLUS_1;
         PROF_STOP(prof_event_qubit_measurement);
@@ -166,7 +166,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         simulator->single_qubit_gate(cmd->qubit1_address + qubit_offset,
                                      cmd->angle, cmd->axis);
         response.outcome_status = Outcome_Status_t::SUCCESS;
-        response.status = NodeStatus_t::READY;
+        response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         PROF_STOP(prof_event_single_qubit_gate);
     }
     break;
@@ -179,7 +179,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
                                   cmd->qubit2_address + qubit_offset,
                                   cmd->angle, cmd->axis);
         response.outcome_status = Outcome_Status_t::SUCCESS;
-        response.status = NodeStatus_t::READY;                                  
+        response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         PROF_STOP(prof_event_two_qubit_gate);
     }
     break;
@@ -190,7 +190,10 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         auto *cmd = static_cast<QubitSwap *>(command.get());
         simulator->qubit_swap(cmd->qubit1_address + qubit_offset,
                               cmd->qubit2_address + qubit_offset);
+        response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
+        response.outcome_status = Outcome_Status_t::SUCCESS;
         PROF_STOP(prof_event_qubit_swap);
+
     }
     break;
 
@@ -198,9 +201,22 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
     {
         PROF_START(prof_event_entanglement_attempt);
         auto *cmd = static_cast<EntanglementAttempt *>(command.get());
+        //small amount of logic to extract the neighbour qubit address
+        if(cmd->nghbr >= nodes.size())
+        {
+            LOG_ERROR("Invalid neighbour index " + std::to_string(cmd->nghbr) + " for entanglement attempt.");
+            response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
+            response.outcome_status = Outcome_Status_t::INVALID_QUBIT;
+            PROF_STOP(prof_event_entanglement_attempt);
+            break;
+        }
+        uint8_t neighbour_address = nodes[cmd->nghbr].first; //for now use only qubit address 0 of the neighbour
         simulator->attempt_entanglement(cmd->fidelity,
-                                        cmd->nghbr + qubit_offset,
-                                        cmd->qid + qubit_offset);
+                                        0, //current logic is only to use qubit 0
+                                        neighbour_address,
+                                        cmd->qid);
+        response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
+        response.outcome_status = Outcome_Status_t::SUCCESS;
         PROF_STOP(prof_event_entanglement_attempt);
     }
     break;
@@ -211,6 +227,8 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         auto *cmd = static_cast<EntanglementSwap *>(command.get());
         simulator->entanglement_swap(cmd->qubit1_address + qubit_offset,
                                      cmd->qubit2_address + qubit_offset);
+        response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
+        response.outcome_status = Outcome_Status_t::SUCCESS;
         PROF_STOP(prof_event_entanglement_swap);
     }
     break;
@@ -225,6 +243,8 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
                                         cmd->qid + qubit_offset,
                                         cmd->immediate,
                                         cmd->repetitions);
+        response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
+        response.outcome_status = Outcome_Status_t::SUCCESS;
         PROF_STOP(prof_event_entanglement_measure);
     }
     break;
@@ -237,6 +257,8 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
                                                cmd->angle1,
                                                cmd->angle2,
                                                cmd->angle3);
+        response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
+        response.outcome_status = Outcome_Status_t::SUCCESS;
         PROF_STOP(prof_event_pre_measure_select);
     }
     break;
@@ -247,6 +269,8 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         auto *cmd = static_cast<QubitMove *>(command.get());
         simulator->qubit_move(cmd->qubit1_address + qubit_offset,
                               cmd->qubit2_address + qubit_offset);
+        response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
+        response.outcome_status = Outcome_Status_t::SUCCESS;
         PROF_STOP(prof_event_qubit_move);
     }
     break;

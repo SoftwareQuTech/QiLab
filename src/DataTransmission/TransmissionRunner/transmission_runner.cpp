@@ -5,6 +5,7 @@
 #include "transmission_runner.hpp"
 #include "logger/logger_api.hpp"
 
+#define TRANSMISSION_STEP_DELAY 10000  // microseconds
 
 DataTransmissionRunner::DataTransmissionRunner(std::vector<int16_t> nodes, std::unique_ptr<TransmissionProcessor> processor, std::shared_ptr<MessageBroker> broker) : transmission_processor(std::move(processor)), registered_nodes(nodes), message_broker(broker) {}
 
@@ -62,9 +63,11 @@ int DataTransmissionRunner::on_run(int core_id)
         PROF_STOP(prof_event_serialize);
         PROF_START(prof_event_spi_transfer);
 
+        //LOG_INFO("Sending response data " + std::to_string(static_cast<uint8_t>(responses[0]->status)) + " for node " + std::to_string(registered_nodes[0]) + ".");
         if(transmission_processor->transmit_msg(responses, commands, registered_nodes.size()) != 0)
         {
             LOG_ERROR("Transmission Failed during SPI transfer.");
+            //std::this_thread::sleep_for(std::chrono::milliseconds(TRANSMISSION_STEP_DELAY));
             continue;
         }
 
@@ -75,9 +78,12 @@ int DataTransmissionRunner::on_run(int core_id)
         {
             if (commands[i] == nullptr || commands[i]->command_type == Command_t::NOP)
             {
+                //std::this_thread::sleep_for(std::chrono::milliseconds(TRANSMISSION_STEP_DELAY));   
+                responses[i]->status = NodeStatus_t::READY;
                 continue;
             }
 
+            LOG_INFO("Routing command of type " + std::to_string(static_cast<uint8_t>(commands[i]->command_type)) + " for node " + std::to_string(registered_nodes[i]) + ".");
             command_context.node_id = registered_nodes[i];
             if(commands[i]->command_type == Command_t::ENTANGLEMENT_ATTEMPT ||
                commands[i]->command_type == Command_t::ENTANGLEMENT_MEASURE)
@@ -97,7 +103,7 @@ int DataTransmissionRunner::on_run(int core_id)
 
         //
         //CPU_PAUSE();
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::microseconds(TRANSMISSION_STEP_DELAY));
         PROF_STOP(prof_event_deserialize);
         //std::this_thread::yield();
     }

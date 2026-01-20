@@ -104,12 +104,12 @@ public:
     int8_t transfer(uint8_t const* tx_buffer, uint8_t const* rx_buffer, const uint8_t length) override;
 
 private:
-    int spi_fd;                              ///< File descriptor for the SPI device
-    const char* device;                      ///< SPI device path (e.g., "/dev/spidev1.0")
-    uint8_t mode;                            ///< SPI mode (0-3)
-    uint8_t bits;                            ///< Bits per word
-    uint32_t speed;                          ///< Clock speed in Hz
-    uint16_t delay;                          ///< Delay between transfers in microseconds
+    int spi_fd{-1};                          ///< File descriptor for the SPI device
+    const char* device{"/dev/spidev1.0"};   ///< SPI device path (e.g., "/dev/spidev1.0")
+    uint8_t mode{0};                         ///< SPI mode (0-3)
+    uint8_t bits{8};                         ///< Bits per word
+    uint32_t speed{18000000};                ///< Clock speed in Hz
+    uint16_t delay{0};                       ///< Delay between transfers in microseconds
     
     /// Pre-allocated transfer structure for optimal performance (avoids malloc on each transfer)
     struct spi_ioc_transfer transfer_template;

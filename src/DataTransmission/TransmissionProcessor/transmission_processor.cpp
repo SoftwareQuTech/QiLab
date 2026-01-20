@@ -20,13 +20,17 @@
     // Define static buffers
 __attribute__((aligned(64))) uint8_t TransmissionProcessor::tx_buffer[MAX_BUFFER_LENGTH];
 __attribute__((aligned(64))) uint8_t TransmissionProcessor::rx_buffer[MAX_BUFFER_LENGTH];
+uint32_t TransmissionProcessor::lp_data_buffer[LP_DATA_BUFFER_LENGTH];
 
 // CRC-8/CCITT parameters.
 static constexpr uint8_t CRC8_CCITT_POLY = 0x07u;
 static constexpr uint8_t CRC8_INIT = 0x00u;
 static constexpr uint8_t CRC8_XOROUT = 0x00u;
 
-TransmissionProcessor::TransmissionProcessor(std::unique_ptr<ITransmissionHandler> transmission_handler) : data_handler(std::move(transmission_handler)) {}
+TransmissionProcessor::TransmissionProcessor(std::unique_ptr<ITransmissionHandler> transmission_handler) : data_handler(std::move(transmission_handler)) 
+{
+    lp_data_buffer[0] = 0xDEADBEEF; //just to avoid compiler warnings
+}
 
 TransmissionProcessor::~TransmissionProcessor() {}
 
@@ -52,7 +56,6 @@ static uint8_t crc8_ccitt(const uint8_t *data, std::size_t len) noexcept
 
 int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<ResponseData>> &responses, std::vector<std::unique_ptr<CommandBase>> &commands, uint8_t transfer_msg_count)
 {
-    static uint8_t cnt = 0;
     // Using class-level buffers, no need to reallocate or zero
     static_assert(sizeof(TransmissionProcessor::tx_buffer) % 64 == 0, "tx_buffer not aligned");
     static_assert(sizeof(TransmissionProcessor::rx_buffer) % 64 == 0, "rx_buffer not aligned");
@@ -66,7 +69,7 @@ int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<Res
     {
         return -1;
     }
-    
+
     // Directly serialize into tx_buffer to avoid double copy
     for(auto i = 0; i < transfer_msg_count; i++)
     {
@@ -76,23 +79,35 @@ int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<Res
             LOG_ERROR("Null response data provided.");
             return -2;
         }
+        if((cycle_count_ & 0xFF) == 0)
+        {
+            lp_data_buffer[2] = static_cast<uint32_t>(cycle_count_ & 0xFFFFFFFFULL);
+            lp_data_buffer[3] = static_cast<uint32_t>((cycle_count_ >> 32) & 0xFFFFFFFFULL);
+            //LOG_INFO("Cycle count updated in LP buffer: " + std::to_string(lp_data_buffer[2]) + ", " + std::to_string(lp_data_buffer[3]));
+        }
         uint8_t* dest = TransmissionProcessor::tx_buffer + (i * RESPONSE_MESSAGE_LENGTH);
-        // dest[0] = 0; // cycle count placeholder
-        // if (response->outcome_status == Outcome_Status_t::SUCCESS)
-        // {
-        //     dest[1] = (0xf0 & ((uint8_t)response->outcome_result << 4)) | (0x0f & (uint8_t)response->status);
-        // }
+        dest[0] = cycle_count_ & 0xFF;
+        //LOG_INFO("Current cycle count: " + std::to_string(dest[0]));
+        //if (response->outcome_status == Outcome_Status_t::SUCCESS)
+        //{
+            dest[1] = (0xf0 & ((uint8_t)response->outcome_status << 4)) | (0x0f & (uint8_t)response->status);
+        //}
         // else
         // {
         //     dest[1] = (0xf0 & ((uint8_t)response->outcome_status << 4)) | (0x0f & (uint8_t)response->status);
         // }
-        // dest[2] = 0; // data placeholder
-        // dest[3] = crc8_ccitt(dest, 3); // CRC for this message
-        dest[0] = 0xDE;
-        dest[1] = 0xAD;
-        dest[2] = 0xBE;
-        dest[3] = cnt++;
         
+        // Extract LP data nibble from lp_data_buffer (match Python baseline: walk nibbles LSB->MSB)
+        constexpr uint8_t nibbles_per_word = 8; // 32 bits / 4 bits per nibble
+        uint32_t lp_data_word = lp_data_buffer[(cycle_count_ & 0xFF) / nibbles_per_word];
+        uint8_t nibble_index = (cycle_count_ & 0xFF) & (nibbles_per_word - 1);
+        uint8_t nibble_offset = nibble_index * 4;
+        uint8_t lp_data = static_cast<uint8_t>((lp_data_word >> nibble_offset) & 0x0F);
+
+        dest[2] = lp_data;
+        dest[3] = crc8_ccitt(dest, 3); // CRC for this message
+
+        cycle_count_++;
     }
 
     if(data_handler->transfer(tx_buffer, rx_buffer, RESPONSE_MESSAGE_LENGTH * transfer_msg_count))
@@ -102,16 +117,22 @@ int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<Res
     }
 
     // Process commands directly from rx_buffer
-    for(uint8_t i = 0; i < transfer_msg_count; i++)
+    for (uint8_t i = 0; i < transfer_msg_count; i++)
     {
-        const uint8_t* cmd_data = rx_buffer + (i * COMMAND_MESSAGE_LENGTH);
-        if(!verify_crc(cmd_data, 3))
+        const uint8_t *cmd_data = rx_buffer + (i * COMMAND_MESSAGE_LENGTH);
+        // LOG_INFO("Received command data: 0x");
+        // for(int j = 0; j < COMMAND_MESSAGE_LENGTH; j++)
+        // {
+        //    std::cout << std::hex << static_cast<int>(rx_buffer[j]) << std::dec;
+        // }
+        // std::cout << std::endl;
+        if (!verify_crc(cmd_data, 3))
         {
             LOG_ERROR("CRC verification failed.");
             return -4;
         }
         auto cmd = deserialize_command(cmd_data);
-        if(cmd != nullptr)
+        if (cmd != nullptr)
         {
             commands[i].swap(cmd);
         }

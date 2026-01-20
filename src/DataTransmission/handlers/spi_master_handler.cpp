@@ -1,6 +1,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstring>
+#include <string>
 
 #include "logger/profiler_api.hpp"
 #include "logger/logger_api.hpp"
@@ -8,6 +9,7 @@
 
 
 SPIHandler::SPIHandler(){
+    // Use default-initialized members to establish the connection
     connect_spi(device, mode, bits, speed);
 }
 
