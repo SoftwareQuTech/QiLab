@@ -7,7 +7,7 @@
 #include <errno.h>
 #include <iostream>
 #include <thread>
-
+#include "logger/logger_api.hpp"
 namespace thread_utils {
 
 #define THREAD_SCHEDULER_FIFO_PRIORITY 80
@@ -30,17 +30,20 @@ inline bool pin_current_thread_to_core(int core_id) {
     bool success = true;
     
     // Try setting affinity
-    if (sched_setaffinity(tid, sizeof(cpu_set_t), &cpuset) != 0) {
-        std::cerr << "Failed to set thread " << tid << " affinity to core " << core_id 
-                  << " (errno: " << errno << ")" << std::endl;
+    if (sched_setaffinity(tid, sizeof(cpu_set_t), &cpuset) != 0) 
+    {
+        LOG_ERROR("Failed to set thread " + std::to_string(tid) + " affinity to core " + std::to_string(core_id) 
+                  + " (errno: " + std::to_string(errno) + ")");
         success = false;
     }
     
     // Verify affinity
     CPU_ZERO(&cpuset);
-    if (sched_getaffinity(tid, sizeof(cpu_set_t), &cpuset) == 0) {
-        if (!CPU_ISSET(core_id, &cpuset)) {
-            std::cerr << "Core " << core_id << " not in affinity set for thread " << tid << std::endl;
+    if (sched_getaffinity(tid, sizeof(cpu_set_t), &cpuset) == 0) 
+    {
+        if (!CPU_ISSET(core_id, &cpuset)) 
+        {
+            LOG_ERROR("Core " + std::to_string(core_id) + " not in affinity set for thread " + std::to_string(tid));
             success = false;
         }
     }
@@ -49,22 +52,24 @@ inline bool pin_current_thread_to_core(int core_id) {
     struct sched_param param;
     param.sched_priority = THREAD_SCHEDULER_FIFO_PRIORITY;//sched_get_priority_max(SCHED_FIFO);
     
-    if (sched_setscheduler(tid, SCHED_FIFO, &param) != 0) {
-        std::cerr << "Failed to set SCHED_FIFO for thread " << tid 
-                  << " (errno: " << errno << ")" << std::endl;
+    if (sched_setscheduler(tid, SCHED_FIFO, &param) != 0) 
+    {
+        LOG_ERROR("Failed to set SCHED_FIFO for thread " + std::to_string(tid) 
+                  + " (errno: " + std::to_string(errno) + ")");
         success = false;
     }
 
     // Get and print current core
     int current_core = sched_getcpu();
-    std::cout << "Thread " << tid << " requested core " << core_id 
-              << ", currently on core " << current_core 
-              << " (success: " << success << ")" << std::endl;
+    LOG_INFO("Thread " + std::to_string(tid) + " requested core " + std::to_string(core_id) 
+              + ", currently on core " + std::to_string(current_core) 
+              + " (success: " + (success ? "true" : "false") + ")");
               
     // Verify we're on the right core
-    if (current_core != core_id) {
-        std::cerr << "Thread " << tid << " running on wrong core: " 
-                  << current_core << " instead of " << core_id << std::endl;
+    if (current_core != core_id) 
+    {
+        LOG_ERROR("Thread " + std::to_string(tid) + " running on wrong core: " 
+                  + std::to_string(current_core) + " instead of " + std::to_string(core_id));
         success = false;
     }
 

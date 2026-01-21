@@ -116,8 +116,7 @@ TEST(TransmissionProcessor_TransmitMsg, SendsResponsesAndReceivesCommands) {
     // 2 responses to send
     auto r1 = std::make_unique<ResponseData>();
     r1->status = NodeStatus_t::READY;
-    r1->outcome_status = Outcome_Status_t::SUCCESS;
-    r1->outcome_result = Bell_State_Measurent_t::BELL_STATE_PHI_MINUS;
+    r1->outcome = static_cast<uint8_t>(Outcome_Status_t::SUCCESS) | static_cast<uint8_t>(Bell_State_Measurent_t::BELL_STATE_PHI_MINUS);
 
     std::vector<std::unique_ptr<ResponseData>> responses;
     responses.emplace_back(std::make_unique<ResponseData>());
@@ -182,8 +181,7 @@ TEST(TransmissionProcessor_TransmitMsg, SendsResponsesAndReceivesEmptyCommands) 
     // 2 responses to send
     auto r1 = std::make_unique<ResponseData>();
     r1->status = NodeStatus_t::READY;
-    r1->outcome_status = Outcome_Status_t::SUCCESS;
-    r1->outcome_result = Bell_State_Measurent_t::BELL_STATE_PHI_MINUS;
+    r1->outcome = static_cast<uint8_t>(Outcome_Status_t::SUCCESS) | static_cast<uint8_t>(Bell_State_Measurent_t::BELL_STATE_PHI_MINUS);
 
     std::vector<std::unique_ptr<ResponseData>> responses;
     responses.emplace_back(std::make_unique<ResponseData>());
@@ -244,8 +242,7 @@ TEST(TransmissionProcessor_TransmitMsg, FailsOnSingleBadCrcAmongFrames) {
     for (auto& r : responses) {
         r = std::make_unique<ResponseData>();
         r->status = NodeStatus_t::READY;
-        r->outcome_status = Outcome_Status_t::SUCCESS;
-        r->outcome_result = Bell_State_Measurent_t::BELL_STATE_PHI_PLUS;
+        r->outcome = static_cast<uint8_t>(Outcome_Status_t::SUCCESS) | static_cast<uint8_t>(Bell_State_Measurent_t::BELL_STATE_PHI_PLUS);
     }
 
     uint8_t rx_buf[12];
@@ -277,8 +274,7 @@ TEST(TransmissionProcessor_TransmitMsg, FailsOnUnknownOpcode) {
     std::vector<std::unique_ptr<ResponseData>> responses(1);
     responses[0] = std::make_unique<ResponseData>();
     responses[0]->status = NodeStatus_t::READY;
-    responses[0]->outcome_status = Outcome_Status_t::SUCCESS;
-    responses[0]->outcome_result = Bell_State_Measurent_t::BELL_STATE_PHI_MINUS;
+    responses[0]->outcome = static_cast<uint8_t>(Outcome_Status_t::SUCCESS) | static_cast<uint8_t>(Bell_State_Measurent_t::BELL_STATE_PHI_MINUS);
 
     uint8_t rx_buf[4];
     // opcode 0xFF assumed unknown for your Command_t
@@ -343,8 +339,7 @@ TEST(TransmissionProcessor_TransmitMsg, TransportReturnsError) {
     for (auto& r : responses) {
         r = std::make_unique<ResponseData>();
         r->status = NodeStatus_t::READY;
-        r->outcome_status = Outcome_Status_t::SUCCESS;
-        r->outcome_result = Bell_State_Measurent_t::BELL_STATE_PHI_PLUS;
+        r->outcome = static_cast<uint8_t>(Outcome_Status_t::SUCCESS) | static_cast<uint8_t>(Bell_State_Measurent_t::BELL_STATE_PHI_PLUS);
     }
 
     EXPECT_CALL(*h, transfer(::testing::_, ::testing::_, 8))
@@ -365,8 +360,7 @@ TEST(TransmissionProcessor_TransmitMsg, MixedValidAndZeroFramesDecodeAsExpected)
     for (auto& r : responses) {
         r = std::make_unique<ResponseData>();
         r->status = NodeStatus_t::READY;
-        r->outcome_status = Outcome_Status_t::SUCCESS;
-        r->outcome_result = Bell_State_Measurent_t::BELL_STATE_PSI_MINUS;
+        r->outcome = static_cast<uint8_t>(Outcome_Status_t::SUCCESS) | static_cast<uint8_t>(Bell_State_Measurent_t::BELL_STATE_PSI_MINUS);
     }
 
     uint8_t rx_buf[12] = {0}; // all zeros => CRC also 0 with this poly/init/xorout
@@ -397,8 +391,7 @@ TEST(TransmissionProcessor_TransmitMsg, NonSuccessOutcomeStatusStillTransmitsAnd
     std::vector<std::unique_ptr<ResponseData>> responses(1);
     responses[0] = std::make_unique<ResponseData>();
     responses[0]->status = NodeStatus_t::READY;
-    responses[0]->outcome_status = Outcome_Status_t::UNKNOWN_FAILURE; // force non-success nibble path
-    responses[0]->outcome_result = Bell_State_Measurent_t::BELL_STATE_PHI_PLUS;
+    responses[0]->outcome = static_cast<uint8_t>(Outcome_Status_t::UNKNOWN_FAILURE) | static_cast<uint8_t>(Bell_State_Measurent_t::BELL_STATE_PHI_PLUS); // force non-success nibble path
 
     uint8_t rx_buf[4];
     build_command_frame(static_cast<uint8_t>(Command_t::NOP), 0x01, 0x02, rx_buf);
@@ -427,8 +420,7 @@ TEST(TransmissionProcessor_TransmitMsg, UsesOnlyFirstKResponsesWhenCountLessThan
     for (auto& r : responses) {
         r = std::make_unique<ResponseData>();
         r->status = NodeStatus_t::READY;
-        r->outcome_status = Outcome_Status_t::SUCCESS;
-        r->outcome_result = Bell_State_Measurent_t::BELL_STATE_PHI_MINUS;
+        r->outcome = static_cast<uint8_t>(Outcome_Status_t::SUCCESS) | static_cast<uint8_t>(Bell_State_Measurent_t::BELL_STATE_PHI_MINUS);
     }
     const uint8_t k = 4;
 
@@ -464,8 +456,7 @@ TEST(TransmissionProcessor_TransmitMsg, MaxBatchEightFrames) {
     for (auto& r : responses) {
         r = std::make_unique<ResponseData>();
         r->status = NodeStatus_t::READY;
-        r->outcome_status = Outcome_Status_t::SUCCESS;
-        r->outcome_result = Bell_State_Measurent_t::BELL_STATE_PSI_PLUS;
+        r->outcome = static_cast<uint8_t>(Outcome_Status_t::SUCCESS) | static_cast<uint8_t>(Bell_State_Measurent_t::BELL_STATE_PSI_PLUS);
     }
 
     uint8_t rx_buf[N * 4];
@@ -503,8 +494,7 @@ TEST(TransmissionProcessor_TransmitMsg, WorksWithInitiallyEmptyCommandsVector) {
     for (auto& r : responses) {
         r = std::make_unique<ResponseData>();
         r->status = NodeStatus_t::READY;
-        r->outcome_status = Outcome_Status_t::SUCCESS;
-        r->outcome_result = Bell_State_Measurent_t::BELL_STATE_PHI_PLUS;
+        r->outcome = static_cast<uint8_t>(Outcome_Status_t::SUCCESS) | static_cast<uint8_t>(Bell_State_Measurent_t::BELL_STATE_PHI_PLUS);
     }
 
     uint8_t rx_buf[8];
@@ -528,8 +518,7 @@ TEST(TransmissionProcessor_TransmitMsg, IgnoresNullResponsesBeyondCount) {
     for (int i = 0; i < 2; ++i) {
         responses[i] = std::make_unique<ResponseData>();
         responses[i]->status = NodeStatus_t::READY;
-        responses[i]->outcome_status = Outcome_Status_t::SUCCESS;
-        responses[i]->outcome_result = Bell_State_Measurent_t::BELL_STATE_PHI_MINUS;
+        responses[i]->outcome = static_cast<uint8_t>(Outcome_Status_t::SUCCESS) | static_cast<uint8_t>(Bell_State_Measurent_t::BELL_STATE_PHI_MINUS);
     }
     // responses[2], responses[3] are nullptr, but count==2 -> OK
 

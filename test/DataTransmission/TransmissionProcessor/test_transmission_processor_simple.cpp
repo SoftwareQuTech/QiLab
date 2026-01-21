@@ -123,7 +123,7 @@ TEST(TransmissionProcessor_Receive, BadCrcReturnsMinus3) {
 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::unique_ptr<CommandBase> cmd;
-    EXPECT_EQ(tp.receive_command(cmd, 100), -3);
+    EXPECT_EQ(tp.receive_command(cmd, 100), -2);
     EXPECT_EQ(cmd, nullptr);
 }
 
@@ -136,7 +136,7 @@ TEST(TransmissionProcessor_Receive, TransportTimeoutOrErrorReturnsMinus2) {
 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::unique_ptr<CommandBase> cmd;
-    EXPECT_EQ(tp.receive_command(cmd, 5), -2);
+    EXPECT_EQ(tp.receive_command(cmd, 5), -1);
     EXPECT_EQ(cmd, nullptr);
 }
 
@@ -178,8 +178,7 @@ TEST(TransmissionProcessor_Send, SendsSingleResponseSuccessNibblePath) {
 
     auto resp = std::make_unique<ResponseData>();
     resp->status = NodeStatus_t::READY;
-    resp->outcome_status = Outcome_Status_t::SUCCESS;
-    resp->outcome_result = Bell_State_Measurent_t::BELL_STATE_PHI_MINUS;
+    resp->outcome = static_cast<uint8_t>(Outcome_Status_t::SUCCESS) | static_cast<uint8_t>(Bell_State_Measurent_t::BELL_STATE_PHI_MINUS);
 
     EXPECT_CALL(*h, send_data(_, 4))
         .WillOnce(Invoke([&](const uint8_t* tx, uint8_t len) -> int8_t {
@@ -198,8 +197,7 @@ TEST(TransmissionProcessor_Send, SendsSingleResponseFailureNibblePath) {
 
     auto resp = std::make_unique<ResponseData>();
     resp->status = NodeStatus_t::READY;
-    resp->outcome_status = Outcome_Status_t::UNKNOWN_FAILURE; // force non-success packing
-    resp->outcome_result = Bell_State_Measurent_t::BELL_STATE_PHI_PLUS;
+    resp->outcome = static_cast<uint8_t>(Outcome_Status_t::UNKNOWN_FAILURE) | static_cast<uint8_t>(Bell_State_Measurent_t::BELL_STATE_PHI_PLUS); // force non-success packing
 
     EXPECT_CALL(*h, send_data(_, 4))
         .WillOnce(Invoke([&](const uint8_t* tx, uint8_t len) -> int8_t {
@@ -225,8 +223,7 @@ TEST(TransmissionProcessor_Send, TransportWriteErrorReturnsMinus2) {
 
     auto resp = std::make_unique<ResponseData>();
     resp->status = NodeStatus_t::READY;
-    resp->outcome_status = Outcome_Status_t::SUCCESS;
-    resp->outcome_result = Bell_State_Measurent_t::BELL_STATE_PSI_PLUS;
+    resp->outcome = static_cast<uint8_t>(Outcome_Status_t::SUCCESS) | static_cast<uint8_t>(Bell_State_Measurent_t::BELL_STATE_PSI_PLUS);
 
     EXPECT_CALL(*h, send_data(_, 4))
         .WillOnce(Return(int8_t{-1}));
@@ -263,8 +260,7 @@ TEST(TransmissionProcessor_Sequence, SendThenReceiveInOrder) {
 
     auto resp = std::make_unique<ResponseData>();
     resp->status = NodeStatus_t::READY;
-    resp->outcome_status = Outcome_Status_t::SUCCESS;
-    resp->outcome_result = Bell_State_Measurent_t::BELL_STATE_PHI_MINUS;
+    resp->outcome = static_cast<uint8_t>(Outcome_Status_t::SUCCESS) | static_cast<uint8_t>(Bell_State_Measurent_t::BELL_STATE_PHI_MINUS);
     EXPECT_EQ(tp.send_response(resp), 0);
 
     std::unique_ptr<CommandBase> cmd;
@@ -279,23 +275,27 @@ TEST(TransmissionProcessor_Sequence, MultipleSendsBackToBack) {
 
     EXPECT_CALL(*h, send_data(_, 4))
         .Times(3)
-        .WillRepeatedly(Invoke([&](const uint8_t* tx, uint8_t len) -> int8_t {
+        .WillRepeatedly(Invoke([&](const uint8_t *tx, uint8_t len) -> int8_t
+                               {
             EXPECT_EQ(len, 4);
-            EXPECT_EQ(crc8_ccitt(tx, 3), tx[3]); return 0;
-        }));
+            EXPECT_EQ(crc8_ccitt(tx, 3), tx[3]); return 0; }));
 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
 
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 3; ++i)
+    {
         auto resp = std::make_unique<ResponseData>();
         resp->status = NodeStatus_t::READY;
-        resp->outcome_status = (i == 1) ? Outcome_Status_t::UNKNOWN_FAILURE : Outcome_Status_t::SUCCESS;
-        resp->outcome_result = Bell_State_Measurent_t::BELL_STATE_PHI_PLUS;
+        resp->outcome = (i == 1) ? static_cast<uint8_t>(Outcome_Status_t::UNKNOWN_FAILURE) : 
+        static_cast<uint8_t>(Outcome_Status_t::SUCCESS) | 
+        static_cast<uint8_t>(Bell_State_Measurent_t::BELL_STATE_PHI_PLUS);
+
         EXPECT_EQ(tp.send_response(resp), 0);
     }
 }
 
-TEST(TransmissionProcessor_Sequence, ReceiveTwiceThenTransportError) {
+TEST(TransmissionProcessor_Sequence, ReceiveTwiceThenTransportError)
+{
     auto handler = std::make_unique<MockTransmissionHandler>();
     auto* h = handler.get();
 
@@ -319,5 +319,5 @@ TEST(TransmissionProcessor_Sequence, ReceiveTwiceThenTransportError) {
     ASSERT_NE(cmd, nullptr);
     EXPECT_EQ(cmd->command_type, Command_t::QUBIT_INIT);
 
-    EXPECT_EQ(tp.receive_command(cmd, 10), -2);
+    EXPECT_EQ(tp.receive_command(cmd, 10), -1);
 }

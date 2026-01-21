@@ -1,8 +1,9 @@
-#include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
 #include <iostream>
+
+#include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
+#include "logger/logger_api.hpp"
+
 #define COMMAND_MESSAGE_LENGTH      4
-
-
 #define MAX_BUFFER_LENGTH           64
 #define RESPONSE_MESSAGE_LENGTH     4
 #define CONTROL_WORD_LEN            4
@@ -19,13 +20,17 @@
     // Define static buffers
 __attribute__((aligned(64))) uint8_t TransmissionProcessor::tx_buffer[MAX_BUFFER_LENGTH];
 __attribute__((aligned(64))) uint8_t TransmissionProcessor::rx_buffer[MAX_BUFFER_LENGTH];
+uint32_t TransmissionProcessor::lp_data_buffer[LP_DATA_BUFFER_LENGTH];
 
 // CRC-8/CCITT parameters.
 static constexpr uint8_t CRC8_CCITT_POLY = 0x07u;
 static constexpr uint8_t CRC8_INIT = 0x00u;
 static constexpr uint8_t CRC8_XOROUT = 0x00u;
 
-TransmissionProcessor::TransmissionProcessor(std::unique_ptr<ITransmissionHandler> transmission_handler) : data_handler(std::move(transmission_handler)) {}
+TransmissionProcessor::TransmissionProcessor(std::unique_ptr<ITransmissionHandler> transmission_handler) : data_handler(std::move(transmission_handler)) 
+{
+    lp_data_buffer[0] = 0xDEADBEEF; //just to avoid compiler warnings
+}
 
 TransmissionProcessor::~TransmissionProcessor() {}
 
@@ -64,52 +69,76 @@ int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<Res
     {
         return -1;
     }
-    
+
     // Directly serialize into tx_buffer to avoid double copy
     for(auto i = 0; i < transfer_msg_count; i++)
     {
         auto response = responses[i].get();
         if(response == nullptr)
         {
+            LOG_ERROR("Null response data provided.");
             return -2;
         }
+        if((cycle_count_ & 0xFF) == 0)
+        {
+            lp_data_buffer[2] = static_cast<uint32_t>(cycle_count_ & 0xFFFFFFFFULL);
+            lp_data_buffer[3] = static_cast<uint32_t>((cycle_count_ >> 32) & 0xFFFFFFFFULL);
+            //LOG_INFO("Cycle count updated in LP buffer: " + std::to_string(lp_data_buffer[2]) + ", " + std::to_string(lp_data_buffer[3]));
+        }
         uint8_t* dest = TransmissionProcessor::tx_buffer + (i * RESPONSE_MESSAGE_LENGTH);
-        dest[0] = 0; // cycle count placeholder
-        if (response->outcome_status == Outcome_Status_t::SUCCESS)
-        {
-            dest[1] = (0xf0 & ((uint8_t)response->outcome_result << 4)) | (0x0f & (uint8_t)response->status);
-        }
-        else
-        {
-            dest[1] = (0xf0 & ((uint8_t)response->outcome_status << 4)) | (0x0f & (uint8_t)response->status);
-        }
-        dest[2] = 0; // data placeholder
+        dest[0] = cycle_count_ & 0xFF;
+        //LOG_INFO("Current cycle count: " + std::to_string(dest[0]));
+        //if (response->outcome_status == Outcome_Status_t::SUCCESS)
+        //{
+            dest[1] = (0xf0 & ((uint8_t)response->outcome << 4)) | (0x0f & (uint8_t)response->status);
+        //}
+        // else
+        // {
+        //     dest[1] = (0xf0 & ((uint8_t)response->outcome_status << 4)) | (0x0f & (uint8_t)response->status);
+        // }
+        
+        // Extract LP data nibble from lp_data_buffer (match Python baseline: walk nibbles LSB->MSB)
+        constexpr uint8_t nibbles_per_word = 8; // 32 bits / 4 bits per nibble
+        uint32_t lp_data_word = lp_data_buffer[(cycle_count_ & 0xFF) / nibbles_per_word];
+        uint8_t nibble_index = (cycle_count_ & 0xFF) & (nibbles_per_word - 1);
+        uint8_t nibble_offset = nibble_index * 4;
+        uint8_t lp_data = static_cast<uint8_t>((lp_data_word >> nibble_offset) & 0x0F);
+
+        dest[2] = lp_data;
         dest[3] = crc8_ccitt(dest, 3); // CRC for this message
+
+        cycle_count_++;
     }
 
     if(data_handler->transfer(tx_buffer, rx_buffer, RESPONSE_MESSAGE_LENGTH * transfer_msg_count))
     {
-        std::cerr << "Failed to transfer data." << std::endl;
+        LOG_ERROR("Failed to transfer data.");
         return -3;
     }
 
     // Process commands directly from rx_buffer
-    for(uint8_t i = 0; i < transfer_msg_count; i++)
+    for (uint8_t i = 0; i < transfer_msg_count; i++)
     {
-        const uint8_t* cmd_data = rx_buffer + (i * COMMAND_MESSAGE_LENGTH);
-        if(!verify_crc(cmd_data, 3))
+        const uint8_t *cmd_data = rx_buffer + (i * COMMAND_MESSAGE_LENGTH);
+        // LOG_INFO("Received command data: 0x");
+        // for(int j = 0; j < COMMAND_MESSAGE_LENGTH; j++)
+        // {
+        //    std::cout << std::hex << static_cast<int>(rx_buffer[j]) << std::dec;
+        // }
+        // std::cout << std::endl;
+        if (!verify_crc(cmd_data, 3))
         {
-            std::cerr << "CRC verification failed." << std::endl;
+            LOG_ERROR("CRC verification failed.");
             return -4;
         }
         auto cmd = deserialize_command(cmd_data);
-        if(cmd != nullptr)
+        if (cmd != nullptr)
         {
             commands[i].swap(cmd);
         }
         else
         {
-            std::cerr << "Command is not recognized." << std::endl;
+            LOG_ERROR("Command deserialization failed.");
             return -4;
         }
     }
@@ -123,6 +152,11 @@ int8_t TransmissionProcessor::receive_command(std::unique_ptr<CommandBase> &comm
 
     if (data_handler->receive_data(data_buffer, COMMAND_MESSAGE_LENGTH))
     {
+        return -1;
+    }
+    if (!verify_crc(data_buffer, 3))
+    {
+        LOG_ERROR("CRC verification failed.");
         return -2;
     }
     std::unique_ptr<CommandBase> cmd = deserialize_command(data_buffer);
@@ -133,6 +167,7 @@ int8_t TransmissionProcessor::receive_command(std::unique_ptr<CommandBase> &comm
     }
     else
     {
+        LOG_ERROR("Command deserialization failed.");
         return -3;
     }
 
@@ -212,13 +247,13 @@ std::unique_ptr<CommandBase> TransmissionProcessor::deserialize_command(const ui
 int8_t TransmissionProcessor::serialize_response(const ResponseData &response, uint8_t *buffer)
 {
     buffer[0] = 0;//buffer[0] -> must be populated on hardware platform with actual cyclecount
-    if (response.outcome_status == Outcome_Status_t::SUCCESS)
+    if (response.outcome == Outcome_Status_t::SUCCESS)
     {
-        buffer[1] = (0xf0 & ((uint8_t)response.outcome_result << 4)) | (0x0f & (uint8_t)response.status);
+        buffer[1] = (0xf0 & ((uint8_t)response.outcome << 4)) | (0x0f & (uint8_t)response.status);
     }
     else
     {
-        buffer[1] = (0xf0 & ((uint8_t)response.outcome_status << 4)) | (0x0f & (uint8_t)response.status);
+        buffer[1] = (0xf0 & ((uint8_t)response.outcome << 4)) | (0x0f & (uint8_t)response.status);
     }
     buffer[2] = 0;//buffer[2] -> must be populated on hardware platform with actual data with every cycle
     uint8_t crc = crc8_ccitt(buffer, 3);

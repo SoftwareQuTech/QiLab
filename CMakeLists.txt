@@ -18,11 +18,11 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Debug build flags
-set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -fsanitize=address -fno-omit-frame-pointer")
-set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -fno-omit-frame-pointer")
+set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS}")
 
 # Release build flags
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
 
 # RelWithDebInfo
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -DNDEBUG")
@@ -41,14 +41,32 @@ if(NOT stim_POPULATED)
 endif()
 
 
+# ---- Options ----
 option(ENABLE_PROFILING "Enable fast TLS profiler" ON)
+option(ENABLE_LOGGING "Enable logging functionality" OFF)  # Default OFF
 
 if(ENABLE_PROFILING)
-  add_compile_definitions(PROF_ENABLED=1)
   add_library(profiler STATIC src/logger/profiler.cpp)
+  target_compile_definitions(profiler PUBLIC PROF_ENABLED=1)
+  target_include_directories(profiler PUBLIC ${PROJECT_SOURCE_DIR}/src)
 else()
-  add_compile_definitions(PROF_ENABLED=0)
-  # Do NOT compile profiler.cpp when disabled
+  # Empty interface library when disabled
+  add_library(profiler INTERFACE)
+  target_compile_definitions(profiler INTERFACE PROF_ENABLED=0)
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(ENABLE_LOGGING ON CACHE BOOL "Enable logging functionality" FORCE)
+endif()
+
+if(ENABLE_LOGGING)
+  add_library(logger STATIC src/logger/logger.cpp)
+  target_compile_definitions(logger PUBLIC LOGGING_ENABLED=1)
+  target_include_directories(logger PUBLIC ${PROJECT_SOURCE_DIR}/src)
+else()
+  # Empty interface library when disabled
+  add_library(logger INTERFACE)
+  target_compile_definitions(logger INTERFACE LOGGING_ENABLED=0)
 endif()
 
 add_library(qilab_lib STATIC
@@ -63,14 +81,15 @@ add_library(qilab_lib STATIC
   #Message Broker
   src/MessageBroker/message_broker.cpp
   #Entanglement Manager
-  #src/SimulatorRunner/entanglement_manager.cpp
+  src/Simulator/entanglement/entanglement_manager.cpp
+  src/SimulatorRunners/entanglement_runner.cpp
 )
 
 target_include_directories(qilab_lib PUBLIC
   ${PROJECT_SOURCE_DIR}/include
   ${PROJECT_SOURCE_DIR}/src
 )
-target_link_libraries(qilab_lib PRIVATE libstim)
+target_link_libraries(qilab_lib PRIVATE libstim profiler)
 
 include_directories("src")
 
@@ -88,9 +107,10 @@ add_executable(qilab
   #Message Broker
   src/MessageBroker/message_broker.cpp
   #Entanglement Manager
-  #src/SimulatorRunner/entanglement_manager.cpp
+  src/Simulator/entanglement/entanglement_manager.cpp
+  src/SimulatorRunners/entanglement_runner.cpp
     )
-target_link_libraries(qilab PRIVATE libstim profiler)
+target_link_libraries(qilab PRIVATE libstim profiler logger)
 
 include(CTest)                 # defines BUILD_TESTING (default ON)
 

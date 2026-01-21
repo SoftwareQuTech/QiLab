@@ -15,8 +15,9 @@
 #include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
 #include "DataTransmission/handlers/mock_handler.hpp"
 #include "logger/profiler_api.hpp"
+#include "logger/logger_api.hpp"
 #include "DataTransmission/handlers/spi_master_handler.hpp"
-//#include "SimulatorRunner/entanglement_manager.hpp"
+#include "SimulatorRunners/entanglement_runner.hpp"
 #include "MessageBroker/message_broker.hpp"
 
 bool abort_sim = false;
@@ -44,21 +45,25 @@ int main()
     
     std::unique_ptr<StimAdapter> stim_adapter =  std::make_unique<StimAdapter>(seq, 0); //the seed is problematic
     SimulatorRunner sim(std::move(stim_adapter), broker);
-    int16_t node_id = sim.register_node(10);
+    int16_t node_id_1 = sim.register_node(10);
 
+
+    std::unique_ptr<ITransmissionHandler> transportB = std::make_unique<MockHandler>();
     std::unique_ptr<ITransmissionHandler> transportA = std::make_unique<SPIHandler>();
     std::unique_ptr<TransmissionProcessor> command_handlerA = std::make_unique<TransmissionProcessor>(std::move(transportA));
-    DataTransmissionRunner nodeA({node_id}, std::move(command_handlerA), broker);
+    DataTransmissionRunner nodeA({node_id_1}, std::move(command_handlerA), broker);
 
+    EntanglementRunner ent_runner(broker);
 
-    std::cout << "Starting simulation" << std::endl;
-
+    LOG_INFO("Starting simulation");
+    
     // Pre-define core assignments
     constexpr int SIMULATOR_CORE = 2;
+    constexpr int ENTANGLEMENT_CORE = 2;
     constexpr int TRANSMISSION_CORE = 3;
 
     // Start simulator thread with affinity check
-    std::cout << "Starting simulator thread on core " << SIMULATOR_CORE << std::endl;
+    LOG_INFO("Starting simulator thread on core: " + std::to_string(SIMULATOR_CORE));
     std::jthread simulator_thread([&sim, SIMULATOR_CORE]() {
         // Set name for easier identification
         pthread_setname_np(pthread_self(), "simulator");
@@ -68,8 +73,19 @@ int main()
     // Small delay to ensure first thread is settled
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
+    // Start entanglement thread with affinity check
+    // LOG_INFO("Starting entanglement thread on core: " + std::to_string(ENTANGLEMENT_CORE));
+    // std::jthread entanglement_thread([&ent_runner, ENTANGLEMENT_CORE]() {
+    //     // Set name for easier identification
+    //     pthread_setname_np(pthread_self(), "entanglement");
+    //     return ent_runner.on_run(ENTANGLEMENT_CORE);
+    // });
+
+    // Small delay to ensure first thread is settled
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     // Start transmission thread with affinity check
-    std::cout << "Starting transmission thread on core " << TRANSMISSION_CORE << std::endl;
+    LOG_INFO("Starting transmission thread on core: " + std::to_string(TRANSMISSION_CORE));
     std::jthread thread_node_a([&nodeA, TRANSMISSION_CORE]() {
         // Set name for easier identification
         pthread_setname_np(pthread_self(), "transmit");
@@ -87,6 +103,9 @@ int main()
     sim.on_abort();
     simulator_thread.join();
     
+    //ent_runner.on_abort();
+    //entanglement_thread.join();
+
     nodeA.on_abort();    
     thread_node_a.join();
 /*
@@ -140,7 +159,7 @@ int main()
     delete command_handlerA;
     */
     PROF_SAVE_DATA("test_trace");
-    std::cout << "Executed the simulation" << std::endl;
+    LOG_INFO("Executed the simulation");
 
     return 0;
 }

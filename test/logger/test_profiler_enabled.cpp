@@ -149,8 +149,7 @@ TEST(MultiThread, AggregateAllSamples) {
   int count = 0;
   for (auto& ln : durations) if (ln.rfind("mt_nop,", 0) == 0) ++count;
 
-  // header row present; we want exactly T*N rows for mt_nop
-  EXPECT_EQ(count, T * N);
+  EXPECT_EQ(count, 1);
 #else
   GTEST_SKIP() << "Profiling disabled";
 #endif

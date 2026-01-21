@@ -4,39 +4,98 @@ image: ubuntu:22.04
 stages:
   - build
   - test
+  - coverage
+
+variables:
+  DEBIAN_FRONTEND: noninteractive
 
 build:
   stage: build
-  variables:
-    DEBIAN_FRONTEND: noninteractive
   before_script:
     - apt-get update -y
     - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git
     - mkdir -p build && cd build
   script:
-    - cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++
+    - cmake .. -DCMAKE_BUILD_TYPE=Release 
+        -DCMAKE_C_COMPILER=/usr/bin/gcc 
+        -DCMAKE_CXX_COMPILER=/usr/bin/g++ 
+        -DCMAKE_CXX_FLAGS="--coverage" 
+        -DCMAKE_C_FLAGS="--coverage"
+        -DBUILD_TESTING=ON
     - cmake --build . -- -j$(nproc)
   artifacts:
     paths:
-      - build/
+      - build/test/*_tests           # Only your test executables
+      - build/**/*.gcno
+      - build/CMakeCache.txt
+    exclude:
+      - build/_deps/
     expire_in: 1 hour
 
 test:
   stage: test
-  variables:
-    DEBIAN_FRONTEND: noninteractive
   dependencies:
     - build
   before_script:
     - apt-get update -y
-    - apt-get install -y --no-install-recommends ca-certificates cmake
-  script:
+    - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git
     - cd build
-    - echo "Running ctest and producing junit report..."
-    - ctest --output-on-failure --parallel $(nproc) --output-junit junit.xml || true
+    - cmake .. -DCMAKE_BUILD_TYPE=Release 
+      -DCMAKE_C_COMPILER=/usr/bin/gcc 
+      -DCMAKE_CXX_COMPILER=/usr/bin/g++ 
+      -DCMAKE_CXX_FLAGS="--coverage" 
+      -DCMAKE_C_FLAGS="--coverage"
+      -DBUILD_TESTING=ON
+    # Rebuild only Stim if needed as stim is 1gb and too big to be an artifact
+    - cmake --build . -- -j$(nproc)
+  script:
+    - ctest --output-on-failure --parallel $(nproc) --output-junit junit.xml
   artifacts:
     reports:
       junit: build/junit.xml
     paths:
-      - build/junit.xml
+      - build/**/*.gcda
+      - build/**/*.gcno
+    exclude:
+      - build/_deps/
     when: always
+
+coverage:
+  stage: coverage
+  dependencies:
+    - test
+  before_script:
+    - apt-get update -y
+    - apt-get install -y --no-install-recommends lcov
+  script:
+    - cd build
+    # Capture coverage data
+    - lcov --capture --directory . --output-file coverage.info
+    # Remove system headers and test files from coverage
+    - lcov --remove coverage.info '/usr/*' '*/test/*' '*/googletest/*' '*/gmock/*' 'src/gmock*' '*/gmock*' --output-file coverage_filtered.info
+    # Generate HTML report
+    - genhtml coverage_filtered.info --output-directory coverage_html
+    # Print summary
+    - lcov --list coverage_filtered.info
+    # Move to public directory for GitLab Pages
+    - mkdir -p ../public
+    - mv coverage_html/* ../public/
+  coverage: '/lines\.*: \d+\.\d+%/'
+  artifacts:
+    paths:
+      - public
+      - build/coverage_filtered.info
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: build/coverage.xml
+
+pages:
+  stage: coverage
+  dependencies:
+    - coverage
+  script:
+    - echo "Deploying coverage report to GitLab Pages"
+  artifacts:
+    paths:
+      - public
