@@ -107,12 +107,14 @@ struct ISimulator
      *
      * @param fidelity Desired/target fidelity for the entanglement attempt.
      * @param neighbour_address Address/identifier of the neighbor/link.
+     * @param local_qubit Local qubit identifier used for the entanglement context.
      * @param qid Local qubit identifier used for the entanglement context.
      * @return Implementation-defined status/result code.
      *
      * @retval 0..255 Meaning must be documented by the implementation (e.g., 0 = success).
      */
     virtual uint8_t attempt_entanglement(uint16_t fidelity,
+                                         uint8_t local_qubit,
                                          uint8_t neighbour_address,
                                          uint8_t qid) = 0;
 
@@ -197,4 +199,7 @@ struct ISimulator
      */
     virtual uint8_t entanglement_swap(uint8_t qubit1_address,
                                       uint8_t qubit2_address) = 0;
+
+    virtual bool allocate_qubits(uint8_t num_qubits) = 0;
+
 };

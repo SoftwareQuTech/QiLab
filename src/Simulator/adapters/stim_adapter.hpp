@@ -41,17 +41,6 @@ public:
      */
     StimAdapter(std::seed_seq &seed_seq, const uint8_t &num_qubits);
 
-    /**
-     * @brief Construct with optional logger for performance measurements.
-     *
-     * @param seed_seq Seed sequence used to initialize the internal RNG.
-     * @param num_qubits Number of logical qubits to allocate/track.
-     * @param logger Optional non-owning pointer used for timing/perf logs.
-     *               The caller retains ownership and must outlive this adapter,
-     *               or pass nullptr to disable logging.
-     */
-    StimAdapter(std::seed_seq &seed_seq, const uint8_t &num_qubits, IProfiler* logger);
-
     /// @brief Virtual destructor to allow cleanup via base pointer.
     ~StimAdapter() override;
 
@@ -102,7 +91,7 @@ public:
      * @note Consider aligning return coding with the rest of the API via a
      *       strong enum in the future.
      */
-    uint8_t attempt_entanglement(uint16_t fidelity, uint8_t neighbour_address, uint8_t qid) override;
+    uint8_t attempt_entanglement(uint16_t fidelity, uint8_t local_qubit, uint8_t neighbour_address, uint8_t qid) override;
 
     /**
      * @copydoc ISimulator::entanglement_measure
@@ -139,8 +128,48 @@ public:
      */
     uint8_t entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_address) override;
 
+    bool allocate_qubits(uint8_t num_qubits) override;
 private:
-
+    // Cached objects for all quantum operations
+    
+    // For single-target operations (measure, initialize, single-qubit gates)
+    std::array<stim::GateTarget, 1> single_target;
+    stim::SpanRef<stim::GateTarget> single_span;
+    
+    // Measurement specific
+    stim::CircuitInstruction measure_inst;
+    
+    // Initialization specific
+    stim::CircuitInstruction init_inst;
+    
+    // Single qubit gate specific
+    stim::CircuitInstruction h_gate_inst;       // H
+    stim::CircuitInstruction x_gate_inst;       // X
+    stim::CircuitInstruction sqrt_x_gate_inst;       // SQRT_X
+    stim::CircuitInstruction x_gate_dag_inst;   // SQRT_X_DAG
+    stim::CircuitInstruction y_gate_inst;       // Y
+    stim::CircuitInstruction sqrt_y_gate_inst;       // SQRT_Y
+    stim::CircuitInstruction y_gate_dag_inst;   // SQRT_Y_DAG
+    stim::CircuitInstruction z_gate_inst;       // Z
+    stim::CircuitInstruction sqrt_z_gate_inst;       // S (SQRT_Z) 
+    stim::CircuitInstruction z_gate_dag_inst;   // S_DAG (SQRT_Z_DAG)
+    
+    // For two-qubit operations (CNOT, CZ, SWAP)
+    std::array<stim::GateTarget, 2> two_target;
+    stim::SpanRef<stim::GateTarget> two_span;
+    stim::CircuitInstruction cnot_inst;
+    stim::CircuitInstruction cz_inst;
+    stim::CircuitInstruction swap_inst;
+    
+    // Threshold for measurement record clearing
+    static constexpr size_t MEASUREMENT_CLEAR_THRESHOLD = 1024;
+    
+    // Cache control for initialization
+    static constexpr bool USE_CACHED_INSTRUCTIONS = true;
+    
+    static constexpr uint8_t MAX_QUBITS_AVAILABLE = 250;
+    
+    uint64_t registered_qubits = 0;
     /**
      * @brief Pseudo-random number generator for mock outcomes.
      *
@@ -156,14 +185,6 @@ private:
      * may experiment with other packings to evaluate performance trade-offs.
      */
     stim::TableauSimulator<64> stim_instance;
-
-    /**
-     * @brief Optional non-owning logger for performance tracing.
-     *
-     * Not owned; lifetime is managed by the caller. May be nullptr to disable
-     * logging. Guard calls appropriately in implementation.
-     */
-    IProfiler *local_logger;
 
     // Non-copyable and non-movable: each adapter owns unique simulator state.
     StimAdapter(const StimAdapter &) = delete;

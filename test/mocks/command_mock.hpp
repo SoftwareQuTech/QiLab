@@ -8,6 +8,7 @@
 
 #pragma once
 #include <cstdint>
+#include <functional>
 
 #include "DataTypes/commands.hpp"
 
@@ -20,6 +21,8 @@ public:
     /// Build the command into `buff` (up to `max_len` bytes).
     /// @return number of bytes written.
     virtual std::size_t create_command(uint8_t *buff, std::size_t max_len) const = 0;
+
+    virtual bool conditional_execution(const int &cntx) { return true; }
 
 protected:
     // CRC-8/CCITT parameters.
@@ -46,6 +49,28 @@ protected:
         }
         return static_cast<uint8_t>(crc ^ CRC8_XOROUT);
     }
+};
+
+class ConditionalCommand: public BaseC
+{
+    public:
+    ConditionalCommand(std::function<bool(const int&)> p, BaseC* c)
+        : predicate(std::move(p)), actual_command(std::move(c)) {}
+
+    bool conditional_execution(const int &cntx) override
+    {
+        return predicate(cntx);
+    }
+
+    std::size_t create_command(uint8_t *buff, std::size_t max_len) const
+    {
+        actual_command->create_command(buff, max_len);
+        return 4;
+    }
+
+    private:
+    std::function<bool(const int &cntx)> predicate;
+    BaseC* actual_command;
 };
 
 struct Nop : public BaseC
@@ -177,7 +202,9 @@ struct Entangle : public BaseC
 
         buff[0] = Command_t::ENTANGLEMENT_ATTEMPT;
         buff[1] = ((n << 4) & NGHBR_BIT_MASK) | (FIDELITY_BIT_MASK & f);
-        buff[2] = (q << 2) & QID_BIT_MASK;
+        //TODO: Figure out how this is done in QNodeOS
+        //WORKAROUND: get the address of the qubit as a whole
+        buff[2] = q;//(q << 2) & QID_BIT_MASK;
         uint8_t crc = crc8_ccitt(buff, 3);
         buff[3] = crc;
 
