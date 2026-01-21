@@ -90,7 +90,7 @@ int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<Res
         //LOG_INFO("Current cycle count: " + std::to_string(dest[0]));
         //if (response->outcome_status == Outcome_Status_t::SUCCESS)
         //{
-            dest[1] = (0xf0 & ((uint8_t)response->outcome_status << 4)) | (0x0f & (uint8_t)response->status);
+            dest[1] = (0xf0 & ((uint8_t)response->outcome << 4)) | (0x0f & (uint8_t)response->status);
         //}
         // else
         // {
@@ -247,13 +247,13 @@ std::unique_ptr<CommandBase> TransmissionProcessor::deserialize_command(const ui
 int8_t TransmissionProcessor::serialize_response(const ResponseData &response, uint8_t *buffer)
 {
     buffer[0] = 0;//buffer[0] -> must be populated on hardware platform with actual cyclecount
-    if (response.outcome_status == Outcome_Status_t::SUCCESS)
+    if (response.outcome == Outcome_Status_t::SUCCESS)
     {
-        buffer[1] = (0xf0 & ((uint8_t)response.outcome_result << 4)) | (0x0f & (uint8_t)response.status);
+        buffer[1] = (0xf0 & ((uint8_t)response.outcome << 4)) | (0x0f & (uint8_t)response.status);
     }
     else
     {
-        buffer[1] = (0xf0 & ((uint8_t)response.outcome_status << 4)) | (0x0f & (uint8_t)response.status);
+        buffer[1] = (0xf0 & ((uint8_t)response.outcome << 4)) | (0x0f & (uint8_t)response.status);
     }
     buffer[2] = 0;//buffer[2] -> must be populated on hardware platform with actual data with every cycle
     uint8_t crc = crc8_ccitt(buffer, 3);

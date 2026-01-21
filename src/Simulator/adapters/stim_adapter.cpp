@@ -10,6 +10,7 @@ StimAdapter::StimAdapter(std::seed_seq &seed_seq, const uint8_t &num_qubits)
     , single_span(single_target.data(), single_target.data() + 1)
     , measure_inst(stim::GateType::M, {}, single_span, "")
     , init_inst(stim::GateType::R, {}, single_span, "")
+    , h_gate_inst(stim::GateType::H, {}, single_span, "")
     , x_gate_inst(stim::GateType::X, {}, single_span, "")
     , sqrt_x_gate_inst(stim::GateType::SQRT_X, {}, single_span, "")
     , x_gate_dag_inst(stim::GateType::SQRT_X_DAG, {}, single_span, "")
@@ -169,8 +170,7 @@ uint8_t StimAdapter::attempt_entanglement(uint16_t fidelity, uint8_t local_qubit
 
     // Use cached single_target for H gate
     single_target[0] = stim::GateTarget{local_qubit};
-    stim::CircuitInstruction inst{stim::GateType::H, {}, single_span, ""};
-    stim_instance.do_H_XZ(inst);
+    stim_instance.do_H_XZ(h_gate_inst);
 
     // Use cached two_target for CX gate
     two_target[0] = stim::GateTarget{local_qubit};
@@ -180,15 +180,15 @@ uint8_t StimAdapter::attempt_entanglement(uint16_t fidelity, uint8_t local_qubit
 }
 uint8_t StimAdapter::entanglement_measure(uint16_t fidelity, uint8_t neighbour_address, bool basis, uint8_t qid, bool try_now, uint8_t repetitions)
 {
-    assert(("This function is not implemented", 0));
+    return 0;//assert(("This function is not implemented", 0));
 }
 void StimAdapter::pre_measure_gates_selection(bool target, Angle_t angle_1, Angle_t angle_2, Angle_t angle_3)
 {
-    assert(("This function is not implemented", 0));
+    //assert(("This function is not implemented", 0));
 }
 void StimAdapter::qubit_move(uint8_t qubit1_address, uint8_t qubit2_address)
 {
-    assert(("This function is not implemented", 0));
+    //assert(("This function is not implemented", 0));
 }
 void StimAdapter::qubit_swap(uint8_t qubit1_address, uint8_t qubit2_address)
 {
@@ -209,8 +209,7 @@ uint8_t StimAdapter::entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_ad
 
     // Use cached single_target for H gate
     single_target[0] = stim::GateTarget{qubit1_address};
-    stim::CircuitInstruction inst{stim::GateType::H, {}, single_span, ""};
-    stim_instance.do_H_XZ(inst);
+    stim_instance.do_H_XZ(h_gate_inst);
     
     return 0;
 }

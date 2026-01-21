@@ -49,7 +49,7 @@ protected:
         data.destination = dest;
         data.source = src;
         data.transport = std::make_unique<ResponseData>();
-        data.transport->outcome_status = status;
+        data.transport->outcome = status;
         return data;
     }
 };
@@ -132,7 +132,7 @@ TEST_F(MessageBrokerTest, PostAndGetResponse) {
     TransportData<ResponseData> retrieved;
     EXPECT_TRUE(broker->get_response(retrieved));
     EXPECT_EQ(retrieved.node_id, 5);
-    EXPECT_EQ(retrieved.transport->outcome_status, Outcome_Status_t::SUCCESS);
+    EXPECT_EQ(retrieved.transport->outcome, Outcome_Status_t::SUCCESS);
 }
 
 // Test: Get response from empty queue
@@ -162,9 +162,9 @@ TEST_F(MessageBrokerTest, MultipleResponseDestinations) {
 // Test: Concurrent producers, single consumer (commands)
 TEST_F(MessageBrokerTest, ConcurrentCommandProducers) {
     const int NUM_PRODUCERS = 4;
-    // Keep total commands within ring buffer capacity (256) to avoid intentional drops
-    // and simplify ASan leak checking.
-    const int COMMANDS_PER_PRODUCER = 64;
+    // Keep total commands well within ring buffer capacity (256) to avoid intentional drops
+    // and simplify ASan leak checking. Using 60 per producer = 240 total to be safe.
+    const int COMMANDS_PER_PRODUCER = 60;
     const int TOTAL_COMMANDS = NUM_PRODUCERS * COMMANDS_PER_PRODUCER;
     
     std::atomic<int> posted{0};

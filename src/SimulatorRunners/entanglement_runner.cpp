@@ -88,7 +88,7 @@ void EntanglementRunner::send_response_async(int node_id, Outcome_Status_t statu
     transport_data.destination = DestinationType::CommandRunner;
     transport_data.source = DestinationType::EntanglementRunner;
     transport_data.transport = std::make_unique<ResponseData>();
-    transport_data.transport->outcome_status = status;
+    transport_data.transport->outcome = status;
     message_broker->route_response(std::move(transport_data));
 }
 

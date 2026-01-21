@@ -143,7 +143,7 @@ private:
     stim::CircuitInstruction init_inst;
     
     // Single qubit gate specific
-
+    stim::CircuitInstruction h_gate_inst;       // H
     stim::CircuitInstruction x_gate_inst;       // X
     stim::CircuitInstruction sqrt_x_gate_inst;       // SQRT_X
     stim::CircuitInstruction x_gate_dag_inst;   // SQRT_X_DAG

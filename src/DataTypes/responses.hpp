@@ -29,29 +29,28 @@ enum Outcome_Status_t
 
 enum Measurement_t
 {
-    MEASURE_OUTCOME_PLUS_1      = 0x8,
-    MEASURE_OUTCOME_MINUS_1     = 0xC,
+    MEASURE_OUTCOME_PLUS_1      = 0x0,
+    MEASURE_OUTCOME_MINUS_1     = 0x4,
 };
 
 enum Entaglement_t
 {
-    STATE_PHI_PLUS              = 0x8,
-    STATE_PHI_MINUS             = 0x9,
-    STATE_PSI_PLUS              = 0xA,
-    STATE_PSI_MINUS             = 0xB
+    STATE_PHI_PLUS              = 0x0,
+    STATE_PHI_MINUS             = 0x1,
+    STATE_PSI_PLUS              = 0x2,
+    STATE_PSI_MINUS             = 0x3
 };
 
 enum Bell_State_Measurent_t
 {
-    BELL_STATE_PHI_PLUS          = 0x8,
-    BELL_STATE_PHI_MINUS         = 0x9,
-    BELL_STATE_PSI_PLUS          = 0xA,
-    BELL_STATE_PSI_MINUS         = 0xB
+    BELL_STATE_PHI_PLUS          = 0x0,
+    BELL_STATE_PHI_MINUS         = 0x1,
+    BELL_STATE_PSI_PLUS          = 0x2,
+    BELL_STATE_PSI_MINUS         = 0x3
 };
 
 struct ResponseData
 {
     uint8_t status = NodeStatus_t::READY;
-    uint8_t outcome_result = 0;
-    Outcome_Status_t outcome_status = Outcome_Status_t::SUCCESS;
+    uint8_t outcome = Outcome_Status_t::SUCCESS;
 };
