@@ -46,12 +46,15 @@ int main()
     std::unique_ptr<StimAdapter> stim_adapter =  std::make_unique<StimAdapter>(seq, 0); //the seed is problematic
     SimulatorRunner sim(std::move(stim_adapter), broker);
     int16_t node_id_1 = sim.register_node(10);
+    int16_t node_id_2 = sim.register_node(10);
+    //int16_t node_id_3 = sim.register_node(10);
+    //int16_t node_id_4 = sim.register_node(10);
 
 
     std::unique_ptr<ITransmissionHandler> transportB = std::make_unique<MockHandler>();
     std::unique_ptr<ITransmissionHandler> transportA = std::make_unique<SPIHandler>();
     std::unique_ptr<TransmissionProcessor> command_handlerA = std::make_unique<TransmissionProcessor>(std::move(transportA));
-    DataTransmissionRunner nodeA({node_id_1}, std::move(command_handlerA), broker);
+    DataTransmissionRunner nodeA({node_id_1, node_id_2}, std::move(command_handlerA), broker);
 
     EntanglementRunner ent_runner(broker);
 
@@ -74,14 +77,14 @@ int main()
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     // Start entanglement thread with affinity check
-    // LOG_INFO("Starting entanglement thread on core: " + std::to_string(ENTANGLEMENT_CORE));
-    // std::jthread entanglement_thread([&ent_runner, ENTANGLEMENT_CORE]() {
-    //     // Set name for easier identification
-    //     pthread_setname_np(pthread_self(), "entanglement");
-    //     return ent_runner.on_run(ENTANGLEMENT_CORE);
-    // });
+    LOG_INFO("Starting entanglement thread on core: " + std::to_string(ENTANGLEMENT_CORE));
+    std::jthread entanglement_thread([&ent_runner, ENTANGLEMENT_CORE]() {
+        // Set name for easier identification
+        pthread_setname_np(pthread_self(), "entanglement");
+        return ent_runner.on_run(ENTANGLEMENT_CORE);
+    });
 
-    // Small delay to ensure first thread is settled
+    // Small delay to ensure second thread is settled
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     // Start transmission thread with affinity check
@@ -103,8 +106,8 @@ int main()
     sim.on_abort();
     simulator_thread.join();
     
-    //ent_runner.on_abort();
-    //entanglement_thread.join();
+    ent_runner.on_abort();
+    entanglement_thread.join();
 
     nodeA.on_abort();    
     thread_node_a.join();

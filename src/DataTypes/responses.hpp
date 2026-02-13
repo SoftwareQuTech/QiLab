@@ -53,4 +53,5 @@ struct ResponseData
 {
     uint8_t status = NodeStatus_t::READY;
     uint8_t outcome = Outcome_Status_t::SUCCESS;
+    uint64_t cycle_count = 0;
 };

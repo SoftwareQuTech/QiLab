@@ -41,6 +41,15 @@ static void build_command_frame(uint8_t opcode, uint8_t b1, uint8_t b2, uint8_t 
     out[3] = crc8_ccitt(out, 3);
 }
 
+// Helper to create per-node transmission data
+static std::vector<NodeTransmissionData> create_node_data(size_t num_nodes) {
+    std::vector<NodeTransmissionData> node_data;
+    for (size_t i = 0; i < num_nodes; ++i) {
+        node_data.emplace_back();
+    }
+    return node_data;
+}
+
 // ----------------- Mock Transport -----------------
 class MockTransmissionHandler : public ITransmissionHandler {
 public:
@@ -62,9 +71,10 @@ TEST(TransmissionProcessor_ValidateInputs, ResponseNumberMismatch) {
 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands;
+    auto node_data = create_node_data(num_messages);
 
     // Act
-    int8_t rc = tp.transmit_msg(responses, commands, num_messages);
+    int8_t rc = tp.transmit_msg(responses, commands, num_messages, node_data);
 
     // Assert
     EXPECT_EQ(rc, -1);
@@ -81,9 +91,10 @@ TEST(TransmissionProcessor_ValidateInputs, CommandNumberMismatch) {
 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands;
+    auto node_data = create_node_data(num_messages);
 
     // Act
-    int8_t rc = tp.transmit_msg(responses, commands, num_messages);
+    int8_t rc = tp.transmit_msg(responses, commands, num_messages, node_data);
 
     // Assert
     EXPECT_EQ(rc, -1);
@@ -101,8 +112,9 @@ TEST(TransmissionProcessor_ValidateInputs, CommandResponseNumberMismatch) {
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands;
     commands.resize(4);
+    auto node_data = create_node_data(num_messages);
     // Act
-    int8_t rc = tp.transmit_msg(responses, commands, num_messages);
+    int8_t rc = tp.transmit_msg(responses, commands, num_messages, node_data);
 
     // Assert
     EXPECT_EQ(rc, -1);
@@ -158,8 +170,9 @@ TEST(TransmissionProcessor_TransmitMsg, SendsResponsesAndReceivesCommands) {
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands;
     commands.resize(4);
+    auto node_data = create_node_data(4);
     // Act
-    int8_t rc = tp.transmit_msg(responses, commands, /*transfer_msg_count=*/4);
+    int8_t rc = tp.transmit_msg(responses, commands, /*transfer_msg_count=*/4, node_data);
 
     // Assert
     EXPECT_EQ(rc, 0);
@@ -219,8 +232,9 @@ TEST(TransmissionProcessor_TransmitMsg, SendsResponsesAndReceivesEmptyCommands) 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands;
     commands.resize(num_messages);
+    auto node_data = create_node_data(num_messages);
     // Act
-    int8_t rc = tp.transmit_msg(responses, commands, num_messages);
+    int8_t rc = tp.transmit_msg(responses, commands, num_messages, node_data);
 
     // Assert
     EXPECT_EQ(rc, 0);
@@ -261,8 +275,9 @@ TEST(TransmissionProcessor_TransmitMsg, FailsOnSingleBadCrcAmongFrames) {
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands;
     commands.resize(3);
+    auto node_data = create_node_data(3);
 
-    int8_t rc = tp.transmit_msg(responses, commands, 3);
+    int8_t rc = tp.transmit_msg(responses, commands, 3, node_data);
     EXPECT_EQ(rc, -4);
 }
 
@@ -288,8 +303,9 @@ TEST(TransmissionProcessor_TransmitMsg, FailsOnUnknownOpcode) {
 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands(1);
+    auto node_data = create_node_data(1);
 
-    int8_t rc = tp.transmit_msg(responses, commands, 1);
+    int8_t rc = tp.transmit_msg(responses, commands, 1, node_data);
     EXPECT_EQ(rc, -4);
 }
 
@@ -304,7 +320,8 @@ TEST(TransmissionProcessor_TransmitMsg, RejectsNullResponseWithinCount) {
 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands(3);
-    int8_t rc = tp.transmit_msg(responses, commands, 3);
+    auto node_data = create_node_data(3);
+    int8_t rc = tp.transmit_msg(responses, commands, 3, node_data);
     EXPECT_EQ(rc, -2);
 }
 
@@ -315,7 +332,8 @@ TEST(TransmissionProcessor_TransmitMsg, RejectsZeroTransferCount) {
     responses[0] = std::make_unique<ResponseData>();
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands;
-    int8_t rc = tp.transmit_msg(responses, commands, 0);
+    auto node_data = create_node_data(0);
+    int8_t rc = tp.transmit_msg(responses, commands, 0, node_data);
     EXPECT_EQ(rc, -1);
 }
 
@@ -326,7 +344,8 @@ TEST(TransmissionProcessor_TransmitMsg, RejectsCountGreaterThanResponses) {
     for (auto& r : responses) r = std::make_unique<ResponseData>();
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands(3);
-    int8_t rc = tp.transmit_msg(responses, commands, 3);
+    auto node_data = create_node_data(3);
+    int8_t rc = tp.transmit_msg(responses, commands, 3, node_data);
     EXPECT_EQ(rc, -1);
 }
 
@@ -347,7 +366,8 @@ TEST(TransmissionProcessor_TransmitMsg, TransportReturnsError) {
 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands(2);
-    int8_t rc = tp.transmit_msg(responses, commands, 2);
+    auto node_data = create_node_data(2);
+    int8_t rc = tp.transmit_msg(responses, commands, 2, node_data);
     EXPECT_EQ(rc, -3);
 }
 
@@ -374,8 +394,9 @@ TEST(TransmissionProcessor_TransmitMsg, MixedValidAndZeroFramesDecodeAsExpected)
 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands(3);
+    auto node_data = create_node_data(3);
 
-    int8_t rc = tp.transmit_msg(responses, commands, 3);
+    int8_t rc = tp.transmit_msg(responses, commands, 3, node_data);
     EXPECT_EQ(rc, 0);
     ASSERT_EQ(commands.size(), 3u);
     EXPECT_EQ(commands[0]->command_type, Command_t::NOP);
@@ -406,7 +427,8 @@ TEST(TransmissionProcessor_TransmitMsg, NonSuccessOutcomeStatusStillTransmitsAnd
 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands(1);
-    int8_t rc = tp.transmit_msg(responses, commands, 1);
+    auto node_data = create_node_data(1);
+    int8_t rc = tp.transmit_msg(responses, commands, 1, node_data);
     EXPECT_EQ(rc, 0);
     EXPECT_EQ(commands[0]->command_type, Command_t::NOP);
 }
@@ -439,7 +461,8 @@ TEST(TransmissionProcessor_TransmitMsg, UsesOnlyFirstKResponsesWhenCountLessThan
 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands(k);
-    int8_t rc = tp.transmit_msg(responses, commands, k);
+    auto node_data = create_node_data(k);
+    int8_t rc = tp.transmit_msg(responses, commands, k, node_data);
     EXPECT_EQ(rc, 0);
     EXPECT_EQ(commands.size(), k);
     EXPECT_EQ(commands[0]->command_type, Command_t::QUBIT_INIT);
@@ -474,7 +497,8 @@ TEST(TransmissionProcessor_TransmitMsg, MaxBatchEightFrames) {
 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands(N);
-    int8_t rc = tp.transmit_msg(responses, commands, N);
+    auto node_data = create_node_data(N);
+    int8_t rc = tp.transmit_msg(responses, commands, N, node_data);
     EXPECT_EQ(rc, 0);
     for (uint8_t i = 0; i < N; ++i) {
         ASSERT_NE(commands[i], nullptr);
@@ -503,7 +527,8 @@ TEST(TransmissionProcessor_TransmitMsg, WorksWithInitiallyEmptyCommandsVector) {
 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands; // empty
-    int8_t rc = tp.transmit_msg(responses, commands, 2);
+    auto node_data = create_node_data(2);
+    int8_t rc = tp.transmit_msg(responses, commands, 2, node_data);
 
     EXPECT_EQ(rc, -1);
     ASSERT_EQ(commands.size(), 0u);
@@ -534,7 +559,8 @@ TEST(TransmissionProcessor_TransmitMsg, IgnoresNullResponsesBeyondCount) {
 
     TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
     std::vector<std::unique_ptr<CommandBase>> commands(4); //sizes should match
-    int8_t rc = tp.transmit_msg(responses, commands, 2);
+    auto node_data = create_node_data(2);
+    int8_t rc = tp.transmit_msg(responses, commands, 2, node_data);
 
     EXPECT_EQ(rc, 0);
     EXPECT_EQ(commands[0]->command_type, Command_t::QUBIT_INIT);

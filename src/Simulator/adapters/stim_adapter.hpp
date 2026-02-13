@@ -84,23 +84,26 @@ public:
      * model as needed.
      *
      * @param fidelity Target fidelity parameter guiding mock success rate.
+     * @param local_qubit Local qubit identifier.
      * @param neighbour_address Peer/link identifier (unused in pure mock).
+     * @param is_initiator Whether this node initiates entanglement (applies gates) or just measures.
      * @param qid Local qubit identifier.
      * @return Implementation-defined status byte (e.g., 0=success).
      *
      * @note Consider aligning return coding with the rest of the API via a
      *       strong enum in the future.
      */
-    uint8_t attempt_entanglement(uint16_t fidelity, uint8_t local_qubit, uint8_t neighbour_address, uint8_t qid) override;
+    int8_t attempt_entanglement(uint16_t fidelity, uint8_t local_qubit, uint8_t neighbour_address, bool is_initiator, uint8_t qid) override;
 
     /**
      * @copydoc ISimulator::entanglement_measure
      *
      * @details Typically mocked: optionally performs @p repetitions attempts
      *          when @p try_now is true and returns a synthesized outcome.
+     * @param is_initiator Whether this node initiates entanglement (applies gates) or just measures.
      */
-    uint8_t entanglement_measure(uint16_t fidelity, uint8_t neighbour_address, bool basis,
-                                 uint8_t qid, bool try_now, uint8_t repetitions) override;
+    int8_t entanglement_measure(uint16_t fidelity, uint8_t local_qubit, uint8_t neighbour_address, bool basis,
+                                 bool is_initiator, uint8_t qid, bool try_now, uint8_t repetitions) override;
 
     /**
      * @copydoc ISimulator::pre_measure_gates_selection
@@ -112,21 +115,23 @@ public:
 
     /**
      * @copydoc ISimulator::qubit_move
+     * @details Mocked move; updates internal bookkeeping and returns a status code.
      */
-    void qubit_move(uint8_t qubit1_address, uint8_t qubit2_address) override;
+    bool qubit_move(uint8_t qubit1_address, uint8_t qubit2_address) override;
 
     /**
      * @copydoc ISimulator::qubit_swap
+     * @details Mocked swap; updates internal bookkeeping and returns a status code.
      */
-    void qubit_swap(uint8_t qubit1_address, uint8_t qubit2_address) override;
+    bool qubit_swap(uint8_t qubit1_address, uint8_t qubit2_address) override;
 
     /**
      * @copydoc ISimulator::entanglement_swap
      *
      * @details Mocked entanglement swapping; updates internal bookkeeping and
-     *          returns a status code.
+     *          returns a result code
      */
-    uint8_t entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_address) override;
+    bool entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_address) override;
 
     bool allocate_qubits(uint8_t num_qubits) override;
 private:
@@ -160,6 +165,20 @@ private:
     stim::CircuitInstruction cnot_inst;
     stim::CircuitInstruction cz_inst;
     stim::CircuitInstruction swap_inst;
+    
+    // Pre-measurement gate configuration storage
+    struct PreMeasureConfig {
+        bool enabled = false;
+        Angle_t angle1;
+        Angle_t angle2;
+        Angle_t angle3;
+    };
+    
+    PreMeasureConfig pre_measure_config;         // target=0: for qubit_measure
+    PreMeasureConfig pre_entangle_measure_config; // target=1: for entanglement_measure
+    
+    // Helper to apply pre-measurement gates from a configuration
+    void apply_pre_measure_gates(uint8_t qubit_address, const PreMeasureConfig& config);
     
     // Threshold for measurement record clearing
     static constexpr size_t MEASUREMENT_CLEAR_THRESHOLD = 1024;

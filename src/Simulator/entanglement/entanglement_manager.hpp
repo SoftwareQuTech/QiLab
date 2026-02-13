@@ -150,11 +150,11 @@ protected:
     bool match_request(const EntanglementRequest& request);
 
 private:
-    /// Timeout duration for unmatched entanglement requests (500 microseconds)
-    static constexpr std::chrono::microseconds ENTANGLEMENT_TIMEOUT{500};
+    /// Timeout duration for unmatched entanglement requests (50000 microseconds)
+    static constexpr std::chrono::microseconds ENTANGLEMENT_TIMEOUT{50000};
 
-    /// Default execution delay after matching (1000 nanoseconds = 1 microsecond)
-    static constexpr int DEFAULT_SUCCESS_DELAY_NS = 1000;
+    /// Default execution delay after matching (100ms)
+    static constexpr int DEFAULT_SUCCESS_DELAY_NS = 100000;
 
     /// Callback invoked when a request expires without finding a match
     std::function<void(int, Outcome_Status_t)> response_callback;

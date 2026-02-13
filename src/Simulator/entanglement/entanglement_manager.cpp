@@ -14,9 +14,10 @@ EntanglementManager::EntanglementManager(std::function<void(int, Outcome_Status_
 
 bool EntanglementManager::check_request_is_expired(const EntanglementRequest &request)
 {
-    std::chrono::duration elapsed_time = std::chrono::steady_clock::now() - request.command_issue_time;
-    if (std::chrono::microseconds(elapsed_time.count()) > ENTANGLEMENT_TIMEOUT)
+    auto elapsed_time = std::chrono::steady_clock::now() - request.command_issue_time;
+    if (elapsed_time > ENTANGLEMENT_TIMEOUT)
     {
+        //LOG_INFO("Elapsed time for request from node " + std::to_string(request.node_id) + " to neighbour " + std::to_string(request.neighbour_node) + " is " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(elapsed_time).count()) + " microseconds, which exceeds the timeout of " + std::to_string(ENTANGLEMENT_TIMEOUT.count()) + " microseconds.");
         LOG_WARNING("Entanglement request from node " + std::to_string(request.node_id) + " to neighbour " + std::to_string(request.neighbour_node) + " has expired.");
         return true;
     }
@@ -69,10 +70,20 @@ int EntanglementManager::update_requests()
             std::chrono::duration elapsed_time = now - matched_pairs[i].match_time;
             if (elapsed_time > std::chrono::nanoseconds(matched_pairs[i].calculated_success_time_delay))
             {
-                command_callback(matched_pairs[i].node_id_1, std::move(matched_pairs[i].command1));
-                command_callback(matched_pairs[i].node_id_2, std::move(matched_pairs[i].command2));
-                matched_pairs.erase(matched_pairs.begin() + i);
+                //the order of node ids must be correct in order to do the lower node ent first
+                //this is the logic in the simulator runner in order to ensure only the first node does the gates and the second just measures
+                if (matched_pairs[i].node_id_1 < matched_pairs[i].node_id_2) {
+                    command_callback(matched_pairs[i].node_id_1, std::move(matched_pairs[i].command1));
+                    command_callback(matched_pairs[i].node_id_2, std::move(matched_pairs[i].command2)); 
+                }
+                else
+                {
+                    command_callback(matched_pairs[i].node_id_2, std::move(matched_pairs[i].command2)); 
+                    command_callback(matched_pairs[i].node_id_1, std::move(matched_pairs[i].command1));
+                }
                 LOG_INFO("Entanglement commands sent to nodes " + std::to_string(matched_pairs[i].node_id_1) + " and " + std::to_string(matched_pairs[i].node_id_2) + ".");
+                matched_pairs.erase(matched_pairs.begin() + i);
+
             }
         }
     }

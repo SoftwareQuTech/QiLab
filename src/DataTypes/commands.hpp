@@ -77,6 +77,7 @@ enum Command_t
     QUBIT_MOVE =                        0x08,
     QUBIT_SWAP =                        0x09,
     ENTANGLEMENT_SWAP =                 0x0A,
+    PRE_MEASURE_AND_ENTANGLE_MEASURE =  0x0B,
     INVALID_COMMAND =                   0xFF
 };
 
@@ -163,7 +164,7 @@ struct EntanglementAttempt final: public CommandBase
     explicit EntanglementAttempt(const uint8_t* data) noexcept
         : CommandBase(data)
         , fidelity(FIDELITY_BIT_MASK & data[1])
-        , nghbr((NGHBR_BIT_MASK & data[1]) >> 4)
+        , nghbr(((NGHBR_BIT_MASK & data[1]) >> 4) - 1) // Adjusting for 0-based indexing
         //TODO: Figure out how this is done in QNodeOS
         //WORKAROUND: get the address of the qubit as a whole
         , qid(data[2]) // ((QID_BIT_MASK & data[2]) >> 2)
@@ -179,7 +180,7 @@ struct EntangleMeasure final: public CommandBase
     explicit EntangleMeasure(const uint8_t* data) noexcept
         : CommandBase(data)
         , fidelity(FIDELITY_BIT_MASK & data[1])
-        , nghbr((NGHBR_BIT_MASK & data[1]) >> 4)
+        , nghbr(((NGHBR_BIT_MASK & data[1]) >> 4) - 1) // Adjusting for 0-based indexing
         , qid((QID_BIT_MASK & data[2]) >> 2)
         , basis(BASIS_BIT_MASK & data[2])
         , immediate((0x02 & data[2]) >> 1)

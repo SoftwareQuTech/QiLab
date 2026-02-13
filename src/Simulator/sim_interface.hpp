@@ -108,14 +108,16 @@ struct ISimulator
      * @param fidelity Desired/target fidelity for the entanglement attempt.
      * @param neighbour_address Address/identifier of the neighbor/link.
      * @param local_qubit Local qubit identifier used for the entanglement context.
+     * @param is_initiator Whether this node is the initiator (applies gates) or responder (just measures).
      * @param qid Local qubit identifier used for the entanglement context.
      * @return Implementation-defined status/result code.
      *
      * @retval 0..255 Meaning must be documented by the implementation (e.g., 0 = success).
      */
-    virtual uint8_t attempt_entanglement(uint16_t fidelity,
+    virtual int8_t attempt_entanglement(uint16_t fidelity,
                                          uint8_t local_qubit,
                                          uint8_t neighbour_address,
+                                         bool is_initiator,
                                          uint8_t qid) = 0;
 
     /**
@@ -125,9 +127,14 @@ struct ISimulator
      * the specified @p fidelity constraint and basis. If @p try_now is true,
      * the implementation may perform immediate attempts up to @p repetitions.
      *
+     * If @p is_initiator is true, this node applies entangling gates (H+CNOT) before measurement.
+     * If @p is_initiator is false, this node just measures without applying gates.
+     *
      * @param fidelity Target fidelity threshold or parameter.
+     * @param local_qubit Local qubit identifier associated with the link.
      * @param neighbour_address Peer/link identifier for the entanglement.
      * @param basis Measurement basis selector (implementation-defined).
+     * @param is_initiator Whether this node is the initiator (applies gates) or responder (just measures).
      * @param qid Local qubit identifier associated with the link.
      * @param try_now If true, perform the measurement attempt immediately.
      * @param repetitions Maximum number of attempts if immediate mode is enabled.
@@ -136,9 +143,11 @@ struct ISimulator
      * @note Define and document the mapping of the return value (e.g., success,
      *       failure, timeout, or an encoded measurement outcome).
      */
-    virtual uint8_t entanglement_measure(uint16_t fidelity,
+    virtual int8_t entanglement_measure(uint16_t fidelity,
+                                         uint8_t local_qubit,
                                          uint8_t neighbour_address,
                                          bool basis,
+                                         bool is_initiator,
                                          uint8_t qid,
                                          bool try_now,
                                          uint8_t repetitions) = 0;
@@ -173,7 +182,7 @@ struct ISimulator
      * @param qubit1_address Source qubit address.
      * @param qubit2_address Destination qubit address.
      */
-    virtual void qubit_move(uint8_t qubit1_address, uint8_t qubit2_address) = 0;
+    virtual bool qubit_move(uint8_t qubit1_address, uint8_t qubit2_address) = 0;
 
     /**
      * @brief Swap the quantum states of two qubits.
@@ -184,7 +193,7 @@ struct ISimulator
      * @param qubit1_address First qubit address.
      * @param qubit2_address Second qubit address.
      */
-    virtual void qubit_swap(uint8_t qubit1_address, uint8_t qubit2_address) = 0;
+    virtual bool qubit_swap(uint8_t qubit1_address, uint8_t qubit2_address) = 0;
 
     /**
      * @brief Perform entanglement swapping between two local qubits.
@@ -197,7 +206,7 @@ struct ISimulator
      * @return Implementation-defined status/result code (e.g., success/failure).
      *
      */
-    virtual uint8_t entanglement_swap(uint8_t qubit1_address,
+    virtual bool entanglement_swap(uint8_t qubit1_address,
                                       uint8_t qubit2_address) = 0;
 
     virtual bool allocate_qubits(uint8_t num_qubits) = 0;

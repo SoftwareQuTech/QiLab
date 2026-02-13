@@ -24,7 +24,7 @@ int EntanglementRunner::on_run(int core_id)
         // Try to pin thread and verify success
         if (!thread_utils::pin_current_thread_to_core(core_id))
         {
-            LOG_ERROR("Failed to properly pin SimulatorRunner to core " + std::to_string(core_id) + ".");
+            LOG_ERROR("Failed to properly pin EntanglementRunner to core " + std::to_string(core_id) + ".");
         }
 
         // Double check after a small delay
@@ -32,7 +32,7 @@ int EntanglementRunner::on_run(int core_id)
         int current_core = sched_getcpu();
         if (current_core != core_id)
         {
-            LOG_WARNING("SimulatorRunner still not on correct core. Expected " + std::to_string(core_id) + " but on " + std::to_string(current_core) + ".");
+            LOG_WARNING("EntanglementRunner still not on correct core. Expected " + std::to_string(core_id) + " but on " + std::to_string(current_core) + ".");
         }
     }
     TransportData<CommandBase> command; // Command from message broker
@@ -49,7 +49,7 @@ int EntanglementRunner::on_run(int core_id)
             //extract neighbour node from command - placeholder here
             if(cmd->command_type == Command_t::ENTANGLEMENT_ATTEMPT)
             {
-                neighbour_node = static_cast<EntanglementAttempt*>(cmd.get())->nghbr;
+                neighbour_node = static_cast<EntanglementAttempt*>(cmd.get())->nghbr; 
             }
             else if(cmd->command_type == Command_t::ENTANGLEMENT_MEASURE)
             {
@@ -67,8 +67,8 @@ int EntanglementRunner::on_run(int core_id)
             }
         }
 
-        //entanglement_manager->update_requests();
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        entanglement_manager->update_requests();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     LOG_INFO("Ending Entanglement Runner.");
     return 0;
@@ -89,6 +89,7 @@ void EntanglementRunner::send_response_async(int node_id, Outcome_Status_t statu
     transport_data.source = DestinationType::EntanglementRunner;
     transport_data.transport = std::make_unique<ResponseData>();
     transport_data.transport->outcome = status;
+    transport_data.transport->status= NodeStatus_t::OUTCOME_READY;
     message_broker->route_response(std::move(transport_data));
 }
 

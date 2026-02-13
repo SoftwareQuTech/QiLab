@@ -90,6 +90,9 @@ class DataTransmissionRunner
     /// Identifiers of nodes this runner manages transmission for
     std::vector<int16_t> registered_nodes;
     
+    /// Per-node transmission state data (cycle counter and LP data)
+    std::vector<NodeTransmissionData> node_transmission_data;
+    
     /// Flag to signal thread termination
     bool abort = false;
     
