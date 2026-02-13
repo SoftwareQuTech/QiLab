@@ -19,6 +19,7 @@
 #include "DataTransmission/handlers/spi_master_handler.hpp"
 #include "SimulatorRunners/entanglement_runner.hpp"
 #include "MessageBroker/message_broker.hpp"
+#include "utils/config_loader.hpp"
 
 bool abort_sim = false;
 
@@ -43,18 +44,38 @@ int main()
 
     std::shared_ptr<MessageBroker> broker = std::make_shared<MessageBroker>();
     
+    // Load configuration from file
+    auto config = load_config();
+    if (!config) {
+        LOG_ERROR("Failed to load configuration, exiting");
+        return 1;
+    }
+    
+    if (config->nodes.empty()) {
+        LOG_ERROR("No nodes configured, exiting");
+        return 1;
+    }
+    
+    LOG_INFO("Configuration loaded with " + std::to_string(config->nodes.size()) + " nodes");
+    
     std::unique_ptr<StimAdapter> stim_adapter =  std::make_unique<StimAdapter>(seq, 0); //the seed is problematic
     SimulatorRunner sim(std::move(stim_adapter), broker);
-    int16_t node_id_1 = sim.register_node(10);
-    int16_t node_id_2 = sim.register_node(10);
-    //int16_t node_id_3 = sim.register_node(10);
-    //int16_t node_id_4 = sim.register_node(10);
+    
+    // Register nodes dynamically from configuration
+    std::vector<int16_t> node_ids;
+    for (size_t i = 0; i < config->nodes.size(); ++i) {
+        int num_qubits = config->nodes[i].num_qubits;
+        int16_t node_id = sim.register_node(num_qubits);
+        node_ids.push_back(node_id);
+        LOG_INFO("Registered node " + std::to_string(i) + " with ID " + 
+                 std::to_string(node_id) + " (" + std::to_string(num_qubits) + " qubits)");
+    }
 
 
     std::unique_ptr<ITransmissionHandler> transportB = std::make_unique<MockHandler>();
     std::unique_ptr<ITransmissionHandler> transportA = std::make_unique<SPIHandler>();
     std::unique_ptr<TransmissionProcessor> command_handlerA = std::make_unique<TransmissionProcessor>(std::move(transportA));
-    DataTransmissionRunner nodeA({node_id_1, node_id_2}, std::move(command_handlerA), broker);
+    DataTransmissionRunner nodeA(node_ids, std::move(command_handlerA), broker);
 
     EntanglementRunner ent_runner(broker);
 

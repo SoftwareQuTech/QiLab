@@ -69,6 +69,29 @@ Runtime notes:
 - Profiling data is dumped to CSV (`test_trace_events.csv`, `test_trace_durations.csv`) when profiling is enabled.
 - Graceful shutdown: send SIGINT (Ctrl+C); threads call `on_abort()` before exit.
 
+## Configuration
+QiLab loads node configuration from `~/.qilab/config/nodes.yaml`. If the file doesn't exist, a default configuration will be created on first run.
+
+**Example configuration** (`~/.qilab/config/nodes.yaml`):
+```yaml
+# QILab Node Configuration
+nodes:
+  - num_qubits: 10  # First node with 10 qubits
+  - num_qubits: 10  # Second node with 10 qubits
+  # Add more nodes as needed
+```
+
+Each node entry specifies:
+- `num_qubits`: Number of qubits in the node (must be a positive integer)
+
+On startup, QiLab will:
+1. Load the configuration from `~/.qilab/config/nodes.yaml`
+2. Create the file with default settings if it doesn't exist
+3. Register all nodes with the simulator based on the configuration
+4. Log the node registration details
+
+See [docs/config_example.yaml](docs/config_example.yaml) for a complete example with comments.
+
 ## Tests
 Enable tests at configure time and run via `ctest`:
 ```bash

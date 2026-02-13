@@ -35,7 +35,7 @@ uint8_t MockAdapter::qubit_measure(uint8_t qubit_address, bool basis)
     //return some measurement result as per spec
     return 0x08;
 }
-uint8_t MockAdapter::attempt_entanglement(uint16_t fidelity, uint8_t neighbour_address, uint8_t qid)
+int8_t MockAdapter::attempt_entanglement(uint16_t fidelity, uint8_t neighbour_address, bool is_initiator, uint8_t qid)
 {
     std::cout << "MOCK SIM: Attempt entanglemet with fidelity: " << fidelity << std::endl;
     std::cout << "MOCK SIM: Attempt entanglemet on neightbour: " << neighbour_address << std::endl;
@@ -43,7 +43,7 @@ uint8_t MockAdapter::attempt_entanglement(uint16_t fidelity, uint8_t neighbour_a
 
     return 0x09;
 }
-uint8_t MockAdapter::entanglement_measure(uint16_t fidelity, uint8_t neighbour_address, bool basis, uint8_t qid, bool try_now, uint8_t repetitions)
+int8_t MockAdapter::entanglement_measure(uint16_t fidelity, uint8_t neighbour_address, bool basis, bool is_initiator, uint8_t qid, bool try_now, uint8_t repetitions)
 {
     std::cout << "MOCK SIM: Attempt entanglemet measure with fidelity: " << fidelity << std::endl;
     std::cout << "MOCK SIM: Attempt entanglemet measure on neightbour: " << neighbour_address << std::endl;
@@ -61,20 +61,22 @@ void MockAdapter::pre_measure_gates_selection(bool target, Angle_t angle_1, Angl
     std::cout << "MOCK SIM: Pre measure gate selection with angle 3: " << angle_3 << std::endl;
     
 }
-void MockAdapter::qubit_move(uint8_t qubit1_address, uint8_t qubit2_address)
+bool MockAdapter::qubit_move(uint8_t qubit1_address, uint8_t qubit2_address)
 {
     std::cout << "MOCK SIM: Qubit move address 1: " << qubit1_address << std::endl;
     std::cout << "MOCK SIM: Qubit move address 2: " << qubit2_address << std::endl;
+    return true;
 }
-void MockAdapter::qubit_swap(uint8_t qubit1_address, uint8_t qubit2_address)
+bool MockAdapter::qubit_swap(uint8_t qubit1_address, uint8_t qubit2_address)
 {
     std::cout << "MOCK SIM: Qubit swap address 1: " << qubit1_address << std::endl;
     std::cout << "MOCK SIM: Qubit swap address 2: " << qubit2_address << std::endl;
+    return true;
 }
-uint8_t MockAdapter::entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_address)
+bool MockAdapter::entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_address)
 {
     std::cout << "MOCK SIM: Entanglement swap address 1: " << qubit1_address << std::endl;
     std::cout << "MOCK SIM: Entanglement swap address 2: " << qubit2_address << std::endl;
 
-    return 0x0A;
+    return true;
 }

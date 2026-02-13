@@ -40,6 +40,18 @@ if(NOT stim_POPULATED)
   add_subdirectory(${stim_SOURCE_DIR})
 endif()
 
+# Get yaml-cpp library for configuration
+FetchContent_Declare(yaml-cpp
+        GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+        GIT_TAG 0.8.0)
+FetchContent_GetProperties(yaml-cpp)
+if(NOT yaml-cpp_POPULATED)
+  FetchContent_Populate(yaml-cpp)
+  set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "disable yaml tests")
+  set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "disable yaml tools")
+  add_subdirectory(${yaml-cpp_SOURCE_DIR} ${yaml-cpp_BINARY_DIR})
+endif()
+
 
 # ---- Options ----
 option(ENABLE_PROFILING "Enable fast TLS profiler" ON)
@@ -83,13 +95,15 @@ add_library(qilab_lib STATIC
   #Entanglement Manager
   src/Simulator/entanglement/entanglement_manager.cpp
   src/SimulatorRunners/entanglement_runner.cpp
+  #Utils
+  src/utils/config_loader.cpp
 )
 
 target_include_directories(qilab_lib PUBLIC
   ${PROJECT_SOURCE_DIR}/include
   ${PROJECT_SOURCE_DIR}/src
 )
-target_link_libraries(qilab_lib PRIVATE libstim profiler)
+target_link_libraries(qilab_lib PRIVATE libstim profiler yaml-cpp::yaml-cpp)
 
 include_directories("src")
 
@@ -109,8 +123,10 @@ add_executable(qilab
   #Entanglement Manager
   src/Simulator/entanglement/entanglement_manager.cpp
   src/SimulatorRunners/entanglement_runner.cpp
+  #Utils
+  src/utils/config_loader.cpp
     )
-target_link_libraries(qilab PRIVATE libstim profiler logger)
+target_link_libraries(qilab PRIVATE libstim profiler logger yaml-cpp::yaml-cpp)
 
 include(CTest)                 # defines BUILD_TESTING (default ON)
 

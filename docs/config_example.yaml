@@ -1,0 +1,18 @@
+# QILab Node Configuration
+# This file defines the quantum network nodes for simulation
+#
+# Location: ~/.qilab/config/nodes.yaml
+#
+# Each node should specify:
+#   num_qubits: Number of qubits in the node (positive integer)
+
+nodes:
+  # Node 0: First quantum node with 10 qubits
+  - num_qubits: 10
+  
+  # Node 1: Second quantum node with 10 qubits
+  - num_qubits: 10
+  
+  # You can add more nodes as needed
+  # - num_qubits: 15
+  # - num_qubits: 20
