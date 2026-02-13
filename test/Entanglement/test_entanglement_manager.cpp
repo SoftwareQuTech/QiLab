@@ -98,8 +98,8 @@ TEST_F(EntanglementManagerTest, RequestTimeout) {
     auto cmd = make_entanglement_attempt(2);
     manager->add_new_request(std::move(cmd), 1, 2);
     
-    // Wait for timeout (500 microseconds)
-    std::this_thread::sleep_for(std::chrono::microseconds(600));
+    // Wait for timeout (500 miliseconds) + some buffer
+    std::this_thread::sleep_for(std::chrono::milliseconds(600));
     
     // Update should expire the request
     manager->update_requests();
@@ -245,7 +245,7 @@ TEST_F(EntanglementManagerTest, PartialTimeoutWithMatching) {
     manager->add_new_request(std::move(cmd1), 1, 2);
     
     // Wait for first request to timeout
-    std::this_thread::sleep_for(std::chrono::microseconds(600));
+    std::this_thread::sleep_for(std::chrono::milliseconds(600));
     
     // Add new matching pair that should succeed
     auto cmd2 = make_entanglement_attempt(4);
@@ -368,7 +368,7 @@ TEST_F(EntanglementManagerTest, SelfEntanglementRequest) {
     manager->update_requests();
     
     // Wait for timeout
-    std::this_thread::sleep_for(std::chrono::microseconds(600));
+    std::this_thread::sleep_for(std::chrono::milliseconds(600));
     manager->update_requests();
     
     // Should timeout with failure

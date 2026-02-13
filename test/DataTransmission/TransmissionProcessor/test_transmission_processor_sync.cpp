@@ -278,7 +278,8 @@ TEST(TransmissionProcessor_TransmitMsg, FailsOnSingleBadCrcAmongFrames) {
     auto node_data = create_node_data(3);
 
     int8_t rc = tp.transmit_msg(responses, commands, 3, node_data);
-    EXPECT_EQ(rc, -4);
+    EXPECT_EQ(nullptr, commands[1].get()); // 2nd frame should fail CRC and be nullptr
+    EXPECT_EQ(rc, 0);
 }
 
 // 2) Unknown opcode -> expect -3
@@ -306,7 +307,8 @@ TEST(TransmissionProcessor_TransmitMsg, FailsOnUnknownOpcode) {
     auto node_data = create_node_data(1);
 
     int8_t rc = tp.transmit_msg(responses, commands, 1, node_data);
-    EXPECT_EQ(rc, -4);
+    EXPECT_EQ(nullptr, commands[0].get()); // Should fail to decode and be nullptr
+    EXPECT_EQ(rc, 0);
 }
 
 // 3) Null response entry within transfer_msg_count -> expect -1

@@ -108,7 +108,8 @@ public:
      * DMA efficiency. Commands are deserialized with minimal allocation overhead.
      *
      * @param[in]  responses           Responses to serialize and send (size must match transfer_msg_count).
-     * @param[out] commands            Command vector; successfully decoded commands swap into indices [0..transfer_msg_count-1].
+    * @param[out] commands            Command vector; successfully decoded commands swap into indices [0..transfer_msg_count-1].
+    *                               If CRC or deserialize fails for a slot, that entry is reset to nullptr.
      * @param[in]  transfer_msg_count  Number of messages to TX/RX atomically (≤ responses.size(), ≤ commands.size()).
      * @param[in,out] node_data_vec    Vector of per-node transmission data; processor extracts cycle counter and LP data per node during batch transmission.
      * @return int8_t
