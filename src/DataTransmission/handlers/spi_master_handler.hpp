@@ -108,7 +108,7 @@ private:
     const char* device{"/dev/spidev1.0"};   ///< SPI device path (e.g., "/dev/spidev1.0")
     uint8_t mode{0};                         ///< SPI mode (0-3)
     uint8_t bits{8};                         ///< Bits per word
-    uint32_t speed{15000000};                ///< Clock speed in Hz
+    uint32_t speed{18000000};                ///< Clock speed in Hz
     uint16_t delay{0};                       ///< Delay between transfers in microseconds
     
     /// Pre-allocated transfer structure for optimal performance (avoids malloc on each transfer)

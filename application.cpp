@@ -80,7 +80,10 @@ int main()
     EntanglementRunner ent_runner(broker);
 
     LOG_INFO("Starting simulation");
-    
+
+    LOG_WARNING("This build uses reset of the qubits in the entanglement attempt. This is needed in order to run the qia-test apps correctly.");
+    LOG_WARNING("This will be removed in the future when we have a better way to ensure state of the qubits for testing.");
+
     // Pre-define core assignments
     constexpr int SIMULATOR_CORE = 2;
     constexpr int ENTANGLEMENT_CORE = 2;
@@ -132,56 +135,7 @@ int main()
 
     nodeA.on_abort();    
     thread_node_a.join();
-/*
-    std::shared_ptr<ITransmissionHandler> transportA = std::make_shared<MockHandler>();
-    TransmissionProcessor* command_handlerA = new TransmissionProcessor(transportA);
-    DataTransmissionRunner* nodeA = new DataTransmissionRunner({0}, command_handlerA, nullptr);
 
-
-    int16_t node_id = sim.register_node(10);
-
-
-    std::cout << "Starting simulation" << std::endl;
-
-    std::jthread simulator_thread(&SimulatorRunner::on_run, &sim);
-    //std::jthread ent_manager_thread(&EntanglementManager::on_run, &ent_manager);
-
-    std::unique_ptr<std::jthread> thread_node_a;
-
-
-    if(nodeA != nullptr)
-    {
-        thread_node_a = std::make_unique<std::jthread>([nodeA]{ nodeA->on_run(); });
-    }
-
-    while(!abort_sim)
-    {
-        //do nothing and wait for abort signal
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        abort_sim = true;
-    }
-    std::cout << "Timer expired" << std::endl;
-
-    nodeA->on_abort();
-
-    std::cout << "Node Stopped" << std::endl;
-
-    sim.on_abort();
-        std::cout << "Sim stopped" << std::endl;
-
-    simulator_thread.join();
-        std::cout << "Join sim thread" << std::endl;
-
-    thread_node_a->join();
-
-    std::cout << "Join node thread" << std::endl;
-
-
-    //logger->save_to_file("simple_prg_10000r_3n");
-
-    delete stim_adapter;
-    delete command_handlerA;
-    */
     PROF_SAVE_DATA("test_trace");
     LOG_INFO("Executed the simulation");
 

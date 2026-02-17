@@ -183,10 +183,10 @@ int8_t StimAdapter::attempt_entanglement(uint16_t fidelity, uint8_t local_qubit,
     // ONLY the initiator node applies the entangling gates
     if (is_initiator) {
         // Force initialize both qubits to |0⟩
-        // single_target[0] = stim::GateTarget{local_qubit};
-        // stim_instance.do_RZ(init_inst);
-        // single_target[0] = stim::GateTarget{neighbour_address};
-        // stim_instance.do_RZ(init_inst);
+        single_target[0] = stim::GateTarget{local_qubit};
+        stim_instance.do_RZ(init_inst);
+        single_target[0] = stim::GateTarget{neighbour_address};
+        stim_instance.do_RZ(init_inst);
 
         // Use cached single_target for H gate
         single_target[0] = stim::GateTarget{local_qubit};
@@ -266,10 +266,10 @@ int8_t StimAdapter::entanglement_measure(uint16_t fidelity, uint8_t local_qubit,
     // ONLY the initiator node applies the entangling gates
     if (is_initiator) {
         // Force initialize both qubits to |0⟩ (they might be in some state from previous operations)
-        // single_target[0] = stim::GateTarget{local_qubit};
-        // stim_instance.do_RZ(init_inst);
-        // single_target[0] = stim::GateTarget{neighbour_address};
-        // stim_instance.do_RZ(init_inst);
+        single_target[0] = stim::GateTarget{local_qubit};
+        stim_instance.do_RZ(init_inst);
+        single_target[0] = stim::GateTarget{neighbour_address};
+        stim_instance.do_RZ(init_inst);
 
         // First, establish entanglement with neighbor
         // Apply H to local qubit
