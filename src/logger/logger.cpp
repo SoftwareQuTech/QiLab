@@ -7,6 +7,15 @@
 
 StandardLogger::StandardLogger() {}
 
+void StandardLogger::enable()
+{
+    enabled_ = true;
+}
+void StandardLogger::disable()
+{
+    enabled_ = false;
+}
+
 StandardLogger& StandardLogger::instance()
 {
     static StandardLogger instance;
@@ -29,16 +38,19 @@ std::string StandardLogger::get_timestamp()
 
 void StandardLogger::log_info(const std::string_view message)
 {
+    if (!enabled_.load(std::memory_order_relaxed)) return;
     std::lock_guard<std::mutex> lock(logging_lock_);
     std::clog << "[" << get_timestamp() << "] [INFO]: " << message << std::endl;
 }
 void StandardLogger::log_warning(const std::string_view message)
 {
+    if (!enabled_.load(std::memory_order_relaxed)) return;
     std::lock_guard<std::mutex> lock(logging_lock_);
     std::clog << "[" << get_timestamp() << "] [WARNING]: " << message << std::endl;
 }
 void StandardLogger::log_error(const std::string_view message)
 {
+    if (!enabled_.load(std::memory_order_relaxed)) return;
     std::lock_guard<std::mutex> lock(logging_lock_);
     std::cerr << "[" << get_timestamp() << "] [ERROR]: " << message << std::endl;
 }

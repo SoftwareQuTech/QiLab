@@ -5,6 +5,7 @@ stages:
   - build
   - test
   - coverage
+  - release
 
 variables:
   DEBIAN_FRONTEND: noninteractive
@@ -21,6 +22,7 @@ build:
         -DCMAKE_CXX_COMPILER=/usr/bin/g++ 
         -DCMAKE_CXX_FLAGS="--coverage" 
         -DCMAKE_C_FLAGS="--coverage"
+        -DQILAB_CI_TAG=${CI_COMMIT_TAG}
         -DBUILD_TESTING=ON
     - cmake --build . -- -j$(nproc)
   artifacts:
@@ -45,6 +47,7 @@ test:
       -DCMAKE_CXX_COMPILER=/usr/bin/g++ 
       -DCMAKE_CXX_FLAGS="--coverage" 
       -DCMAKE_C_FLAGS="--coverage"
+      -DQILAB_CI_TAG=${CI_COMMIT_TAG}
       -DBUILD_TESTING=ON
     # Rebuild only Stim if needed as stim is 1gb and too big to be an artifact
     - cmake --build . -- -j$(nproc)
@@ -99,3 +102,26 @@ pages:
   artifacts:
     paths:
       - public
+
+release_mvp:
+  stage: release
+  before_script:
+    - apt-get update -y
+    - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git
+  script:
+    - VERSION="${CI_COMMIT_TAG#v}"
+    - cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++ -DQILAB_CI_TAG=${CI_COMMIT_TAG} -DBUILD_TESTING=OFF
+    - cmake --build build-release --target qilab -- -j$(nproc)
+    - mkdir -p "dist/qilab-${VERSION}"
+    - cp build-release/qilab "dist/qilab-${VERSION}/"
+    - cp README.md "dist/qilab-${VERSION}/"
+    - if [ -f docs/config_example.yaml ]; then cp docs/config_example.yaml "dist/qilab-${VERSION}/config_example.yaml"; fi
+    - tar -czf "dist/qilab-${VERSION}.tar.gz" -C dist "qilab-${VERSION}"
+  artifacts:
+    paths:
+      - dist/*.tar.gz
+    expire_in: 1 month
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: on_success
+    - when: never

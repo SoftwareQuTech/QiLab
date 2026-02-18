@@ -6,6 +6,19 @@
 #include "utils/thread_utils.hpp"
 #include "logger/logger_api.hpp"
 
+struct Qubit
+{
+    //add model for decoherence, error rates, etc. if needed for more detailed simulation
+    //for now, this is just a placeholder to represent qubits in the node registry
+    uint8_t address; // global qubit address in the simulator
+    // Optional: Add fields for tracking qubit state, entanglement metadata, etc.
+};
+struct NodeInfo
+{
+    uint16_t qubit_offset; ///< Starting address of this node's qubits in global space
+    std::vector<Qubit> qubits; ///< Optional: Track individual qubit states or metadata if needed
+};
+
 SimulatorRunner::SimulatorRunner(std::unique_ptr<ISimulator> sim, std::shared_ptr<MessageBroker> broker) : simulator(std::move(sim)), message_broker(broker)
 {
     PROF_THREAD_INIT();

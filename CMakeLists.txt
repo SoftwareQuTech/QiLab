@@ -26,7 +26,47 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
 
 # RelWithDebInfo
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -DNDEBUG")
-project(QILab)
+
+# Version information (single source of truth for local builds)
+set(QILAB_VERSION_MAJOR 0)
+set(QILAB_VERSION_MINOR 0)
+set(QILAB_VERSION_PATCH 3)
+
+# Optional CI tag override (accepts vX.Y.Z or X.Y.Z)
+set(QILAB_CI_TAG "${QILAB_CI_TAG}")
+if(NOT QILAB_CI_TAG AND DEFINED ENV{CI_COMMIT_TAG})
+  set(QILAB_CI_TAG "$ENV{CI_COMMIT_TAG}")
+endif()
+
+if(QILAB_CI_TAG)
+  string(REGEX REPLACE "^v" "" QILAB_CI_TAG_CLEAN "${QILAB_CI_TAG}")
+  if(QILAB_CI_TAG_CLEAN MATCHES "^([0-9]+)\.([0-9]+)\.([0-9]+)$")
+    set(QILAB_VERSION_MAJOR "${CMAKE_MATCH_1}")
+    set(QILAB_VERSION_MINOR "${CMAKE_MATCH_2}")
+    set(QILAB_VERSION_PATCH "${CMAKE_MATCH_3}")
+  endif()
+endif()
+
+set(QILAB_VERSION "${QILAB_VERSION_MAJOR}.${QILAB_VERSION_MINOR}.${QILAB_VERSION_PATCH}")
+
+execute_process(
+  COMMAND git rev-parse --short HEAD
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  OUTPUT_VARIABLE QILAB_GIT_COMMIT
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET)
+
+if(NOT QILAB_GIT_COMMIT)
+  set(QILAB_GIT_COMMIT "unknown")
+endif()
+
+project(QILab VERSION ${QILAB_VERSION})
+
+# Generate version header from CMake values
+configure_file(
+  ${CMAKE_SOURCE_DIR}/src/utils/version.hpp.in
+  ${CMAKE_BINARY_DIR}/generated/qilab/version.hpp
+  @ONLY)
 
 # ---- Project compilation ----
 #get the stim library
@@ -55,7 +95,7 @@ endif()
 
 # ---- Options ----
 option(ENABLE_PROFILING "Enable fast TLS profiler" ON)
-option(ENABLE_LOGGING "Enable logging functionality" OFF)  # Default OFF
+option(ENABLE_LOGGING "Enable logging functionality" ON)  # Default ON
 
 if(ENABLE_PROFILING)
   add_library(profiler STATIC src/logger/profiler.cpp)
@@ -102,6 +142,7 @@ add_library(qilab_lib STATIC
 target_include_directories(qilab_lib PUBLIC
   ${PROJECT_SOURCE_DIR}/include
   ${PROJECT_SOURCE_DIR}/src
+  ${CMAKE_BINARY_DIR}/generated
 )
 target_link_libraries(qilab_lib PRIVATE libstim profiler yaml-cpp::yaml-cpp)
 
@@ -126,6 +167,7 @@ add_executable(qilab
   #Utils
   src/utils/config_loader.cpp
     )
+target_include_directories(qilab PRIVATE ${CMAKE_BINARY_DIR}/generated)
 target_link_libraries(qilab PRIVATE libstim profiler logger yaml-cpp::yaml-cpp)
 
 include(CTest)                 # defines BUILD_TESTING (default ON)

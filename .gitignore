@@ -43,6 +43,11 @@
 
 #builds
 /build
-
+/build-*/
+/dist
+/Release
+/Debug
+/RelWithDebInfo
+/MinSizeRel
 #vscode
 .vscode

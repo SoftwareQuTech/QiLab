@@ -4,6 +4,7 @@
 #include <thread>
 #include <signal.h>
 
+#include "qilab/version.hpp"
 #include "stim.h"
 #include "stim/circuit/gate_target.h"
 #include "stim/circuit/circuit_instruction.h"
@@ -33,6 +34,10 @@ void signal_callback_handler(int signum) {
 int main()
 {
     signal(SIGINT, signal_callback_handler);
+    LOG_INFO("QILab v" + std::to_string(QILab::VERSION_MAJOR) + "."
+              + std::to_string(QILab::VERSION_MINOR) + "."
+              + std::to_string(QILab::VERSION_PATCH)
+              + " (" + QILab::VERSION_GIT_COMMIT + ")");
 #if defined(__linux) && defined(__GLIBCXX__) && __GLIBCXX__ >= 20200128
     // Workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=94087
     // See https://github.com/quantumlib/Stim/issues/26

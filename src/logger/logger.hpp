@@ -10,12 +10,14 @@
 #include <string>
 #include <mutex>
 #include <string_view>
-
+#include <atomic>
 class StandardLogger
 {
 public:
     static StandardLogger &instance();
 
+    void enable();
+    void disable();
     void log_info(const std::string_view message);
     void log_warning(const std::string_view message);
     void log_error(const std::string_view message);
@@ -23,6 +25,7 @@ public:
 private:
     StandardLogger();
     
+    std::atomic<bool> enabled_ = true;
     std::mutex logging_lock_;
     std::string get_timestamp();
 

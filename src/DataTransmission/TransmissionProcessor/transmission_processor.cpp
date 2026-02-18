@@ -133,7 +133,7 @@ int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<Res
         {
             // Explicitly clear the command slot so callers do not reuse stale commands.
             commands[i].reset();
-            LOG_ERROR("CRC verification failed for received command on node index " + std::to_string(i) + ".");
+            //LOG_ERROR("CRC verification failed for received command on node index " + std::to_string(i) + ".");
             continue; //does not seem logical to fail entire batch on single CRC failure, so just skip this command and continue with the rest.
             //return -4;
         }

@@ -5,6 +5,8 @@
 #include <iostream>
 #include <cstdlib>
 
+#include "logger/logger_api.hpp"
+
 std::string get_default_config_path() {
     const char* home = std::getenv("HOME");
     if (!home) {
@@ -23,19 +25,20 @@ bool create_default_config() {
     try {
         if (!std::filesystem::exists(dir)) {
             std::filesystem::create_directories(dir);
-            std::cout << "Created config directory: " << dir << std::endl;
+            LOG_INFO("Created config directory: " + dir.string());
         }
         
         // Don't overwrite existing config
         if (std::filesystem::exists(config_path)) {
-            std::cout << "Config file already exists at: " << config_path << std::endl;
+            LOG_INFO("Config file already exists at: " + config_path);
+
             return true;
         }
         
         // Create default configuration
         std::ofstream config_file(config_path);
         if (!config_file.is_open()) {
-            std::cerr << "Failed to create config file: " << config_path << std::endl;
+            LOG_ERROR("Failed to create config file: " + config_path);
             return false;
         }
         
@@ -50,11 +53,11 @@ bool create_default_config() {
         config_file << "  - num_qubits: 10\n";
         
         config_file.close();
-        std::cout << "Created default config file at: " << config_path << std::endl;
+        LOG_INFO("Created default config file at: " + config_path);
         return true;
         
     } catch (const std::filesystem::filesystem_error& e) {
-        std::cerr << "Filesystem error: " << e.what() << std::endl;
+        LOG_ERROR("Filesystem error: " + std::string(e.what()));
         return false;
     }
 }
@@ -64,8 +67,8 @@ std::optional<AppConfig> load_config(const std::string& config_path) {
     
     // Check if file exists
     if (!std::filesystem::exists(path)) {
-        std::cerr << "Config file not found: " << path << std::endl;
-        std::cerr << "Creating default configuration..." << std::endl;
+        LOG_ERROR("Config file not found: " + path);
+        LOG_INFO("Creating default configuration...");
         if (!create_default_config()) {
             return std::nullopt;
         }
@@ -76,13 +79,13 @@ std::optional<AppConfig> load_config(const std::string& config_path) {
         AppConfig app_config;
         
         if (!config["nodes"]) {
-            std::cerr << "Config file is missing 'nodes' section" << std::endl;
+            LOG_ERROR("Config file is missing 'nodes' section");
             return std::nullopt;
         }
         
         const YAML::Node& nodes = config["nodes"];
         if (!nodes.IsSequence()) {
-            std::cerr << "'nodes' must be a list" << std::endl;
+            LOG_ERROR("'nodes' must be a list");
             return std::nullopt;
         }
         
@@ -90,31 +93,30 @@ std::optional<AppConfig> load_config(const std::string& config_path) {
             NodeConfig node_config;
             
             if (!node["num_qubits"]) {
-                std::cerr << "Node missing 'num_qubits' field" << std::endl;
+                LOG_ERROR("Node missing 'num_qubits' field");
                 return std::nullopt;
             }
             
             node_config.num_qubits = node["num_qubits"].as<int>();
             
             if (node_config.num_qubits <= 0) {
-                std::cerr << "num_qubits must be positive, got: " 
-                         << node_config.num_qubits << std::endl;
+                LOG_ERROR("num_qubits must be positive, got: " + std::to_string(node_config.num_qubits));
                 return std::nullopt;
             }
             
             app_config.nodes.push_back(node_config);
         }
         
-        std::cout << "Loaded configuration with " << app_config.nodes.size() 
-                  << " nodes from: " << path << std::endl;
+        LOG_INFO("Loaded configuration with " + std::to_string(app_config.nodes.size()) 
+                 + " nodes from: " + path);
         
         return app_config;
         
     } catch (const YAML::Exception& e) {
-        std::cerr << "YAML parsing error: " << e.what() << std::endl;
+        LOG_ERROR("YAML parsing error: " + std::string(e.what()));
         return std::nullopt;
     } catch (const std::exception& e) {
-        std::cerr << "Error loading config: " << e.what() << std::endl;
+        LOG_ERROR("Error loading config: " + std::string(e.what()));
         return std::nullopt;
     }
 }
