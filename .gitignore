@@ -49,5 +49,6 @@
 /Debug
 /RelWithDebInfo
 /MinSizeRel
+
 #vscode
 .vscode

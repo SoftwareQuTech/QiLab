@@ -18,8 +18,8 @@ Principles:
 - [ ] Phase 3 — CI-aware versioning
 - [x] Phase 4 — Local release management MVP
 - [x] Phase 5 — CI/CD release management MVP
-- [ ] Phase 6 — Infrastructure update procedure (manual-first)
-- [ ] Phase 7 — Infrastructure automation (optional)
+- [x] Phase 6 — Infrastructure update procedure (manual-first)
+- [x] Phase 7 — Infrastructure automation (optional)
 
 ---
 
@@ -162,7 +162,8 @@ Principles:
 ### Status (Implemented)
 - Added `release_mvp` job in `.gitlab-ci.yml`
 - Job runs only on tags (`CI_COMMIT_TAG`)
-- Job builds Release binary and publishes `dist/qilab-<version>.tar.gz` as artifact
+- Job cross-compiles ARM64 binary (`aarch64`) and publishes `dist/qilab-<version>-linux-arm64.tar.gz` as artifact
+- Job verifies architecture using `file` and stores `build-release/binary_arch.txt`
 - No deployment or environment update is performed in CI (artifact-only MVP)
 
 ---
@@ -191,6 +192,64 @@ Include rollback procedure:
 ### Exit Criteria
 - Safe manual upgrade + rollback process proven
 
+### Manual Runbook (MVP)
+
+Assumptions:
+- Service name: `qilab`
+- Install root: `/opt/qilab`
+- Active symlink: `/opt/qilab/current`
+- Versioned releases: `/opt/qilab/releases/<version>`
+
+1) Prepare target directories (once)
+```bash
+sudo mkdir -p /opt/qilab/releases
+```
+
+2) Upload/copy release tarball to target
+```bash
+scp dist/qilab-0.0.3.tar.gz <user>@<host>:/tmp/
+```
+
+3) Extract into versioned directory
+```bash
+VERSION=0.0.3
+sudo mkdir -p /opt/qilab/releases/$VERSION
+sudo tar -xzf /tmp/qilab-$VERSION.tar.gz -C /opt/qilab/releases/$VERSION --strip-components=1
+sudo chmod +x /opt/qilab/releases/$VERSION/qilab
+```
+
+4) Record current active target (for rollback)
+```bash
+PREV_TARGET=$(readlink -f /opt/qilab/current || true)
+echo "$PREV_TARGET"
+```
+
+5) Switch active version + restart service
+```bash
+sudo ln -sfn /opt/qilab/releases/$VERSION /opt/qilab/current
+sudo systemctl restart qilab
+sudo systemctl status qilab --no-pager
+```
+
+6) Health/version check
+```bash
+journalctl -u qilab -n 50 --no-pager
+```
+Expected: startup log includes new `QILab vX.Y.Z` (and commit suffix).
+
+7) Rollback (if needed)
+```bash
+sudo ln -sfn "$PREV_TARGET" /opt/qilab/current
+sudo systemctl restart qilab
+sudo systemctl status qilab --no-pager
+journalctl -u qilab -n 50 --no-pager
+```
+
+### Status (Implemented)
+- Added concrete manual deployment runbook with copy-paste commands
+- Includes explicit rollback steps using previous symlink target
+- No automation added (manual-first preserved)
+
 ---
 
 ## Phase 7 — Infrastructure Automation (Optional, Later)
@@ -207,6 +266,12 @@ Include rollback procedure:
 
 ### Exit Criteria
 - Automated path is no more complex than manual path
+
+### Status (Implemented)
+- Added `scripts/update_release.sh`
+- Script performs: extract tarball to `/opt/qilab/releases/<version>`, switch `/opt/qilab/current`, restart service
+- On restart failure, script auto-rolls back to previous symlink target and retries service restart
+- Kept intentionally minimal and aligned to manual runbook logic
 
 ---
 

@@ -3,6 +3,35 @@
 
 #include <fstream>
 #include <algorithm>
+#include <filesystem>
+#include <cstdlib>
+
+static std::string resolve_profiler_base_path(const std::string& base_path) {
+    namespace fs = std::filesystem;
+
+    fs::path base = base_path.empty() ? fs::path("profile") : fs::path(base_path);
+
+    // Absolute paths are always honored as-is.
+    if (base.is_absolute()) {
+        return base.string();
+    }
+
+    // Highest priority: explicit full base path override.
+    const char* explicit_base = std::getenv("QILAB_PROFILER_PATH");
+    if (explicit_base && explicit_base[0] != '\0') {
+        return std::string(explicit_base);
+    }
+
+    // Next priority: profiler output directory override.
+    const char* profiler_dir = std::getenv("QILAB_PROFILER_DIR");
+    if (profiler_dir && profiler_dir[0] != '\0') {
+        return (fs::path(profiler_dir) / base).string();
+    }
+
+    // Default behavior: use provided relative base path.
+    return base.string();
+}
+
 struct EventData
 {
     std::int64_t max_runtime;
@@ -189,10 +218,17 @@ void Profiler::log_event(std::string_view message) {
 }
 
 void Profiler::dump_csv(const std::string& base_path) {
+    const std::string resolved_base_path = resolve_profiler_base_path(base_path);
+    const std::filesystem::path resolved_base{resolved_base_path};
+    const auto parent_dir = resolved_base.parent_path();
+    if (!parent_dir.empty()) {
+        std::filesystem::create_directories(parent_dir);
+    }
+
     // durations
     {
         std::lock_guard<std::mutex> lk(merge_lock_);
-        std::ofstream ofs(base_path + "_durations.csv");
+        std::ofstream ofs(resolved_base_path + "_durations.csv");
         ofs << "Event,Max[ns],Min[ns],Count\n";
         const std::size_t n = std::min(common_container_.size(), names_.size());
         for (std::size_t id = 0; id < n; ++id) {
@@ -211,7 +247,7 @@ void Profiler::dump_csv(const std::string& base_path) {
     // free-form messages
     {
         std::lock_guard<std::mutex> lk(events_lock_);
-        std::ofstream ofs(base_path + "_events.csv");
+        std::ofstream ofs(resolved_base_path + "_events.csv");
         ofs << "Message,TimestampNs\n";
         for (const auto& e : events_) ofs << e.first << "," << e.second << "\n";
         ofs.flush();

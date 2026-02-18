@@ -34,6 +34,7 @@ void signal_callback_handler(int signum) {
 int main()
 {
     signal(SIGINT, signal_callback_handler);
+    signal(SIGTERM, signal_callback_handler);
     LOG_INFO("QILab v" + std::to_string(QILab::VERSION_MAJOR) + "."
               + std::to_string(QILab::VERSION_MINOR) + "."
               + std::to_string(QILab::VERSION_PATCH)

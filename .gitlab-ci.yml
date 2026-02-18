@@ -107,19 +107,22 @@ release_mvp:
   stage: release
   before_script:
     - apt-get update -y
-    - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git
+    - apt-get install -y --no-install-recommends ca-certificates cmake git gcc-aarch64-linux-gnu g++-aarch64-linux-gnu file
   script:
     - VERSION="${CI_COMMIT_TAG#v}"
-    - cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++ -DQILAB_CI_TAG=${CI_COMMIT_TAG} -DBUILD_TESTING=OFF
+    - cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=/usr/bin/aarch64-linux-gnu-g++ -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DQILAB_CI_TAG=${CI_COMMIT_TAG} -DBUILD_TESTING=OFF
     - cmake --build build-release --target qilab -- -j$(nproc)
+    - file build-release/qilab | tee build-release/binary_arch.txt
+    - grep -E "aarch64|ARM aarch64" build-release/binary_arch.txt
     - mkdir -p "dist/qilab-${VERSION}"
     - cp build-release/qilab "dist/qilab-${VERSION}/"
     - cp README.md "dist/qilab-${VERSION}/"
     - if [ -f docs/config_example.yaml ]; then cp docs/config_example.yaml "dist/qilab-${VERSION}/config_example.yaml"; fi
-    - tar -czf "dist/qilab-${VERSION}.tar.gz" -C dist "qilab-${VERSION}"
+    - tar -czf "dist/qilab-${VERSION}-linux-arm64.tar.gz" -C dist "qilab-${VERSION}"
   artifacts:
     paths:
-      - dist/*.tar.gz
+      - dist/*-linux-arm64.tar.gz
+      - build-release/binary_arch.txt
     expire_in: 1 month
   rules:
     - if: '$CI_COMMIT_TAG'

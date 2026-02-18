@@ -8,6 +8,16 @@
 #include "logger/logger_api.hpp"
 
 std::string get_default_config_path() {
+    const char* explicit_path = std::getenv("QILAB_CONFIG_PATH");
+    if (explicit_path && explicit_path[0] != '\0') {
+        return std::string(explicit_path);
+    }
+
+    const char* config_dir = std::getenv("QILAB_CONFIG_DIR");
+    if (config_dir && config_dir[0] != '\0') {
+        return std::string(config_dir) + "/nodes.yaml";
+    }
+
     const char* home = std::getenv("HOME");
     if (!home) {
         // Fallback to current directory if HOME is not set
