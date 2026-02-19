@@ -30,7 +30,7 @@ struct AppConfig {
  * @param config_path Optional custom path to config file. If empty, uses default path.
  * @return AppConfig if successful, std::nullopt if file not found or parsing failed
  */
-std::optional<AppConfig> load_config(const std::string& config_path = "");
+std::optional<AppConfig> load_config(const std::string& config_path = "") noexcept;
 
 /**
  * @brief Get the default configuration path
@@ -42,7 +42,7 @@ std::optional<AppConfig> load_config(const std::string& config_path = "");
  *
  * @return std::string resolved config file path
  */
-std::string get_default_config_path();
+std::string get_default_config_path() noexcept;
 
 /**
  * @brief Create a default configuration file if it doesn't exist
@@ -52,4 +52,4 @@ std::string get_default_config_path();
  * 
  * @return true if file was created successfully
  */
-bool create_default_config();
+bool create_default_config() noexcept;
