@@ -35,6 +35,16 @@ int main()
 {
     signal(SIGINT, signal_callback_handler);
     signal(SIGTERM, signal_callback_handler);
+    //get the log level from environment variable and set it in the logger
+    const char* log_level_env = std::getenv("QILAB_LOG_LEVEL");
+    if (log_level_env) {
+        std::string log_level_str(log_level_env);
+        LOG_LEVEL(log_level_str);
+    } else {
+        LOG_LEVEL("DEBUG"); // default log level
+    }
+
+    //get version info from generated header and log it
     LOG_INFO("QILab v" + std::to_string(QILab::VERSION_MAJOR) + "."
               + std::to_string(QILab::VERSION_MINOR) + "."
               + std::to_string(QILab::VERSION_PATCH)

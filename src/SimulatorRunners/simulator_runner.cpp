@@ -48,7 +48,9 @@ int16_t SimulatorRunner::register_node(uint8_t num_qubits)
 
     registered_qubits += num_qubits;
 
-    LOG_INFO("Registered node " + std::to_string(node_id) + " with " + std::to_string(num_qubits) + " qubits at offset " + std::to_string(nodes.back().first) + ".");
+    simulator->allocate_qubits(registered_qubits); // Ensure simulator has enough qubits allocated
+
+    LOG_INFO("Registered new node " + std::to_string(node_id) + " with " + std::to_string(num_qubits) + " qubits at offset " + std::to_string(nodes.back().first) + ".");
     return node_id;
 }
 bool SimulatorRunner::unregister_node(int16_t node_id)
@@ -171,7 +173,6 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         response.outcome = res ? (static_cast<uint8_t>(Measurement_t::MEASURE_OUTCOME_MINUS_1) | static_cast<uint8_t>(Outcome_Status_t::SUCCESS))
                                 : (static_cast<uint8_t>(Measurement_t::MEASURE_OUTCOME_PLUS_1) | static_cast<uint8_t>(Outcome_Status_t::SUCCESS));
-        LOG_INFO("Measurement result for qubit " + std::to_string(cmd->qubit1_address + qubit_offset) + ": " + (res ? "-1" : "+1"));
         PROF_STOP(prof_event_qubit_measurement);
     }
     break;
@@ -257,7 +258,6 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         Entaglement_t ent_state = static_cast<Entaglement_t>(res & 0x03); // Assuming the entanglement state is encoded in the lower 2 bits
         response.outcome = static_cast<int>(ent_state) | static_cast<int>(Outcome_Status_t::SUCCESS);
-        LOG_INFO("Entanglement attempt result with neighbor " + std::to_string(cmd->nghbr) + ": " + std::to_string(ent_state));
         PROF_STOP(prof_event_entanglement_attempt);
     }
     break;
@@ -313,7 +313,6 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         }                                        
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         response.outcome = res | static_cast<int>(Outcome_Status_t::SUCCESS); //the result is mesh of measure and entanglement status, so we just set the success bit and return the rest as is
-        LOG_INFO("Entanglement measure result with neighbor " + std::to_string(cmd->nghbr) + ": " + std::to_string(res & 0x0F)); // Assuming the measurement outcome is encoded in the lower 4 bits
         PROF_STOP(prof_event_entanglement_measure);
     }
     break;
