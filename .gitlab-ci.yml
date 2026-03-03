@@ -117,8 +117,8 @@ release_prepare:
       tar -czf "dist/qilab-${CI_COMMIT_TAG}-linux-arm64.tar.gz" -C dist "qilab-${VERSION}"
 
       awk -v v="$VERSION" '
-        $0 ~ "^## \\\\[" v "\\\\]" { in_section=1 }
-        in_section && $0 ~ "^## \\\\[" && $0 !~ "^## \\\\[" v "\\\\]" { exit }
+        index($0, "## [" v "]") == 1 { in_section=1 }
+        in_section && index($0, "## [") == 1 && index($0, "## [" v "]") != 1 { exit }
         in_section { print }
       ' CHANGELOG.md > dist/release_notes.md
 
