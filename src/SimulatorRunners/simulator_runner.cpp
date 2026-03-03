@@ -181,6 +181,13 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
     {
         PROF_START(prof_event_single_qubit_gate);
         auto *cmd = static_cast<SingleQubitGate *>(command.get());
+        if(cmd->angle == 0) //no need to apply a gate if the angle is 0, just return success
+        {
+            response.outcome = Outcome_Status_t::SUCCESS;
+            response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
+            PROF_STOP(prof_event_single_qubit_gate);
+            break;
+        }
         simulator->single_qubit_gate(cmd->qubit1_address + qubit_offset,
                                      cmd->angle, cmd->axis);
         response.outcome = Outcome_Status_t::SUCCESS;
@@ -193,6 +200,13 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
     {
         PROF_START(prof_event_two_qubit_gate);
         auto *cmd = static_cast<TwoQubitGate *>(command.get());
+        if(cmd->angle == 0) //no need to apply a gate if the angle is 0, just return success
+        {
+            response.outcome = Outcome_Status_t::SUCCESS;
+            response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
+            PROF_STOP(prof_event_two_qubit_gate);
+            break;
+        }
         if(!simulator->two_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->qubit2_address + qubit_offset,
                                      cmd->angle, cmd->axis))
         {

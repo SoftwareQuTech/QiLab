@@ -4,7 +4,30 @@
 #include "stim_adapter.hpp"
 
 StimAdapter::StimAdapter(std::seed_seq &seed_seq, const uint8_t &num_qubits)
-    : generator(seed_seq), stim_instance(std::move(generator), num_qubits), single_target{}, single_span(single_target.data(), single_target.data() + 1), measure_inst(stim::GateType::M, {}, single_span, ""), init_inst(stim::GateType::R, {}, single_span, ""), h_gate_inst(stim::GateType::H, {}, single_span, ""), x_gate_inst(stim::GateType::X, {}, single_span, ""), sqrt_x_gate_inst(stim::GateType::SQRT_X, {}, single_span, ""), x_gate_dag_inst(stim::GateType::SQRT_X_DAG, {}, single_span, ""), y_gate_inst(stim::GateType::Y, {}, single_span, ""), sqrt_y_gate_inst(stim::GateType::SQRT_Y, {}, single_span, ""), y_gate_dag_inst(stim::GateType::SQRT_Y_DAG, {}, single_span, ""), z_gate_inst(stim::GateType::Z, {}, single_span, ""), sqrt_z_gate_inst(stim::GateType::S, {}, single_span, ""), z_gate_dag_inst(stim::GateType::S_DAG, {}, single_span, ""), two_target{}, two_span(two_target.data(), two_target.data() + 2), cnot_inst(stim::GateType::CX, {}, two_span, ""), cz_inst(stim::GateType::CZ, {}, two_span, ""), swap_inst(stim::GateType::SWAP, {}, two_span, "")
+    : generator(seed_seq), stim_instance(std::move(generator), num_qubits), 
+    single_target{}, 
+    single_span(single_target.data(), single_target.data() + 1), 
+    measure_inst(stim::GateType::M, {}, single_span, ""), 
+    init_inst(stim::GateType::R, {}, single_span, ""), 
+    h_gate_inst(stim::GateType::H, {}, single_span, ""), 
+    x_gate_inst(stim::GateType::X, {}, single_span, ""), 
+    sqrt_x_gate_inst(stim::GateType::SQRT_X, {}, single_span, ""), 
+    x_gate_dag_inst(stim::GateType::SQRT_X_DAG, {}, single_span, ""), 
+    y_gate_inst(stim::GateType::Y, {}, single_span, ""), 
+    sqrt_y_gate_inst(stim::GateType::SQRT_Y, {}, single_span, ""), 
+    y_gate_dag_inst(stim::GateType::SQRT_Y_DAG, {}, single_span, ""), 
+    z_gate_inst(stim::GateType::Z, {}, single_span, ""), 
+    sqrt_z_gate_inst(stim::GateType::S, {}, single_span, ""), 
+    z_gate_dag_inst(stim::GateType::S_DAG, {}, single_span, ""), 
+    two_target{}, 
+    two_span(two_target.data(), two_target.data() + 2), 
+    cnot_inst(stim::GateType::CX, {}, two_span, ""), 
+    cz_inst(stim::GateType::CZ, {}, two_span, ""), 
+    swap_inst(stim::GateType::SWAP, {}, two_span, ""),
+    sqrt_yy_inst(stim::GateType::SQRT_YY, {}, two_span, ""),
+    sqrt_yy_dag_inst(stim::GateType::SQRT_YY_DAG, {}, two_span, ""),
+    sqrt_xx_inst(stim::GateType::SQRT_XX, {}, two_span, ""),
+    sqrt_xx_dag_inst(stim::GateType::SQRT_XX_DAG, {}, two_span, "")
 {
     // Pre-allocate enough space for all qubits
     stim_instance.ensure_large_enough_for_qubits(num_qubits);
@@ -17,7 +40,7 @@ bool StimAdapter::allocate_qubits(uint8_t num_qubits)
 {
     if (num_qubits + registered_qubits > MAX_QUBITS_AVAILABLE)
         return false;
-    LOG_INFO("Allocating in STIM" + std::to_string(num_qubits) + " qubits. Total registered qubits: " + std::to_string(registered_qubits + num_qubits));
+    LOG_INFO("Allocating in STIM [ " + std::to_string(num_qubits) + " ] qubits. Total registered qubits: " + std::to_string(registered_qubits + num_qubits));
     stim_instance.ensure_large_enough_for_qubits(registered_qubits + num_qubits);
     registered_qubits += num_qubits;
     return true;
@@ -129,24 +152,80 @@ bool StimAdapter::two_qubit_gate(uint8_t qubit1_address, uint8_t qubit2_address,
         LOG_ERROR("Cannot apply a two qubit gate to the same qubit 1:  " + std::to_string(qubit1_address) + ", 2: " + std::to_string(qubit2_address));
         return false;
     }
-    // Update target qubits using cached array
-    two_target[0] = stim::GateTarget{qubit1_address};
-    two_target[1] = stim::GateTarget{qubit2_address};
 
     if (axis == Axis_t::X_AXIS)
     {
-        stim_instance.do_ZCX(cnot_inst); // CNOT is implemented via ZCX
+        if (angle == Angle_t::_8_PI_16)
+        {
+            // Update target qubits using cached array
+            two_target[0] = stim::GateTarget{qubit1_address};
+            two_target[1] = stim::GateTarget{qubit2_address};
+            stim_instance.do_SQRT_XX(sqrt_xx_inst); // SQRT_XX is implemented via a custom instruction
+            LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
+            return true;
+        }
+        else if (angle == Angle_t::_MINUS_PI)
+        {
+            single_target[0] = stim::GateTarget{qubit1_address};
+            stim_instance.do_X(x_gate_inst); // X is implemented via a custom instruction
+            single_target[0] = stim::GateTarget{qubit2_address};
+            stim_instance.do_X(x_gate_inst); // X is implemented via a custom instruction
+            LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
+            return true;
+        }
+        else if (angle == Angle_t::_MINUS_8_PI_16)
+        {
+            // Update target qubits using cached array
+            two_target[0] = stim::GateTarget{qubit1_address};
+            two_target[1] = stim::GateTarget{qubit2_address};
+            stim_instance.do_SQRT_XX_DAG(sqrt_xx_dag_inst); // SQRT_XX_DAG is implemented via a custom instruction
+            LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
+            return true;
+        }
+        {
+            LOG_WARNING("Unsupported angle for two-qubit gate: " + std::to_string(angle) + " on axis: " + std::to_string(axis));
+            return false;
+        }
     }
-    else if (axis == Axis_t::Z_AXIS)
+    else if (axis == Axis_t::Y_AXIS)
     {
-        stim_instance.do_ZCZ(cz_inst); // CZ is implemented via ZCZ
+        if (angle == Angle_t::_8_PI_16)
+        {
+            // Update target qubits using cached array
+            two_target[0] = stim::GateTarget{qubit1_address};
+            two_target[1] = stim::GateTarget{qubit2_address};
+            stim_instance.do_SQRT_YY(sqrt_yy_inst); // SQRT_YY is implemented via a custom instruction
+            LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
+            return true;
+        }
+        else if (angle == Angle_t::_MINUS_PI)
+        {
+            single_target[0] = stim::GateTarget{qubit1_address};
+            stim_instance.do_Y(y_gate_inst); // Y is implemented via a custom instruction
+            single_target[0] = stim::GateTarget{qubit2_address};
+            stim_instance.do_Y(y_gate_inst); // Y is implemented via a custom instruction
+            LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
+            return true;
+        }
+        else if (angle == Angle_t::_MINUS_8_PI_16)
+        {
+            // Update target qubits using cached array
+            two_target[0] = stim::GateTarget{qubit1_address};
+            two_target[1] = stim::GateTarget{qubit2_address};
+            stim_instance.do_SQRT_YY_DAG(sqrt_yy_dag_inst); // SQRT_YY_DAG is implemented via a custom instruction
+            LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
+            return true;
+        }
+        {
+            LOG_WARNING("Unsupported angle for two-qubit gate: " + std::to_string(angle) + " on axis: " + std::to_string(axis));
+            return false;
+        }
     }
     else
     {
         LOG_WARNING("Invalid axis for two-qubit gate: " + std::to_string(axis));
         return false;
     }
-    LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
     return true;
 }
 uint8_t StimAdapter::qubit_measure(uint8_t qubit_address, bool basis)

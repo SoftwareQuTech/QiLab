@@ -30,7 +30,7 @@ void StandardLogger::log_level(const std::string_view level)
         std::clog << "Invalid log level: " << level << ". Valid levels are: DEBUG, ERROR, OFF." << std::endl;
         return;
     }
-    std::clog << "[" << get_timestamp() << "] [ Log level set to: " << level << "]: ";
+    std::clog << "[" << get_timestamp() << "] [ Log level set to: " << level << "]: " << std::endl;
 }
 
 StandardLogger &StandardLogger::instance()

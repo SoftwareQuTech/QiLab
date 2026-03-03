@@ -158,13 +158,17 @@ private:
     stim::CircuitInstruction z_gate_inst;       // Z
     stim::CircuitInstruction sqrt_z_gate_inst;       // S (SQRT_Z) 
     stim::CircuitInstruction z_gate_dag_inst;   // S_DAG (SQRT_Z_DAG)
-    
+
     // For two-qubit operations (CNOT, CZ, SWAP)
     std::array<stim::GateTarget, 2> two_target;
     stim::SpanRef<stim::GateTarget> two_span;
     stim::CircuitInstruction cnot_inst;
     stim::CircuitInstruction cz_inst;
     stim::CircuitInstruction swap_inst;
+    stim::CircuitInstruction sqrt_yy_inst;        // Custom instruction for SQRT_YY
+    stim::CircuitInstruction sqrt_yy_dag_inst;    // Custom instruction for SQRT_YY_DAG
+    stim::CircuitInstruction sqrt_xx_inst;        // Custom instruction for SQRT_XX
+    stim::CircuitInstruction sqrt_xx_dag_inst;    // Custom instruction for SQRT_XX_DAG
     
     // Pre-measurement gate configuration storage
     struct PreMeasureConfig {

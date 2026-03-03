@@ -24,6 +24,14 @@
 
 bool abort_sim = false;
 
+void print_startup_banner(const std::string& version) {
+    std::cout << "\n"
+              << "==== QILAB :: Quantum Interface Lab ====\n"
+              << "Product of TU Delft | v" << version << "\n"
+              << "========================================\n"
+              << std::endl;
+}
+
 
 void signal_callback_handler(int signum) {
    std::cout << "Caught signal " << signum << std::endl;
@@ -33,6 +41,13 @@ void signal_callback_handler(int signum) {
 
 int main()
 {
+    const std::string version = std::to_string(QILab::VERSION_MAJOR) + "."
+                              + std::to_string(QILab::VERSION_MINOR) + "."
+                              + std::to_string(QILab::VERSION_PATCH)
+                              + " (" + QILab::VERSION_GIT_COMMIT + ")";
+
+    print_startup_banner(version);
+
     signal(SIGINT, signal_callback_handler);
     signal(SIGTERM, signal_callback_handler);
     //get the log level from environment variable and set it in the logger
@@ -44,11 +59,6 @@ int main()
         LOG_LEVEL("DEBUG"); // default log level
     }
 
-    //get version info from generated header and log it
-    LOG_INFO("QILab v" + std::to_string(QILab::VERSION_MAJOR) + "."
-              + std::to_string(QILab::VERSION_MINOR) + "."
-              + std::to_string(QILab::VERSION_PATCH)
-              + " (" + QILab::VERSION_GIT_COMMIT + ")");
 #if defined(__linux) && defined(__GLIBCXX__) && __GLIBCXX__ >= 20200128
     // Workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=94087
     // See https://github.com/quantumlib/Stim/issues/26
@@ -135,6 +145,7 @@ int main()
         return nodeA.on_run(TRANSMISSION_CORE);
     });
 
+    PROF_SAVE_DATA("test_trace");
 
     while(!abort_sim)
     {

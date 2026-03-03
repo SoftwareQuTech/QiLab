@@ -32,7 +32,7 @@ struct NodeTransmissionData
 {
     uint64_t cycle_count = 0;
     std::array<uint32_t, LP_DATA_BUFFER_LENGTH> lp_data_buffer;
-    
+    uint64_t crc_error_count = 0;
     NodeTransmissionData() : lp_data_buffer{} {}
 };
 

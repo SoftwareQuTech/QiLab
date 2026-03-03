@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <cstdlib>
+#include "logger/logger_api.hpp"    
 
 static std::string resolve_profiler_base_path(const std::string& base_path) {
     namespace fs = std::filesystem;
@@ -28,8 +29,12 @@ static std::string resolve_profiler_base_path(const std::string& base_path) {
         return (fs::path(profiler_dir) / base).string();
     }
 
-    // Default behavior: use provided relative base path.
-    return base.string();
+    const char* home = std::getenv("HOME");
+    if (!home) {
+        // Fallback to current directory if HOME is not set
+        return ".qilab/logs/";
+    }
+    return std::string(home) + "/.qilab/logs/" + base.string();    
 }
 
 struct EventData
@@ -221,10 +226,11 @@ void Profiler::dump_csv(const std::string& base_path) {
     const std::string resolved_base_path = resolve_profiler_base_path(base_path);
     const std::filesystem::path resolved_base{resolved_base_path};
     const auto parent_dir = resolved_base.parent_path();
+    LOG_INFO("Dumping profiler data to: " + resolved_base_path + "_durations.csv and " + resolved_base_path + "_events.csv");
+
     if (!parent_dir.empty()) {
         std::filesystem::create_directories(parent_dir);
     }
-
     // durations
     {
         std::lock_guard<std::mutex> lk(merge_lock_);
