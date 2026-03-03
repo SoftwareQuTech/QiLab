@@ -10,11 +10,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 - Placeholder for upcoming changes.
 
-## [0.0.3] - 2026-03-03
+## [0.2.5] - 2026-03-03
 
 ### Added
-- Initial changelog section for CI-driven GitLab Releases.
-- Release packaging now includes ARM64 binary, systemd service unit, and update script.
+- Initial release candidate
 
 ### Changed
 - Release notes are generated from the matching changelog version section.
