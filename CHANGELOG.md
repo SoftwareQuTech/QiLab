@@ -10,6 +10,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 - Placeholder for upcoming changes.
 
+
+## [0.2.6] - 2026-03-04
+
+### Added
+- none
+
+### Changed
+- split release into 2 tarballs
+
 ## [0.2.5] - 2026-03-03
 
 ### Added
