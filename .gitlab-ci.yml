@@ -107,9 +107,12 @@ release_prepare:
       file build-release/qilab | tee build-release/binary_arch.txt
       grep -E "aarch64|ARM aarch64" build-release/binary_arch.txt
 
-      mkdir -p "dist/qilab-${VERSION}/
+      mkdir -p "dist/qilab-${VERSION}/"
       mkdir -p "dist-update/qilab-${VERSION}/deploy/systemd" "dist-update/qilab-${VERSION}/scripts"
+
       cp build-release/qilab "dist/qilab-${VERSION}/"
+      mv "dist/qilab-${VERSION}/qilab" "dist/qilab-${VERSION}/qilab-${VERSION}-linux-arm64"
+      
       cp README.md "dist/qilab-${VERSION}/"
       cp deploy/systemd/qilab.service "dist-update/qilab-${VERSION}/deploy/systemd/qilab.service"
       cp scripts/update_release.sh "dist-update/qilab-${VERSION}/scripts/update_release.sh"
