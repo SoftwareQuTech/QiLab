@@ -118,6 +118,8 @@ add_library(qilab_lib STATIC
   src/SimulatorRunners/simulator_runner.cpp
   src/Simulator/adapters/mock_adapter.cpp
   src/Simulator/adapters/stim_adapter.cpp
+  src/Simulator/adapters/stim_nv_adapter.cpp
+  
   #Message Broker
   src/MessageBroker/message_broker.cpp
   #Entanglement Manager
@@ -147,6 +149,7 @@ add_executable(qilab
   src/SimulatorRunners/simulator_runner.cpp
   src/Simulator/adapters/mock_adapter.cpp
   src/Simulator/adapters/stim_adapter.cpp
+  src/Simulator/adapters/stim_nv_adapter.cpp
   #Message Broker
   src/MessageBroker/message_broker.cpp
   #Entanglement Manager

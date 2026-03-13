@@ -22,6 +22,8 @@ StimAdapter::StimAdapter(std::seed_seq &seed_seq, const uint8_t &num_qubits)
     two_target{}, 
     two_span(two_target.data(), two_target.data() + 2), 
     cnot_inst(stim::GateType::CX, {}, two_span, ""), 
+    cx_inst(stim::GateType::CX, {}, two_span, ""), 
+    cy_inst(stim::GateType::CY, {}, two_span, ""), 
     cz_inst(stim::GateType::CZ, {}, two_span, ""), 
     swap_inst(stim::GateType::SWAP, {}, two_span, ""),
     sqrt_yy_inst(stim::GateType::SQRT_YY, {}, two_span, ""),

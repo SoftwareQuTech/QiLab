@@ -163,6 +163,8 @@ private:
     std::array<stim::GateTarget, 2> two_target;
     stim::SpanRef<stim::GateTarget> two_span;
     stim::CircuitInstruction cnot_inst;
+    stim::CircuitInstruction cx_inst;
+    stim::CircuitInstruction cy_inst;    
     stim::CircuitInstruction cz_inst;
     stim::CircuitInstruction swap_inst;
     stim::CircuitInstruction sqrt_yy_inst;        // Custom instruction for SQRT_YY
