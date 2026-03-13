@@ -6,6 +6,19 @@
 #include "utils/thread_utils.hpp"
 #include "logger/logger_api.hpp"
 
+struct Qubit
+{
+    //add model for decoherence, error rates, etc. if needed for more detailed simulation
+    //for now, this is just a placeholder to represent qubits in the node registry
+    uint8_t address; // global qubit address in the simulator
+    // Optional: Add fields for tracking qubit state, entanglement metadata, etc.
+};
+struct NodeInfo
+{
+    uint16_t qubit_offset; ///< Starting address of this node's qubits in global space
+    std::vector<Qubit> qubits; ///< Optional: Track individual qubit states or metadata if needed
+};
+
 SimulatorRunner::SimulatorRunner(std::unique_ptr<ISimulator> sim, std::shared_ptr<MessageBroker> broker) : simulator(std::move(sim)), message_broker(broker)
 {
     PROF_THREAD_INIT();
@@ -35,7 +48,9 @@ int16_t SimulatorRunner::register_node(uint8_t num_qubits)
 
     registered_qubits += num_qubits;
 
-    LOG_INFO("Registered node " + std::to_string(node_id) + " with " + std::to_string(num_qubits) + " qubits at offset " + std::to_string(nodes.back().first) + ".");
+    simulator->allocate_qubits(registered_qubits); // Ensure simulator has enough qubits allocated
+
+    LOG_INFO("Registered new node " + std::to_string(node_id) + " with " + std::to_string(num_qubits) + " qubits at offset " + std::to_string(nodes.back().first) + ".");
     return node_id;
 }
 bool SimulatorRunner::unregister_node(int16_t node_id)
@@ -158,7 +173,6 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         response.outcome = res ? (static_cast<uint8_t>(Measurement_t::MEASURE_OUTCOME_MINUS_1) | static_cast<uint8_t>(Outcome_Status_t::SUCCESS))
                                 : (static_cast<uint8_t>(Measurement_t::MEASURE_OUTCOME_PLUS_1) | static_cast<uint8_t>(Outcome_Status_t::SUCCESS));
-        LOG_INFO("Measurement result for qubit " + std::to_string(cmd->qubit1_address + qubit_offset) + ": " + (res ? "-1" : "+1"));
         PROF_STOP(prof_event_qubit_measurement);
     }
     break;
@@ -167,6 +181,13 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
     {
         PROF_START(prof_event_single_qubit_gate);
         auto *cmd = static_cast<SingleQubitGate *>(command.get());
+        if(cmd->angle == 0) //no need to apply a gate if the angle is 0, just return success
+        {
+            response.outcome = Outcome_Status_t::SUCCESS;
+            response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
+            PROF_STOP(prof_event_single_qubit_gate);
+            break;
+        }
         simulator->single_qubit_gate(cmd->qubit1_address + qubit_offset,
                                      cmd->angle, cmd->axis);
         response.outcome = Outcome_Status_t::SUCCESS;
@@ -179,6 +200,13 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
     {
         PROF_START(prof_event_two_qubit_gate);
         auto *cmd = static_cast<TwoQubitGate *>(command.get());
+        if(cmd->angle == 0) //no need to apply a gate if the angle is 0, just return success
+        {
+            response.outcome = Outcome_Status_t::SUCCESS;
+            response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
+            PROF_STOP(prof_event_two_qubit_gate);
+            break;
+        }
         if(!simulator->two_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->qubit2_address + qubit_offset,
                                      cmd->angle, cmd->axis))
         {
@@ -244,7 +272,6 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         Entaglement_t ent_state = static_cast<Entaglement_t>(res & 0x03); // Assuming the entanglement state is encoded in the lower 2 bits
         response.outcome = static_cast<int>(ent_state) | static_cast<int>(Outcome_Status_t::SUCCESS);
-        LOG_INFO("Entanglement attempt result with neighbor " + std::to_string(cmd->nghbr) + ": " + std::to_string(ent_state));
         PROF_STOP(prof_event_entanglement_attempt);
     }
     break;
@@ -300,7 +327,6 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
         }                                        
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         response.outcome = res | static_cast<int>(Outcome_Status_t::SUCCESS); //the result is mesh of measure and entanglement status, so we just set the success bit and return the rest as is
-        LOG_INFO("Entanglement measure result with neighbor " + std::to_string(cmd->nghbr) + ": " + std::to_string(res & 0x0F)); // Assuming the measurement outcome is encoded in the lower 4 bits
         PROF_STOP(prof_event_entanglement_measure);
     }
     break;

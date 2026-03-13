@@ -129,6 +129,13 @@ public:
      *
      * Generates CSV output with event durations and free-form messages.
      * Should be called after all threads have completed and flushed.
+    *
+    * Path resolution order for relative base paths:
+    * 1) QILAB_PROFILER_PATH (full base path override)
+    * 2) QILAB_PROFILER_DIR + /<base_path>
+    * 3) provided base_path as-is
+    *
+    * Absolute base paths are always used as-is.
      *
      * @param base_path Base filename or path for CSV output.
      *                 Actual filename(s) may be derived from this.

@@ -4,35 +4,67 @@
 #include <thread>
 #include <signal.h>
 
-#include "stim.h"
-#include "stim/circuit/gate_target.h"
-#include "stim/circuit/circuit_instruction.h"
 
+//Simulator implementations
 #include <Simulator/adapters/mock_adapter.hpp>
 #include <Simulator/adapters/stim_adapter.hpp>
+#include <Simulator/adapters/stim_nv_adapter.hpp>
+
+//Runners
 #include <SimulatorRunners/simulator_runner.hpp>
 #include "DataTransmission/TransmissionRunner/transmission_runner.hpp"
+#include "SimulatorRunners/entanglement_runner.hpp"
+
+//Data transmission
 #include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
 #include "DataTransmission/handlers/mock_handler.hpp"
+#include "DataTransmission/handlers/spi_master_handler.hpp"
+#include "MessageBroker/message_broker.hpp"
+
+//Loggers and profilers
 #include "logger/profiler_api.hpp"
 #include "logger/logger_api.hpp"
-#include "DataTransmission/handlers/spi_master_handler.hpp"
-#include "SimulatorRunners/entanglement_runner.hpp"
-#include "MessageBroker/message_broker.hpp"
+
+//Config
+#include "qilab/version.hpp"
 #include "utils/config_loader.hpp"
 
 bool abort_sim = false;
 
+void print_startup_banner(const std::string& version) {
+    std::cout << "\n"
+              << "==== QILAB :: Quantum Interface Lab ====\n"
+              << "Product of TU Delft | v" << version << "\n"
+              << "========================================\n"
+              << std::endl;
+}
+
 
 void signal_callback_handler(int signum) {
-   std::cout << "Caught signal " << signum << std::endl;
    // Terminate program
    abort_sim = true;
 }
 
 int main()
 {
+    const std::string version = std::to_string(QILab::VERSION_MAJOR) + "."
+                              + std::to_string(QILab::VERSION_MINOR) + "."
+                              + std::to_string(QILab::VERSION_PATCH)
+                              + " (" + QILab::VERSION_GIT_COMMIT + ")";
+
+    print_startup_banner(version);
+
     signal(SIGINT, signal_callback_handler);
+    signal(SIGTERM, signal_callback_handler);
+    //get the log level from environment variable and set it in the logger
+    const char* log_level_env = std::getenv("QILAB_LOG_LEVEL");
+    if (log_level_env) {
+        std::string log_level_str(log_level_env);
+        LOG_LEVEL(log_level_str);
+    } else {
+        LOG_LEVEL("DEBUG"); // default log level
+    }
+
 #if defined(__linux) && defined(__GLIBCXX__) && __GLIBCXX__ >= 20200128
     // Workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=94087
     // See https://github.com/quantumlib/Stim/issues/26
@@ -58,7 +90,7 @@ int main()
     
     LOG_INFO("Configuration loaded with " + std::to_string(config->nodes.size()) + " nodes");
     
-    std::unique_ptr<StimAdapter> stim_adapter =  std::make_unique<StimAdapter>(seq, 0); //the seed is problematic
+    std::unique_ptr<StimAdapterNVCenters> stim_adapter =  std::make_unique<StimAdapterNVCenters>(seq, 0); //the seed is problematic
     SimulatorRunner sim(std::move(stim_adapter), broker);
     
     // Register nodes dynamically from configuration
@@ -119,6 +151,7 @@ int main()
         return nodeA.on_run(TRANSMISSION_CORE);
     });
 
+    PROF_SAVE_DATA("test_trace");
 
     while(!abort_sim)
     {

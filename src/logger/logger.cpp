@@ -7,7 +7,33 @@
 
 StandardLogger::StandardLogger() {}
 
-StandardLogger& StandardLogger::instance()
+void StandardLogger::log_level(const std::string_view level)
+{
+    std::lock_guard<std::mutex> lock(logging_lock_);
+    if (level == "DEBUG")
+    {
+        debug_level.store(true, std::memory_order_relaxed);
+        error_level.store(true, std::memory_order_relaxed);
+    }
+    else if (level == "ERROR")
+    {
+        debug_level.store(false, std::memory_order_relaxed);
+        error_level.store(true, std::memory_order_relaxed);
+    }
+    else if (level == "OFF")
+    {
+        debug_level.store(false, std::memory_order_relaxed);
+        error_level.store(false, std::memory_order_relaxed);
+    }
+    else
+    {
+        std::clog << "Invalid log level: " << level << ". Valid levels are: DEBUG, ERROR, OFF." << std::endl;
+        return;
+    }
+    std::clog << "[" << get_timestamp() << "] [ Log level set to: " << level << "]: " << std::endl;
+}
+
+StandardLogger &StandardLogger::instance()
 {
     static StandardLogger instance;
     return instance;
@@ -29,16 +55,19 @@ std::string StandardLogger::get_timestamp()
 
 void StandardLogger::log_info(const std::string_view message)
 {
+    if (!debug_level.load(std::memory_order_relaxed)) return;
     std::lock_guard<std::mutex> lock(logging_lock_);
     std::clog << "[" << get_timestamp() << "] [INFO]: " << message << std::endl;
 }
 void StandardLogger::log_warning(const std::string_view message)
 {
+    if (!error_level.load(std::memory_order_relaxed)) return;
     std::lock_guard<std::mutex> lock(logging_lock_);
     std::clog << "[" << get_timestamp() << "] [WARNING]: " << message << std::endl;
 }
 void StandardLogger::log_error(const std::string_view message)
 {
+    if (!error_level.load(std::memory_order_relaxed)) return;
     std::lock_guard<std::mutex> lock(logging_lock_);
     std::cerr << "[" << get_timestamp() << "] [ERROR]: " << message << std::endl;
 }

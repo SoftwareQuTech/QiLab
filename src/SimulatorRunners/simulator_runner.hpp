@@ -23,18 +23,9 @@
 #include "DataTypes/command_data.hpp"
 #include "MessageBroker/message_broker.hpp"
 
-struct Qubit
-{
-    //add model for decoherence, error rates, etc. if needed for more detailed simulation
-    //for now, this is just a placeholder to represent qubits in the node registry
-    uint8_t address; // global qubit address in the simulator
-    // Optional: Add fields for tracking qubit state, entanglement metadata, etc.
-};
-struct NodeInfo
-{
-    uint16_t qubit_offset; ///< Starting address of this node's qubits in global space
-    std::vector<Qubit> qubits; ///< Optional: Track individual qubit states or metadata if needed
-};
+struct NodeInfo; // Forward declaration of NodeInfo struct
+struct Qubit; // Forward declaration of Qubit struct
+
 /**
  * @brief Executes quantum simulation operations on a dedicated thread.
  *

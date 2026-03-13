@@ -123,6 +123,11 @@ int DataTransmissionRunner::on_run(int core_id)
         PROF_STOP(prof_event_deserialize);
         //std::this_thread::yield();
     }
+    for(size_t node = 0; node < node_transmission_data.size(); ++node)
+    {
+        const auto &node_data = node_transmission_data[node];
+        LOG_INFO("Final cycle count for node: " + std::to_string(node) + ", " + std::to_string(node_data.cycle_count) + ", CRC error count: " + std::to_string(node_data.crc_error_count));
+    }
     PROF_THREAD_FLUSH();
     LOG_INFO("Ending Transmission Runner.");
     return 0;
