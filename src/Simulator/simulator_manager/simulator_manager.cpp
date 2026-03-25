@@ -87,8 +87,10 @@ ResponseData SimulatorManager::single_qubit_gate_handler(std::unique_ptr<Command
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         return response;
     }
-
+    float qubit_noise = simulation_qubits[cmd->qubit1_address + qubit_offset].get_qubit_decoherence_probability();
+    //simulator_inst->apply_qubit_noise(cmd->qubit1_address + qubit_offset, qubit_noise);
     simulator_inst->single_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->angle, cmd->axis);
+    simulation_qubits[cmd->qubit1_address + qubit_offset].mark_touched();
     response.outcome = Outcome_Status_t::SUCCESS;
     response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
     return response;
