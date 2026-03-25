@@ -10,6 +10,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 - Placeholder for upcoming changes.
 
+## [0.2.7] - 2026-03-25
+
+### Added
+- none
+
+### Changed
+- fix issue with pre-measurement selection
 
 ## [0.2.6] - 2026-03-04
 

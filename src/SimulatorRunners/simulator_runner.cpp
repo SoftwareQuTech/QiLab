@@ -335,7 +335,7 @@ ResponseData SimulatorRunner::execute_command(std::unique_ptr<CommandBase> comma
     {
         PROF_START(prof_event_pre_measure_select);
         auto *cmd = static_cast<PreMeasureGatesSelection *>(command.get());
-        simulator->pre_measure_gates_selection(cmd->target + qubit_offset,
+        simulator->pre_measure_gates_selection(cmd->target,
                                                cmd->angle1,
                                                cmd->angle2,
                                                cmd->angle3);
