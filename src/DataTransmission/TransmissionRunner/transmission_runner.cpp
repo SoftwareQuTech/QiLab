@@ -118,12 +118,18 @@ int DataTransmissionRunner::on_run(int core_id)
         }
 
         //
-        //CPU_PAUSE();
-        std::this_thread::sleep_for(std::chrono::microseconds(TRANSMISSION_STEP_DELAY));
+        // CPU_PAUSE();
+        // With this (no syscall — clock_gettime uses VDSO on aarch64):
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::microseconds(TRANSMISSION_STEP_DELAY);
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            // spin — thread is pinned to a dedicated core anyway
+        }
+        //std::this_thread::sleep_for(std::chrono::microseconds(TRANSMISSION_STEP_DELAY));
         PROF_STOP(prof_event_deserialize);
-        //std::this_thread::yield();
+        // std::this_thread::yield();
     }
-    for(size_t node = 0; node < node_transmission_data.size(); ++node)
+    for (size_t node = 0; node < node_transmission_data.size(); ++node)
     {
         const auto &node_data = node_transmission_data[node];
         LOG_INFO("Final cycle count for node: " + std::to_string(node) + ", " + std::to_string(node_data.cycle_count) + ", CRC error count: " + std::to_string(node_data.crc_error_count));

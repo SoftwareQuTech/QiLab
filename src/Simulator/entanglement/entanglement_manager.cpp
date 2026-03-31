@@ -93,6 +93,12 @@ int EntanglementManager::update_requests()
 
 bool EntanglementManager::add_new_request(std::unique_ptr<CommandBase> command, uint16_t node_id, uint16_t neighbour_node)
 {
+    if (node_id == neighbour_node)
+    {
+        // Trying to entangle with same node qubit
+        LOG_ERROR("Cannot entangle qubits on a local node with entanglement command. Please use a two qubit gate instead. Node " + std::to_string(node_id) + " to neighbour " + std::to_string(neighbour_node) + " ignored.");
+        return false;
+    }
     // check if a request is already pending from this node to the neighbour
     for (auto it = pending_requests.begin(); it != pending_requests.end(); ++it)
     {

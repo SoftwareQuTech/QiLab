@@ -20,7 +20,7 @@ SERVICE_NAME="qilab"
 INSTALL_ROOT="/opt/qilab"
 RELEASES_DIR="$INSTALL_ROOT/releases"
 CURRENT_LINK="$INSTALL_ROOT/current"
-TARGET_DIR="$RELEASES_DIR/$VERSION"
+TARGET_DIR="$RELEASES_DIR/$VERSION/qilab-$VERSION"
 CONFIG_DIR="/etc/qilab"
 CONFIG_FILE="$CONFIG_DIR/nodes.yaml"
 PROFILER_DIR="/var/log/qilab/profiler"
@@ -51,11 +51,12 @@ mkdir -p "$TARGET_DIR"
 echo "Extracting: $TARBALL_PATH"
 tar -xzf "$TARBALL_PATH" -C "$TARGET_DIR" --strip-components=1
 
-if [[ ! -f "$TARGET_DIR/qilab" ]]; then
-  echo "Update aborted: executable not found at $TARGET_DIR/qilab"
+if [[ ! -f "$TARGET_DIR/qilab-$VERSION-linux-arm64" ]]; then
+  echo "Update aborted: executable not found at $TARGET_DIR/qilab-$VERSION-linux-arm64"
   exit 1
 fi
 
+mv "$TARGET_DIR/qilab-$VERSION-linux-arm64" "$TARGET_DIR/qilab"
 chmod +x "$TARGET_DIR/qilab"
 
 if ! command -v file >/dev/null 2>&1; then

@@ -10,26 +10,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 - Placeholder for upcoming changes.
 
-## [0.2.7] - 2026-03-25
+## [0.2.8] - 2026-03-25
 
 ### Added
-- none
+- check for entaglement with own qubit error
 
 ### Changed
-- fix issue with pre-measurement selection
-
-## [0.2.6] - 2026-03-04
-
-### Added
-- none
-
-### Changed
-- split release into 2 tarballs
-
-## [0.2.5] - 2026-03-03
-
-### Added
-- Initial release candidate
-
-### Changed
-- Release notes are generated from the matching changelog version section.
+- busy wait on transmission core
+- fix for update script
