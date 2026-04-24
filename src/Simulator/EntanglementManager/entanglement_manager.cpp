@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "Simulator/entanglement/entanglement_manager.hpp"
+#include "entanglement_manager.hpp"
 #include "logger/logger_api.hpp"
 
 #define EXPECTED_MAX_REQUESTS 100

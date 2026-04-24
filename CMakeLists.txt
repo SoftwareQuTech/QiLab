@@ -115,18 +115,18 @@ add_library(qilab_lib STATIC
   src/DataTransmission/TransmissionRunner/transmission_runner.cpp
   src/DataTransmission/TransmissionProcessor/transmission_processor.cpp
   #Simulator
-  src/SimulatorRunners/simulator_runner.cpp
-  src/Simulator/adapters/mock_adapter.cpp
-  src/Simulator/adapters/stim_adapter.cpp
-  src/Simulator/adapters/stim_nv_adapter.cpp
+  src/Simulator/SimulatorRunners/simulator_runner.cpp
+  src/Simulator/SimulatorAdapters/mock_adapter.cpp
+  src/Simulator/SimulatorAdapters/stim_adapter.cpp
+  src/Simulator/SimulatorAdapters/stim_nv_adapter.cpp
   
   #Message Broker
   src/MessageBroker/message_broker.cpp
   #Entanglement Manager
-  src/Simulator/entanglement/entanglement_manager.cpp
-  src/SimulatorRunners/entanglement_runner.cpp
-  #Utils
-  src/utils/config_loader.cpp
+  src/Simulator/EntanglementManager/entanglement_manager.cpp
+  src/Simulator/SimulatorRunners/entanglement_runner.cpp
+  #Configuration Engine
+  src/ConfigurationEngine/config_loader.cpp
 )
 
 target_include_directories(qilab_lib PUBLIC
@@ -146,17 +146,18 @@ add_executable(qilab
   src/DataTransmission/TransmissionRunner/transmission_runner.cpp
   src/DataTransmission/TransmissionProcessor/transmission_processor.cpp
   #Simulator
-  src/SimulatorRunners/simulator_runner.cpp
-  src/Simulator/adapters/mock_adapter.cpp
-  src/Simulator/adapters/stim_adapter.cpp
-  src/Simulator/adapters/stim_nv_adapter.cpp
+  src/Simulator/SimulatorRunners/simulator_runner.cpp
+  src/Simulator/SimulatorAdapters/mock_adapter.cpp
+  src/Simulator/SimulatorAdapters/stim_adapter.cpp
+  src/Simulator/SimulatorAdapters/stim_nv_adapter.cpp
+  src/Simulator/SimulatorManager/simulator_manager.cpp  
   #Message Broker
   src/MessageBroker/message_broker.cpp
   #Entanglement Manager
-  src/Simulator/entanglement/entanglement_manager.cpp
-  src/SimulatorRunners/entanglement_runner.cpp
-  #Utils
-  src/utils/config_loader.cpp
+  src/Simulator/EntanglementManager/entanglement_manager.cpp
+  src/Simulator/SimulatorRunners/entanglement_runner.cpp
+  #Configuration Engine
+  src/ConfigurationEngine/config_loader.cpp
     )
 target_include_directories(qilab PRIVATE ${CMAKE_BINARY_DIR}/generated)
 target_link_libraries(qilab PRIVATE libstim profiler logger)

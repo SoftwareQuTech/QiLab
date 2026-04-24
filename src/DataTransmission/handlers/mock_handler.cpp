@@ -48,10 +48,10 @@ void MockHandler::create_commands()
     // command_list.push_back(new QMeasure(2 * i - 1, 0, Axis_t::Z_AXIS));
     // command_list.push_back(new QMeasure(0, 0, Axis_t::Z_AXIS));
 
-    command_list.push_back(new Entangle(1, 1, 3));
-    command_list.push_back(new Entangle(1, 0, 3));
-    command_list.push_back(new Entangle(1, 3, 3));
     command_list.push_back(new Entangle(1, 2, 3));
+    command_list.push_back(new Entangle(1, 1, 3));
+    command_list.push_back(new Entangle(1, 4, 3));
+    command_list.push_back(new Entangle(1, 3, 3));
 
     //command_list.push_back(new EntanMeasure(1, 2, 3, true, false, 1));
 }

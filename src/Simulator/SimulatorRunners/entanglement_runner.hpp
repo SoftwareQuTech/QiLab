@@ -22,7 +22,7 @@
 
 #include <MessageBroker/message_broker.hpp>
 #include "DataTypes/command_data.hpp"
-#include "Simulator/entanglement/entanglement_manager.hpp"
+#include "Simulator/EntanglementManager/entanglement_manager.hpp"
 
 /**
  * @brief Runs the entanglement coordination loop on a dedicated thread.

@@ -6,7 +6,7 @@
 #include "logger/logger_api.hpp"
 #include "utils/thread_utils.hpp"
 
-#define TRANSMISSION_STEP_DELAY 10  // microseconds
+#define TRANSMISSION_STEP_DELAY 1000000  // microseconds
 
 DataTransmissionRunner::DataTransmissionRunner(std::vector<int16_t> nodes, std::unique_ptr<TransmissionProcessor> processor, std::shared_ptr<MessageBroker> broker) 
     : transmission_processor(std::move(processor)), registered_nodes(nodes), message_broker(broker) 

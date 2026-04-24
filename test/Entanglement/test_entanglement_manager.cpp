@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include "Simulator/entanglement/entanglement_manager.hpp"
+#include "Simulator/EntanglementManager/entanglement_manager.hpp"
 #include "DataTypes/commands.hpp"
 #include "mocks/command_mock.hpp" 
 
