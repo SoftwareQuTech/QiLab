@@ -50,5 +50,10 @@
 /RelWithDebInfo
 /MinSizeRel
 
+
+
 #vscode
 .vscode
+
+#github
+.github

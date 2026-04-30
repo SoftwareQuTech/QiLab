@@ -1,56 +1,513 @@
 #include "config_loader.hpp"
+
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <cstdlib>
-#include <charconv>
-#include <cctype>
+#include <string>
+#include <vector>
 
+#include "ConfigurationEngine/parse_entanglement_config.hpp"
+#include "ConfigurationEngine/parse_node_config.hpp"
+#include "ConfigurationEngine/parse_scalar_helpers.hpp"
 #include "logger/logger_api.hpp"
 
 namespace {
 
-std::string trim(const std::string& input) noexcept {
-    size_t begin = 0;
-    while (begin < input.size() && std::isspace(static_cast<unsigned char>(input[begin])) != 0) {
-        ++begin;
+constexpr int kIndentStep = 2;
+constexpr float kDefaultT2ValueNs = 1000.0f;
+constexpr const char* kTypeKey = "type";
+constexpr const char* kNumQubitsKey = "num_qubits";
+constexpr const char* kNameKey = "name";
+constexpr const char* kNodeTypeKey = "node_type";
+constexpr const char* kNoiseModelKey = "noise_model";
+constexpr const char* kQubitArraysKey = "qubit_arrays";
+constexpr const char* kNodesKey = "nodes";
+constexpr const char* kEntanglementNoiseModelKey = "entanglement_noise_model";
+
+struct ParsedLine
+{
+    int indent = 0;
+    std::string content;
+};
+
+int count_leading_spaces(const std::string& line) noexcept
+{
+    int spaces = 0;
+    while (spaces < static_cast<int>(line.size()) && line[static_cast<std::size_t>(spaces)] == ' ')
+    {
+        ++spaces;
     }
 
-    size_t end = input.size();
-    while (end > begin && std::isspace(static_cast<unsigned char>(input[end - 1])) != 0) {
-        --end;
-    }
-
-    return input.substr(begin, end - begin);
+    return spaces;
 }
 
-bool parse_positive_int(const std::string& text, int& value) noexcept {
-    const std::string trimmed = trim(text);
-    if (trimmed.empty()) {
+QubitNoiseModelConfig make_default_qubit_noise_model() noexcept
+{
+    return QubitNoiseModelConfig{.config_data = QubitNoiseBasicConfig{.t2_value = kDefaultT2ValueNs}};
+}
+
+bool set_parse_error(std::string& error,
+                     const char* scope,
+                     const std::string& detail) noexcept
+{
+    error = std::string("[") + scope + "] " + detail;
+    return false;
+}
+
+bool set_parse_error_near(std::string& error,
+                          const char* scope,
+                          const std::string& detail,
+                          const std::string& near_content) noexcept
+{
+    return set_parse_error(error, scope, detail + " near '" + near_content + "'");
+}
+
+std::vector<ParsedLine> read_config_lines(std::ifstream& stream)
+{
+    std::vector<ParsedLine> result;
+    std::string line;
+    while (std::getline(stream, line))
+    {
+        const int indent = count_leading_spaces(line);
+        const std::string content = config_parse::trim(line.substr(static_cast<std::size_t>(indent)));
+        if (content.empty() || content[0] == '#')
+        {
+            continue;
+        }
+
+        result.push_back(ParsedLine{.indent = indent, .content = content});
+    }
+
+    return result;
+}
+
+template <typename VariantType, typename ParserMap>
+bool parse_model_block(const std::vector<ParsedLine>& lines,
+                       std::size_t& index,
+                       int parent_indent,
+                       const ParserMap& parser_map,
+                       VariantType& output,
+                       std::string& error) noexcept
+{
+    config_parse::FieldMap model_fields;
+
+    while (index < lines.size() && lines[index].indent > parent_indent)
+    {
+        if (lines[index].indent != parent_indent + kIndentStep)
+        {
+            return set_parse_error_near(error, "model", "Invalid indentation", lines[index].content);
+        }
+
+        const auto key_value = config_parse::split_key_value(lines[index].content);
+        if (!key_value.has_value())
+        {
+            return set_parse_error_near(error, "model", "Invalid key/value", lines[index].content);
+        }
+
+        if (model_fields.find(key_value->first) != model_fields.end())
+        {
+            return set_parse_error(error, "model", "Duplicate key '" + key_value->first + "'");
+        }
+
+        model_fields.insert(*key_value);
+        ++index;
+    }
+
+    std::string model_type_name;
+    if (!config_parse::require_key(model_fields, kTypeKey, model_type_name, error))
+    {
         return false;
     }
 
-    int parsed_value = 0;
-    const char* begin = trimmed.data();
-    const char* end = trimmed.data() + trimmed.size();
-    const auto [ptr, ec] = std::from_chars(begin, end, parsed_value);
-    if (ec != std::errc() || ptr != end || parsed_value <= 0) {
-        return false;
+    const auto parser_it = parser_map.find(model_type_name);
+    if (parser_it == parser_map.end())
+    {
+        return set_parse_error(error, "model", "Unsupported type '" + model_type_name + "'");
     }
 
-    value = parsed_value;
+    return parser_it->second(model_fields, output, error);
+}
+
+bool parse_inline_num_qubits(const std::string& inline_content,
+                             int& num_qubits,
+                             bool& has_num_qubits,
+                             std::string& error,
+                             const char* context_name) noexcept
+{
+    if (inline_content.empty())
+    {
+        return true;
+    }
+
+    const auto inline_kv = config_parse::split_key_value(inline_content);
+    if (!inline_kv.has_value() || inline_kv->first != kNumQubitsKey)
+    {
+        return set_parse_error(error,
+                               context_name,
+                               "Unsupported inline item '" + inline_content + "' (expected 'num_qubits')");
+    }
+
+    if (!config_parse::parse_positive_int(inline_kv->second, num_qubits))
+    {
+        return set_parse_error(error,
+                               context_name,
+                               "Invalid num_qubits value '" + inline_kv->second + "'");
+    }
+
+    has_num_qubits = true;
     return true;
 }
 
-bool parse_node_num_qubits_line(const std::string& line, int& num_qubits) noexcept {
-    static constexpr const char* key = "num_qubits:";
-    const std::string trimmed = trim(line);
-
-    if (trimmed.rfind(key, 0) != 0) {
-        return false;
+bool parse_qubit_array_field(const std::vector<ParsedLine>& lines,
+                             std::size_t& index,
+                             int item_indent,
+                             QubitArrayConfig& array_config,
+                             bool& has_num_qubits,
+                             bool& has_noise_model,
+                             std::string& error) noexcept
+{
+    const auto key_value = config_parse::split_key_value(lines[index].content);
+    if (!key_value.has_value())
+    {
+        return set_parse_error_near(error, "qubit_array", "Invalid key/value", lines[index].content);
     }
 
-    return parse_positive_int(trimmed.substr(11), num_qubits);
+    if (key_value->first == kNumQubitsKey)
+    {
+        if (!config_parse::parse_positive_int(key_value->second, array_config.num_qubits))
+        {
+            return set_parse_error(error, "qubit_array", "Invalid num_qubits value '" + key_value->second + "'");
+        }
+
+        has_num_qubits = true;
+        ++index;
+        return true;
+    }
+
+    if (key_value->first == kNoiseModelKey)
+    {
+        if (!key_value->second.empty())
+        {
+            return set_parse_error(error, "qubit_array", "noise_model must be a nested map");
+        }
+
+        ++index;
+        if (!parse_model_block(lines,
+                               index,
+                               item_indent + kIndentStep,
+                               config_parse::qubit_model_parsers(),
+                               array_config.noise_model.config_data,
+                               error))
+        {
+            return false;
+        }
+
+        has_noise_model = true;
+        return true;
+    }
+
+    return set_parse_error(error, "qubit_array", "Unknown key '" + key_value->first + "'");
+}
+
+bool parse_single_qubit_array_item(const std::vector<ParsedLine>& lines,
+                                   std::size_t& index,
+                                   int parent_indent,
+                                   QubitArrayConfig& array_config,
+                                   std::string& error) noexcept
+{
+    if (lines[index].indent != parent_indent + kIndentStep)
+    {
+        return set_parse_error_near(error, "qubit_array", "Invalid indentation", lines[index].content);
+    }
+
+    if (lines[index].content.empty() || lines[index].content[0] != '-')
+    {
+        return set_parse_error(error, "qubit_array", "Expected list entry under qubit_arrays");
+    }
+
+    const int item_indent = lines[index].indent;
+    const std::string inline_content = config_parse::trim(lines[index].content.substr(1));
+    ++index;
+
+    bool has_num_qubits = false;
+    bool has_noise_model = false;
+
+    if (!inline_content.empty())
+    {
+        const auto inline_kv = config_parse::split_key_value(inline_content);
+        if (!inline_kv.has_value())
+        {
+            return set_parse_error(error, "qubit_array", "Invalid inline key/value '" + inline_content + "'");
+        }
+
+        if (inline_kv->first == kNumQubitsKey)
+        {
+            if (!config_parse::parse_positive_int(inline_kv->second, array_config.num_qubits))
+            {
+                return set_parse_error(error,
+                                       "qubit_array",
+                                       "Invalid num_qubits value '" + inline_kv->second + "'");
+            }
+
+            has_num_qubits = true;
+        }
+        else if (inline_kv->first == kNoiseModelKey)
+        {
+            if (!inline_kv->second.empty())
+            {
+                return set_parse_error(error, "qubit_array", "noise_model must be a nested map");
+            }
+
+            if (!parse_model_block(lines,
+                                   index,
+                                   item_indent + kIndentStep,
+                                   config_parse::qubit_model_parsers(),
+                                   array_config.noise_model.config_data,
+                                   error))
+            {
+                return false;
+            }
+
+            has_noise_model = true;
+        }
+        else
+        {
+            return set_parse_error(error,
+                                   "qubit_array",
+                                   "Unsupported inline item '" + inline_content + "'");
+        }
+    }
+
+    while (index < lines.size() && lines[index].indent > item_indent)
+    {
+        if (lines[index].indent != item_indent + kIndentStep)
+        {
+            return set_parse_error_near(error, "qubit_array", "Invalid indentation", lines[index].content);
+        }
+
+        if (!parse_qubit_array_field(lines, index, item_indent, array_config, has_num_qubits, has_noise_model, error))
+        {
+            return false;
+        }
+    }
+
+    if (!has_num_qubits)
+    {
+        return set_parse_error(error, "qubit_array", "Missing required key 'num_qubits'");
+    }
+
+    if (!has_noise_model)
+    {
+        return set_parse_error(error, "qubit_array", "Missing required key 'noise_model'");
+    }
+
+    return true;
+}
+
+bool parse_qubit_arrays(const std::vector<ParsedLine>& lines,
+                        std::size_t& index,
+                        int parent_indent,
+                        std::vector<QubitArrayConfig>& qubit_arrays,
+                        std::string& error) noexcept
+{
+    while (index < lines.size() && lines[index].indent > parent_indent)
+    {
+        QubitArrayConfig array_config{
+            .num_qubits = 0,
+            .noise_model = make_default_qubit_noise_model()};
+
+        if (!parse_single_qubit_array_item(lines, index, parent_indent, array_config, error))
+        {
+            return false;
+        }
+
+        qubit_arrays.push_back(array_config);
+    }
+
+    if (qubit_arrays.empty())
+    {
+        return set_parse_error(error, "qubit_arrays", "List must not be empty");
+    }
+
+    return true;
+}
+
+bool parse_node_field(const std::vector<ParsedLine>& lines,
+                      std::size_t& index,
+                      int item_indent,
+                      NodeConfig& node_config,
+                      bool& has_qubit_arrays,
+                      std::string& error) noexcept
+{
+    const auto key_value = config_parse::split_key_value(lines[index].content);
+    if (!key_value.has_value())
+    {
+        return set_parse_error_near(error, "node", "Invalid key/value", lines[index].content);
+    }
+
+    if (key_value->first == kNameKey)
+    {
+        node_config.name = key_value->second;
+        ++index;
+        return true;
+    }
+
+    if (key_value->first == kNodeTypeKey)
+    {
+        const auto parsed_type = config_parse::parse_node_type(key_value->second);
+        if (!parsed_type.has_value())
+        {
+            return set_parse_error(error, "node", "Unsupported node_type '" + key_value->second + "'");
+        }
+
+        node_config.node_type = *parsed_type;
+        ++index;
+        return true;
+    }
+
+    if (key_value->first == kQubitArraysKey)
+    {
+        if (!key_value->second.empty())
+        {
+            return set_parse_error(error, "node", "qubit_arrays must be a list");
+        }
+
+        ++index;
+        if (!parse_qubit_arrays(lines, index, item_indent + kIndentStep, node_config.qubit_arrays, error))
+        {
+            return false;
+        }
+
+        has_qubit_arrays = true;
+        return true;
+    }
+
+    return set_parse_error(error, "node", "Unknown key '" + key_value->first + "'");
+}
+
+bool finalize_node_config(NodeConfig& node_config,
+                          bool has_qubit_arrays,
+                          std::string& error) noexcept
+{
+    if (!has_qubit_arrays)
+    {
+        return set_parse_error(error, "node", "Requires qubit_arrays");
+    }
+
+    int sum_qubits = 0;
+    for (const auto& array_config : node_config.qubit_arrays)
+    {
+        sum_qubits += array_config.num_qubits;
+    }
+
+    node_config.num_qubits = sum_qubits;
+
+    return true;
+}
+
+bool parse_single_node_item(const std::vector<ParsedLine>& lines,
+                            std::size_t& index,
+                            NodeConfig& node_config,
+                            std::string& error) noexcept
+{
+    if (lines[index].indent != kIndentStep)
+    {
+        return set_parse_error_near(error, "nodes", "Invalid indentation", lines[index].content);
+    }
+
+    if (lines[index].content.empty() || lines[index].content[0] != '-')
+    {
+        return set_parse_error(error, "nodes", "Expected list item");
+    }
+
+    const int item_indent = lines[index].indent;
+    const std::string inline_content = config_parse::trim(lines[index].content.substr(1));
+    ++index;
+
+    bool has_qubit_arrays = false;
+
+    if (!inline_content.empty())
+    {
+        const auto inline_kv = config_parse::split_key_value(inline_content);
+        if (!inline_kv.has_value())
+        {
+            return set_parse_error(error, "node", "Invalid inline key/value '" + inline_content + "'");
+        }
+
+        if (inline_kv->first == kNameKey)
+        {
+            node_config.name = inline_kv->second;
+        }
+        else if (inline_kv->first == kNodeTypeKey)
+        {
+            const auto parsed_type = config_parse::parse_node_type(inline_kv->second);
+            if (!parsed_type.has_value())
+            {
+                return set_parse_error(error, "node", "Unsupported node_type '" + inline_kv->second + "'");
+            }
+
+            node_config.node_type = *parsed_type;
+        }
+        else if (inline_kv->first == kQubitArraysKey)
+        {
+            if (!inline_kv->second.empty())
+            {
+                return set_parse_error(error, "node", "qubit_arrays must be a list");
+            }
+
+            if (!parse_qubit_arrays(lines, index, item_indent + kIndentStep, node_config.qubit_arrays, error))
+            {
+                return false;
+            }
+
+            has_qubit_arrays = true;
+        }
+        else
+        {
+            return set_parse_error(error,
+                                   "node",
+                                   "Unsupported inline item '" + inline_content + "'");
+        }
+    }
+
+    while (index < lines.size() && lines[index].indent > item_indent)
+    {
+        if (lines[index].indent != item_indent + kIndentStep)
+        {
+            return set_parse_error_near(error, "node", "Invalid indentation", lines[index].content);
+        }
+
+        if (!parse_node_field(lines, index, item_indent, node_config, has_qubit_arrays, error))
+        {
+            return false;
+        }
+    }
+
+    return finalize_node_config(node_config, has_qubit_arrays, error);
+}
+
+bool parse_nodes(const std::vector<ParsedLine>& lines,
+                 std::size_t& index,
+                 AppConfig& app_config,
+                 std::string& error) noexcept
+{
+    while (index < lines.size() && lines[index].indent > 0)
+    {
+        NodeConfig node_config{
+            .num_qubits = 0,
+            .name = "",
+            .node_type = QuantumNodeType::GENERIC,
+            .qubit_arrays = {}};
+
+        if (!parse_single_node_item(lines, index, node_config, error))
+        {
+            return false;
+        }
+
+        app_config.nodes.push_back(node_config);
+    }
+
+    return true;
 }
 
 } // namespace
@@ -68,7 +525,6 @@ std::string get_default_config_path() noexcept {
 
     const char* home = std::getenv("HOME");
     if (!home) {
-        // Fallback to current directory if HOME is not set
         return ".qilab/config/nodes.yaml";
     }
     return std::string(home) + "/.qilab/config/nodes.yaml";
@@ -77,8 +533,7 @@ std::string get_default_config_path() noexcept {
 bool create_default_config() noexcept {
     std::string config_path = get_default_config_path();
     std::filesystem::path path(config_path);
-    
-    // Create directory if it doesn't exist
+
     std::filesystem::path dir = path.parent_path();
     std::error_code error;
     if (!std::filesystem::exists(dir, error)) {
@@ -97,7 +552,6 @@ bool create_default_config() noexcept {
         }
     }
 
-    // Don't overwrite existing config
     if (std::filesystem::exists(config_path, error)) {
         if (error) {
             LOG_ERROR("Failed to inspect config file '" + config_path + "': " + error.message());
@@ -113,7 +567,6 @@ bool create_default_config() noexcept {
         return false;
     }
 
-    // Create default configuration
     std::ofstream config_file(config_path);
     if (!config_file.is_open()) {
         LOG_ERROR("Failed to create config file: " + config_path);
@@ -122,13 +575,19 @@ bool create_default_config() noexcept {
 
     config_file << "# QILab Node Configuration\n";
     config_file << "# This file defines the quantum network nodes for simulation\n";
-    config_file << "#\n";
-    config_file << "# Each node should specify:\n";
-    config_file << "#   num_qubits: Number of qubits in the node\n";
+    config_file << "\n";
+    config_file << "entanglement_noise_model:\n";
+    config_file << "  type: BASIC\n";
+    config_file << "  t2_value: 1000\n";
     config_file << "\n";
     config_file << "nodes:\n";
-    config_file << "  - num_qubits: 10\n";
-    config_file << "  - num_qubits: 10\n";
+    config_file << "  - name: node0\n";
+    config_file << "    node_type: GENERIC\n";
+    config_file << "    qubit_arrays:\n";
+    config_file << "      - num_qubits: 10\n";
+    config_file << "        noise_model:\n";
+    config_file << "          type: BASIC\n";
+    config_file << "          t2_value: 1000\n";
 
     config_file.close();
     LOG_INFO("Created default config file at: " + config_path);
@@ -136,9 +595,8 @@ bool create_default_config() noexcept {
 }
 
 std::optional<AppConfig> load_config(const std::string& config_path) noexcept {
-    std::string path = config_path.empty() ? get_default_config_path() : config_path;
-    
-    // Check if file exists
+    const std::string path = config_path.empty() ? get_default_config_path() : config_path;
+
     std::error_code error;
     if (!std::filesystem::exists(path, error)) {
         if (error) {
@@ -146,8 +604,7 @@ std::optional<AppConfig> load_config(const std::string& config_path) noexcept {
             return std::nullopt;
         }
 
-        LOG_ERROR("Config file not found: " + path);
-        LOG_INFO("Creating default configuration...");
+        LOG_INFO("Config file not found. Creating default configuration...");
         if (!create_default_config()) {
             return std::nullopt;
         }
@@ -159,79 +616,84 @@ std::optional<AppConfig> load_config(const std::string& config_path) noexcept {
         return std::nullopt;
     }
 
+    const std::vector<ParsedLine> lines = read_config_lines(config_file);
+
     AppConfig app_config;
+    //default entanglement noise model to ensure it's always present, even if not specified in the config
+    app_config.entanglement_noise_model = EntanglementNoiseBasicConfig{.t2_value = kDefaultT2ValueNs};
 
-    bool found_nodes_section = false;
-    bool pending_node_value = false;
-    std::string line;
+    bool found_nodes = false;
 
-    while (std::getline(config_file, line)) {
-        const std::string trimmed = trim(line);
-        if (trimmed.empty() || trimmed[0] == '#') {
-            continue;
+    std::size_t index = 0;
+    while (index < lines.size())
+    {
+        if (lines[index].indent != 0)
+        {
+            LOG_ERROR("Unexpected indentation near top-level entry '" + lines[index].content + "'");
+            return std::nullopt;
         }
 
-        if (!found_nodes_section) {
-            if (trimmed == "nodes:") {
-                found_nodes_section = true;
-            }
-            continue;
+        const auto key_value = config_parse::split_key_value(lines[index].content);
+        if (!key_value.has_value())
+        {
+            LOG_ERROR("Invalid top-level key/value entry: " + lines[index].content);
+            return std::nullopt;
         }
 
-        if (pending_node_value) {
-            int parsed_num_qubits = 0;
-            if (!parse_node_num_qubits_line(trimmed, parsed_num_qubits)) {
-                LOG_ERROR("Node missing or invalid 'num_qubits' field");
+        if (key_value->first == kNodesKey)
+        {
+            if (!key_value->second.empty())
+            {
+                LOG_ERROR("'nodes' must be a list block");
                 return std::nullopt;
             }
 
-            app_config.nodes.push_back(NodeConfig{.num_qubits = parsed_num_qubits});
-            pending_node_value = false;
-            continue;
-        }
-
-        if (trimmed[0] == '-') {
-            const std::string after_dash = trim(trimmed.substr(1));
-            if (after_dash.empty()) {
-                pending_node_value = true;
-                continue;
-            }
-
-            int parsed_num_qubits = 0;
-            if (!parse_node_num_qubits_line(after_dash, parsed_num_qubits)) {
-                LOG_ERROR("Node missing or invalid 'num_qubits' field");
+            ++index;
+            std::string parse_error;
+            if (!parse_nodes(lines, index, app_config, parse_error))
+            {
+                LOG_ERROR("nodes parsing error: " + parse_error);
                 return std::nullopt;
             }
 
-            app_config.nodes.push_back(NodeConfig{.num_qubits = parsed_num_qubits});
+            found_nodes = true;
             continue;
         }
 
-        if (trimmed.back() == ':') {
-            break;
+        if (key_value->first == kEntanglementNoiseModelKey)
+        {
+            if (!key_value->second.empty())
+            {
+                LOG_ERROR("'entanglement_noise_model' must be a map block");
+                return std::nullopt;
+            }
+
+            ++index;
+            std::string parse_error;
+            if (!parse_model_block(lines,
+                                   index,
+                                   0,
+                                   config_parse::entanglement_model_parsers(),
+                                   app_config.entanglement_noise_model,
+                                   parse_error))
+            {
+                LOG_ERROR("entanglement_noise_model parsing error: " + parse_error);
+                return std::nullopt;
+            }
+
+            continue;
         }
 
-        LOG_ERROR("Invalid nodes list entry: " + trimmed);
+        LOG_ERROR("Unknown top-level key: " + key_value->first);
         return std::nullopt;
     }
 
-    if (!found_nodes_section) {
-        LOG_ERROR("Config file is missing 'nodes' section");
+    if (!found_nodes || app_config.nodes.empty())
+    {
+        LOG_ERROR("Config must contain a non-empty 'nodes' section");
         return std::nullopt;
     }
 
-    if (pending_node_value) {
-        LOG_ERROR("Node missing 'num_qubits' field");
-        return std::nullopt;
-    }
-
-    if (app_config.nodes.empty()) {
-        LOG_ERROR("'nodes' must be a non-empty list");
-        return std::nullopt;
-    }
-
-    LOG_INFO("Loaded configuration with " + std::to_string(app_config.nodes.size())
-             + " nodes from: " + path);
-
+    LOG_INFO("Loaded configuration with " + std::to_string(app_config.nodes.size()) + " nodes from: " + path);
     return app_config;
 }

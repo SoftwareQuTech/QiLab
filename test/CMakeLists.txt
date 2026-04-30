@@ -44,6 +44,24 @@ GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
 target_compile_definitions(message_broker_test PRIVATE LOGGING_ENABLED=0)
 add_test(NAME message_broker_test COMMAND message_broker_test)
 
+add_executable(config_loader_test
+                ${CMAKE_CURRENT_SOURCE_DIR}/ConfigurationEngine/test_config_loader.cpp
+                )
+target_compile_definitions(config_loader_test PRIVATE PROF_ENABLED=0 LOGGING_ENABLED=0)
+target_include_directories(config_loader_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(config_loader_test PRIVATE
+GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
+add_test(NAME config_loader_test COMMAND config_loader_test)
+
+add_executable(qubit_models_test
+                ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/NoiseModels/test_qubit_models.cpp
+                )
+target_compile_definitions(qubit_models_test PRIVATE PROF_ENABLED=0 LOGGING_ENABLED=0)
+target_include_directories(qubit_models_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(qubit_models_test PRIVATE
+GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
+add_test(NAME qubit_models_test COMMAND qubit_models_test)
+
 # -------- Enabled tests (only build if PROF_ENABLED is set) --------
 add_executable(prof_tests_enabled 
 ${CMAKE_CURRENT_SOURCE_DIR}/logger/test_profiler_enabled.cpp)
@@ -67,4 +85,6 @@ gtest_discover_tests(prof_tests_disabled)
 gtest_discover_tests(prof_tests_enabled)
 gtest_discover_tests(entanglement_manager_test)
 gtest_discover_tests(message_broker_test)
+gtest_discover_tests(config_loader_test)
+gtest_discover_tests(qubit_models_test)
 

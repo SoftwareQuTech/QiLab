@@ -68,27 +68,30 @@ int16_t SimulatorManager::register_node(const NodeConfig &node_config)
         return -1;
     }
 
-    if(std::get_if<QubitNoiseBasicConfig>(&node_config.qubit_noise_model.config_data))
+    for (const auto &array_config : node_config.qubit_arrays)
     {
-        LOG_INFO("Registering node with BASIC qubit noise model.");
-        for (uint16_t i = 0; i < requested_qubits; i++)
+        if (std::get_if<QubitNoiseBasicConfig>(&array_config.noise_model.config_data))
         {
-            simulation_qubits[registered_qubits + i] = std::make_unique<QubitModelBasic>(std::get<QubitNoiseBasicConfig>(node_config.qubit_noise_model.config_data));
+            LOG_INFO("Registering node with BASIC qubit noise model.");
+            for (uint16_t i = 0; i < requested_qubits; i++)
+            {
+                simulation_qubits[registered_qubits + i] = std::make_unique<QubitModelBasic>(std::get<QubitNoiseBasicConfig>(array_config.noise_model.config_data));
+            }
         }
-    }
-    else if(std::get_if<QubitNoiseAdvancedConfig>(&node_config.qubit_noise_model.config_data))
-    {
-        // Placeholder for advanced model registration
-        LOG_INFO("Registering node with ADVANCED qubit noise model. NOT IMPLEMENTED");
-        // simulator_manager.add_qubit_noise_model(node_id, std::make_unique<QubitModelAdvanced>(*qm_advanced));
-        return -2;
-    }
-    else
-    {
-        LOG_WARNING("Node registered with no valid qubit noise model configuration. Defaulting to BASIC model with T2=1000ns.");
-        for (uint16_t i = 0; i < requested_qubits; i++)
+        else if (std::get_if<QubitNoiseAdvancedConfig>(&array_config.noise_model.config_data))
         {
-            simulation_qubits[registered_qubits + i] = std::make_unique<QubitModelBasic>(QubitNoiseBasicConfig{1000.0f});
+            // Placeholder for advanced model registration
+            LOG_INFO("Registering node with ADVANCED qubit noise model. NOT IMPLEMENTED");
+            // simulator_manager.add_qubit_noise_model(node_id, std::make_unique<QubitModelAdvanced>(*qm_advanced));
+            return -2;
+        }
+        else
+        {
+            LOG_WARNING("Node registered with no valid qubit noise model configuration. Defaulting to BASIC model with T2=1000ns.");
+            for (uint16_t i = 0; i < requested_qubits; i++)
+            {
+                simulation_qubits[registered_qubits + i] = std::make_unique<QubitModelBasic>(QubitNoiseBasicConfig{1000.0f});
+            }
         }
     }
 
