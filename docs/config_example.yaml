@@ -5,7 +5,7 @@
 
 entanglement_noise_model:
   type: BASIC
-  t2_value: 1000
+  t2_value: 0
 
 nodes:
   - name: node0
@@ -19,14 +19,10 @@ nodes:
       qubit_init: 200
     node_type: GENERIC
     qubit_arrays:
-      - num_qubits: 10
+      - num_qubits: 1
         noise_model:
-          type: BASIC
-          t2_value: 1000
-      - num_qubits: 10
-        noise_model:
-          type: ADVANCED
-          t2_value: 1000
+          type: PHASE_FLIP
+          t2_value: 3.17e7
 
   # Add more nodes below, e.g.:
   # - name: node1
