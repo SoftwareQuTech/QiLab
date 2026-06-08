@@ -85,6 +85,15 @@ int16_t SimulatorManager::register_node(const NodeConfig &node_config)
             // simulator_manager.add_qubit_noise_model(node_id, std::make_unique<QubitModelAdvanced>(*qm_advanced));
             return -2;
         }
+        else if (std::get_if<PhaseFlipNoiseConfig>(&array_config.noise_model.config_data))
+        {
+            // Placeholder for phase flip model registration
+            LOG_INFO("Registering node with PHASE_FLIP qubit noise model.");
+            for (uint16_t i = 0; i < requested_qubits; i++)
+            {
+                simulation_qubits[registered_qubits + i] = std::make_unique<PhaseFlipQubitModel>(std::get<PhaseFlipNoiseConfig>(array_config.noise_model.config_data));
+        }
+        }
         else
         {
             LOG_WARNING("Node registered with no valid qubit noise model configuration. Defaulting to BASIC model with T2=1000ns.");

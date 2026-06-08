@@ -23,11 +23,12 @@ void MockHandler::create_commands()
 {
     const int number_of_nodes = 1;
 
-    // for (auto y = 0; y < (2 * number_of_nodes) - 2; y++)
-    // {
-    //     command_list.push_back(new InitQubit(y));
-    // }
-    // command_list.push_back(new SingleQGate(1, Angle_t::_15_PI_16, Axis_t::X_AXIS));
+    for (auto y = 0; y < (2 * number_of_nodes) - 2; y++)
+    {
+         command_list.push_back(new InitQubit(y));
+    }
+    command_list.push_back(new Nop());
+    command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::Z_AXIS));
     // command_list.push_back(new Entangle(1, 1, 0));
     // int i = 0;
     // for (i = 1; i < (number_of_nodes - 1); i++)
@@ -46,12 +47,12 @@ void MockHandler::create_commands()
     //                                                   new SingleQGate(2 * i + 1, Angle_t::_15_PI_16, Axis_t::X_AXIS)));
     // }
     // command_list.push_back(new QMeasure(2 * i - 1, 0, Axis_t::Z_AXIS));
-    // command_list.push_back(new QMeasure(0, 0, Axis_t::Z_AXIS));
+    //command_list.push_back(new QMeasure(0, 0, Axis_t::Z_AXIS));
 
-    command_list.push_back(new Entangle(1, 2, 3));
-    command_list.push_back(new Entangle(1, 1, 3));
-    command_list.push_back(new Entangle(1, 4, 3));
-    command_list.push_back(new Entangle(1, 3, 3));
+    //  command_list.push_back(new Entangle(1, 2, 3));
+    // command_list.push_back(new Entangle(1, 1, 3));
+    // command_list.push_back(new Entangle(1, 4, 3));
+    // command_list.push_back(new Entangle(1, 3, 3));
 
     //command_list.push_back(new EntanMeasure(1, 2, 3, true, false, 1));
 }
@@ -102,7 +103,7 @@ int8_t MockHandler::transfer(uint8_t const* tx_buffer, uint8_t const* rx_buffer,
     // {
     //     return -1;
     // }
-    for(int i = 0; i < length/4; i++)
+    for (int i = 0; i < length/4; i++)
     {
         fill_mock_message(rx_buffer + i * EXPECTED_MESSAGE_SIZE);
     }

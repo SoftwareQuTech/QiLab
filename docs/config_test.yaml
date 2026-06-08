@@ -1,0 +1,28 @@
+# QILab Node Configuration
+# This file defines the quantum network nodes for simulation
+#
+# Location: ~/.qilab/config/nodes.yaml
+
+entanglement_noise_model:
+  type: BASIC
+  t2_value: 0
+
+nodes:
+  - name: test_node
+    node_type: GENERIC
+    qubit_arrays:
+      - num_qubits: 1
+        noise_model:
+          type: PHASE_FLIP
+          t2_value: 1e6
+          #t2_value: 1e6 # 1 ms in ns
+
+  # Add more nodes below, e.g.:
+  # - name: node1
+  #   node_type: NV_CENTER
+  #   qubit_arrays:
+  #     - num_qubits: 4
+  #       noise_model:
+  #         type: DEPOLARIZING
+  #         error_rate: 0.01
+  #         gate_time_ns: 100

@@ -11,25 +11,26 @@ inline bool parse_qubit_phase_flip_model(const FieldMap& fields,
                                          QubitNoiseConfigData& output,
                                          std::string& error) noexcept
 {
-    if (!ensure_allowed_keys(fields, {"type", "flip_probability"}, error))
+    if (!ensure_allowed_keys(fields, {"type", "t2_value"}, error))
     {
         return false;
     }
 
-    std::string probability_text;
-    if (!require_key(fields, "flip_probability", probability_text, error))
+    std::string t2_text;
+    if (!require_key(fields, "t2_value", t2_text, error))
     {
         return false;
     }
 
-    float flip_probability = 0.0f;
-    if (!parse_non_negative_float(probability_text, flip_probability))
+    float t2_value = 0.0f;
+    if (!parse_non_negative_float(t2_text, t2_value))
     {
-        error = "Invalid value for 'flip_probability': " + probability_text;
+        error = "Invalid value for 't2_value': " + t2_text;
         return false;
     }
 
-    output = PhaseFlipNoiseConfig{.flip_probability = flip_probability};
+    output = PhaseFlipNoiseConfig{.t2_value = t2_value};
+    LOG_INFO("Parsed PHASE_FLIP qubit noise model with t2_value = " + std::to_string(t2_value) + " ns.");
     return true;
 }
 
