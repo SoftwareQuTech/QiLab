@@ -42,25 +42,18 @@ public:
         LOG_INFO("$$ get_qubit_decoherence_probability: Calculating phase flip error probability based on elapsed time and T2 value.");
 
         auto now = std::chrono::steady_clock::now();
-        // auto elapsed_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_operation_timestamp_ns).count();
+        auto elapsed_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_operation_timestamp_ns).count();
         // qubit_survival = exp(- (elapsed_time / t2)^2)
         // rho = (1 - flip_prob)rho + flip_prob * Z * rho * Z
 
         // 1 - 2p_flip = W 
         // p_flip = (1 - W) / 2
 
-       
-        float w = std::exp(-std::pow(elapsed_time_ns / t2, 2));
-        float p_flip = 0.5f * (1.0f - w);
-
-        // float p_flip = 0.5f * (1.0 - std::exp(-(static_cast<float>(elapsed_ns) / t2) * (static_cast<float>(elapsed_ns) / t2)));
         LOG_INFO("$$ get_qubit_decoherence_probability: elapsed_time_ns = " + std::to_string(elapsed_time_ns) + " ns, T2 = " + std::to_string(t2) + " ns");
         LOG_INFO("$$ get_qubit_decoherence_probability: w = " + std::to_string(w));
         LOG_INFO("$$ get_qubit_decoherence_probability: p_flip = " + std::to_string(p_flip));
 
-        elapsed_time_ns += 100000; // increment .1 ms TODO: REMOVE AFTER TEST
-
-        return p_flip;
+        return 0.5f * (1.0 - std::exp(-(static_cast<float>(elapsed_ns) / t2) * (static_cast<float>(elapsed_ns) / t2)));;
     }
 
 
