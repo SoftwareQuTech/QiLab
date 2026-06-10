@@ -39,6 +39,12 @@ public:
     // get the probability of a phase flip error occurring based on the elapsed time 
     // since the last operation and the T2 time of the qubit
     {
+        if (t2 < 0.0f)
+        {
+            LOG_ERROR("$$ get_qubit_decoherence_probability: T2 value is invalid.");
+            return 0.0f;
+        }
+
         LOG_INFO("$$ get_qubit_decoherence_probability: Calculating phase flip error probability based on elapsed time and T2 value.");
 
         auto now = std::chrono::steady_clock::now();
