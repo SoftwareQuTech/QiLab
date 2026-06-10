@@ -49,10 +49,6 @@ public:
         // 1 - 2p_flip = W 
         // p_flip = (1 - W) / 2
 
-        LOG_INFO("$$ get_qubit_decoherence_probability: elapsed_time_ns = " + std::to_string(elapsed_time_ns) + " ns, T2 = " + std::to_string(t2) + " ns");
-        LOG_INFO("$$ get_qubit_decoherence_probability: w = " + std::to_string(w));
-        LOG_INFO("$$ get_qubit_decoherence_probability: p_flip = " + std::to_string(p_flip));
-
         return 0.5f * (1.0 - std::exp(-(static_cast<float>(elapsed_ns) / t2) * (static_cast<float>(elapsed_ns) / t2)));;
     }
 
