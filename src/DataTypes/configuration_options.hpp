@@ -79,10 +79,22 @@ struct QubitArrayConfig
     QubitNoiseModelConfig noise_model;
 };
 
+struct QuantumOperationsDelaysNs
+{
+    uint16_t single_gate_delay;
+    uint16_t two_gate_delay;
+    uint16_t measurement_delay;
+    uint16_t entanglement_delay;
+    uint16_t qubit_move_delay;
+    uint16_t qubit_swap_delay;
+    uint16_t qubit_init_delay;
+};
+
 struct NodeConfig
 {
     int num_qubits;                                    // derived: sum of qubit_arrays[].num_qubits
     std::string name;
     QuantumNodeType node_type = QuantumNodeType::GENERIC;
+    QuantumOperationsDelaysNs qubit_operations_delays;
     std::vector<QubitArrayConfig> qubit_arrays;
 };

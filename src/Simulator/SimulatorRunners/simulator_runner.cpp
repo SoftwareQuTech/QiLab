@@ -50,29 +50,35 @@ int SimulatorRunner::on_run(int core_id)
 
     while (!abort)
     {
+        ResponseData response_data;
         PROF_START(prof_event_simulation_thread_log);
 
         if (message_broker->get_command(command, DestinationType::SimRunner))
         {
-
-            ResponseData response_data;
+            // ResponseData response_data;
             // LOG_INFO("Received command for node " + std::to_string(command.node_id) + " of type " + std::to_string(command.transport->command_type) + ".");
-            auto ret_code = simulator_manager->proccess_command(command.node_id, std::move(command.transport), response_data);
+            auto ret_code = simulator_manager->add_new_command_to_process(command.node_id, std::move(command.transport), response_data);
 
             if (ret_code != 0)
             {
                 LOG_ERROR("Error processing command for node " + std::to_string(command.node_id) + ". Error code: " + std::to_string(ret_code));
             }
-            else
+        }
+        uint16_t node_id = 0; // Placeholder, actual node_id should be determined based on the command being processed
+        if (simulator_manager->try_get_ready_response(response_data, node_id) == 0)
+        {
+            response.transport = std::make_unique<ResponseData>(std::move(response_data));
+            response.node_id = node_id; 
+            if (!message_broker->route_response(std::move(response)))
             {
-                response.transport = std::make_unique<ResponseData>(std::move(response_data));
-
-                if (!message_broker->route_response(std::move(response)))
-                {
-                    // error
-                    LOG_ERROR("Failed to route response for node " + std::to_string(command.node_id) + ".");
-                }
+                // error
+                LOG_ERROR("Failed to route response for node " + std::to_string(node_id) + ".");
             }
+        }
+        else
+        {
+            // No response ready, can perform other tasks or simply continue
+            // LOG_INFO("No ready response from simulator manager.");
         }
         std::this_thread::sleep_for(std::chrono::microseconds(5));
         PROF_STOP(prof_event_simulation_thread_log);

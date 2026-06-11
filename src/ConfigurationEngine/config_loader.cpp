@@ -22,6 +22,7 @@ constexpr const char* kNodeTypeKey = "node_type";
 constexpr const char* kNoiseModelKey = "noise_model";
 constexpr const char* kQubitArraysKey = "qubit_arrays";
 constexpr const char* kNodesKey = "nodes";
+constexpr const char* kQuantumOperationsDelays = "quantum_operations_delay_ns";
 constexpr const char* kEntanglementNoiseModelKey = "entanglement_noise_model";
 
 struct ParsedLine

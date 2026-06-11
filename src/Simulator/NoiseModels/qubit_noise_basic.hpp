@@ -29,10 +29,10 @@ public:
     QubitModelBasic(const QubitNoiseBasicConfig& config) : t2(config.t2_value), last_operation_timestamp_ns(std::chrono::steady_clock::now()){}
     ~QubitModelBasic() override = default;
 
-    inline int mark_touched() override
+    inline int mark_touched(uint64_t delay = 0) override
     {
         // Update the timestamp of the last operation
-        last_operation_timestamp_ns = std::chrono::steady_clock::now();
+        last_operation_timestamp_ns = std::chrono::steady_clock::now() + std::chrono::nanoseconds(delay);
         return 0; // Return value to satisfy the interface, can be adjusted as needed
     }   
     

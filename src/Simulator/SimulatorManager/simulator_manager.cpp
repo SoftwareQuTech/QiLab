@@ -1,4 +1,5 @@
 #include <variant>
+#include <thread>
 
 #include "simulator_manager.hpp"
 #include "logger/logger_api.hpp"
@@ -42,6 +43,107 @@ bool SimulatorManager::are_local_qubits_in_range(uint16_t node_id, uint16_t loca
 {
     return is_local_qubit_in_range(node_id, local_qubit1) &&
            is_local_qubit_in_range(node_id, local_qubit2);
+}
+
+SimulatorManager::CommandTimingInfo SimulatorManager::build_command_timing_info(uint16_t node_id, int16_t qubit_offset, const CommandBase &command) const
+{
+    CommandTimingInfo info;
+
+    switch (command.command_type)
+    {
+    case Command_t::NOP:
+        info.target_delay_ns = 100;
+        break;
+    case Command_t::QUBIT_INIT:
+    {
+        auto *cmd = static_cast<const QubitInitialize *>(&command);
+        info.target_delay_ns = node_operation_delays[node_id].qubit_init_delay;
+        info.global_qubit_1 = qubit_offset + cmd->qubit1_address;
+        break;
+    }
+    case Command_t::SINGLE_QUBIT_GATE:
+    {
+        auto *cmd = static_cast<const SingleQubitGate *>(&command);
+        if (cmd->angle != 0)
+        {
+            info.target_delay_ns = node_operation_delays[node_id].single_gate_delay;
+            info.global_qubit_1 = qubit_offset + cmd->qubit1_address;
+        }
+        break;
+    }
+    case Command_t::TWO_QUBIT_GATE:
+    {
+        auto *cmd = static_cast<const TwoQubitGate *>(&command);
+        if (cmd->angle != 0)
+        {
+            info.target_delay_ns = node_operation_delays[node_id].two_gate_delay;
+            info.global_qubit_1 = qubit_offset + cmd->qubit1_address;
+            info.global_qubit_2 = qubit_offset + cmd->qubit2_address;
+        }
+        break;
+    }
+    case Command_t::QUBIT_MEASUREMENT:
+    {
+        auto *cmd = static_cast<const QubitMeasure *>(&command);
+        info.target_delay_ns = node_operation_delays[node_id].measurement_delay;
+        info.global_qubit_1 = qubit_offset + cmd->qubit1_address;
+        break;
+    }
+    case Command_t::ENTANGLEMENT_ATTEMPT:
+    {
+        auto *cmd = static_cast<const EntanglementAttempt *>(&command);
+        info.target_delay_ns = node_operation_delays[node_id].entanglement_delay;
+        info.global_qubit_1 = qubit_offset + cmd->qid;
+        break;
+    }
+    case Command_t::ENTANGLEMENT_MEASURE:
+    {
+        auto *cmd = static_cast<const EntangleMeasure *>(&command);
+        info.target_delay_ns = node_operation_delays[node_id].entanglement_delay + node_operation_delays[node_id].measurement_delay;
+        info.global_qubit_1 = qubit_offset + cmd->qid;
+        break;
+    }
+    case Command_t::ENTANGLEMENT_SWAP:
+    {
+        auto *cmd = static_cast<const EntanglementSwap *>(&command);
+        info.target_delay_ns = node_operation_delays[node_id].qubit_swap_delay;
+        info.global_qubit_1 = qubit_offset + cmd->qubit1_address;
+        info.global_qubit_2 = qubit_offset + cmd->qubit2_address;
+        break;
+    }
+    case Command_t::QUBIT_MOVE:
+    {
+        auto *cmd = static_cast<const QubitMove *>(&command);
+        info.target_delay_ns = node_operation_delays[node_id].qubit_move_delay;
+        info.global_qubit_1 = qubit_offset + cmd->qubit1_address;
+        info.global_qubit_2 = qubit_offset + cmd->qubit2_address;
+        break;
+    }
+    case Command_t::QUBIT_SWAP:
+    {
+        auto *cmd = static_cast<const QubitSwap *>(&command);
+        info.target_delay_ns = node_operation_delays[node_id].qubit_swap_delay;
+        info.global_qubit_1 = qubit_offset + cmd->qubit1_address;
+        info.global_qubit_2 = qubit_offset + cmd->qubit2_address;
+        break;
+    }
+    default:
+        break;
+    }
+
+    return info;
+}
+
+void SimulatorManager::apply_touch_with_delay(const CommandTimingInfo &timing_info, uint64_t wait_ns)
+{
+    if (timing_info.global_qubit_1 >= 0)
+    {
+        simulation_qubits[static_cast<std::size_t>(timing_info.global_qubit_1)]->mark_touched(static_cast<int64_t>(wait_ns));
+    }
+    if (timing_info.global_qubit_2 >= 0)
+    {
+        simulation_qubits[static_cast<std::size_t>(timing_info.global_qubit_2)]->mark_touched(static_cast<int64_t>(wait_ns));
+    }
 }
 
 int16_t SimulatorManager::register_node(const NodeConfig &node_config)
@@ -95,6 +197,16 @@ int16_t SimulatorManager::register_node(const NodeConfig &node_config)
         }
     }
 
+    // Assign the noises to the node noise array
+    node_operation_delays[registered_nodes].single_gate_delay = node_config.qubit_operations_delays.single_gate_delay;
+    node_operation_delays[registered_nodes].two_gate_delay = node_config.qubit_operations_delays.two_gate_delay;
+    node_operation_delays[registered_nodes].entanglement_delay = node_config.qubit_operations_delays.entanglement_delay;
+    node_operation_delays[registered_nodes].measurement_delay = node_config.qubit_operations_delays.measurement_delay;
+    node_operation_delays[registered_nodes].qubit_swap_delay = node_config.qubit_operations_delays.qubit_swap_delay;
+    node_operation_delays[registered_nodes].qubit_move_delay = node_config.qubit_operations_delays.qubit_move_delay;
+    node_operation_delays[registered_nodes].qubit_init_delay = node_config.qubit_operations_delays.qubit_init_delay;
+
+
     // Assign the node ID and update the registry
     nodes[registered_nodes] = std::make_pair(registered_qubits, requested_qubits);
     // the index in the vector is the id(fast?)
@@ -115,7 +227,7 @@ bool SimulatorManager::unregister_node(int16_t node_id)
 }
 
 
-int SimulatorManager::proccess_command(uint16_t node_id, std::unique_ptr<CommandBase> command, ResponseData& response)
+int SimulatorManager::add_new_command_to_process(uint16_t node_id, std::unique_ptr<CommandBase> command, ResponseData& response)
 {
     if (command == nullptr)
     {
@@ -140,10 +252,39 @@ int SimulatorManager::proccess_command(uint16_t node_id, std::unique_ptr<Command
     }
 
     int16_t qubit_offset = nodes[node_id].first;
+    const CommandTimingInfo timing_info = build_command_timing_info(node_id, qubit_offset, *command);
 
+    const auto start_time = clock_type::now();
     response = (this->*sim_command_table[type])(std::move(command), qubit_offset, node_id);
+    const auto elapsed_ns = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(clock_type::now() - start_time).count());
+
+    uint64_t wait_ns = 0;
+    const bool success = (response.outcome & static_cast<uint8_t>(Outcome_Status_t::SUCCESS)) != 0;
+    if (success)
+    {
+        wait_ns = (timing_info.target_delay_ns > elapsed_ns) ? (timing_info.target_delay_ns - elapsed_ns) : 0;
+        apply_touch_with_delay(timing_info, wait_ns);
+    }
+
+    operations_engine.add_new_response_to_wait(response, node_id, wait_ns);
 
     return 0;
+}
+
+int SimulatorManager::try_get_ready_response(ResponseData& response, uint16_t &node_id)
+{
+    int ret_code = -1;
+    //must apply touched paradigm
+    if(operations_engine.try_get_ready_response(response, node_id))
+    {
+        //mark the qubit as touched in order to update the noise model
+        // this is needed in order to ensure the noise is updated after the delay has passed, and not before, which would be unrealistic
+        // the touched paradigm is that the noise is updated only when the qubit is accessed, and not when the command is executed, in order to ensure the noise is updated after the delay has passed, and not before, which would be unrealistic
+        // this is especially important for the single qubit gate, which can have a long delay, and the noise should be updated after the delay
+        ret_code = 0;
+    }
+
+    return ret_code;
 }
 
 ResponseData SimulatorManager::nop_command_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id)
@@ -176,12 +317,22 @@ ResponseData SimulatorManager::single_qubit_gate_handler(std::unique_ptr<Command
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         return response;
     }
-    float qubit_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
-    //simulator_inst->apply_qubit_noise(cmd->qubit1_address + qubit_offset, qubit_noise);
+
+    /// Apply the operations noises here, before the operation is executed, in order to ensure the noise is applied even if the operation fails due to invalid qubits or other reasons, which would be more realistic
+    // Get the qubit in memory noise which shold be dephasing
+    auto p_dephasing = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
+    // Get the qubit noise for the single gate operation, which should be depolarizing
+    //auto p_dephasing = simulation_gates->get_single_qubit_gate_noise_probability(angle, axis);
+    // Combine the noises to get the total noise probability for the operation, this is a simple model, in reality the noise would be more complex and depend on the specific operation and the qubit state, but this is a good starting point
+    //auto total_noise_probability = 1 - (1 - p_dephasing) * (1 - p_single_gate);
+    // Apply the noise
+    //simualtor_inst->apply_qubit_noise(cmd->qubit1_address + qubit_offset, p_dephasing, p_polarizing);
+
+    time_point start_time = clock_type::now();
     simulator_inst->single_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->angle, cmd->axis);
-    simulation_qubits[cmd->qubit1_address + qubit_offset]->mark_touched();
     response.outcome = Outcome_Status_t::SUCCESS;
     response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
+
     return response;
 }
 
@@ -363,6 +514,10 @@ ResponseData SimulatorManager::pre_measurement_gates_selection_handler(std::uniq
     (void)node_id;
     ResponseData response;
     auto *cmd = static_cast<PreMeasureGatesSelection *>(command.get());
+
+    // no need to apply delay, as the gates are applied when measuring
+    // which begs the question do we apply the gate delay multiple times when measuring
+
     simulator_inst->pre_measure_gates_selection(cmd->target + qubit_offset,
                                                 cmd->angle1,
                                                 cmd->angle2,

@@ -28,9 +28,9 @@ public:
 
     ~DepolarizingQubitModel() override = default;
 
-    inline int mark_touched() override
+    inline int mark_touched(uint64_t delay = 0) override
     {
-        last_operation_timestamp_ns = std::chrono::steady_clock::now();
+        last_operation_timestamp_ns = std::chrono::steady_clock::now() + std::chrono::nanoseconds(delay);
         return 0;
     }
 

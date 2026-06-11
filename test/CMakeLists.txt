@@ -62,6 +62,15 @@ target_link_libraries(qubit_models_test PRIVATE
 GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
 add_test(NAME qubit_models_test COMMAND qubit_models_test)
 
+add_executable(operations_engine_test
+                ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/SimulatorManager/test_operations_engine.cpp
+                )
+target_compile_definitions(operations_engine_test PRIVATE PROF_ENABLED=0 LOGGING_ENABLED=0)
+target_include_directories(operations_engine_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(operations_engine_test PRIVATE
+GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
+add_test(NAME operations_engine_test COMMAND operations_engine_test)
+
 # -------- Enabled tests (only build if PROF_ENABLED is set) --------
 add_executable(prof_tests_enabled 
 ${CMAKE_CURRENT_SOURCE_DIR}/logger/test_profiler_enabled.cpp)
@@ -87,4 +96,5 @@ gtest_discover_tests(entanglement_manager_test)
 gtest_discover_tests(message_broker_test)
 gtest_discover_tests(config_loader_test)
 gtest_discover_tests(qubit_models_test)
+gtest_discover_tests(operations_engine_test)
 

@@ -9,11 +9,23 @@ entanglement_noise_model:
 
 nodes:
   - name: node0
+    quantum_operations_delay_ns:
+      single_gate_rotation: 200
+      two_qubit_gate_rotation: 300
+      measurement: 400
+      entanglement: 500
+      qubit_move: 600
+      qubit_swap: 400
+      qubit_init: 200
     node_type: GENERIC
     qubit_arrays:
       - num_qubits: 10
         noise_model:
           type: BASIC
+          t2_value: 1000
+      - num_qubits: 10
+        noise_model:
+          type: ADVANCED
           t2_value: 1000
 
   # Add more nodes below, e.g.:

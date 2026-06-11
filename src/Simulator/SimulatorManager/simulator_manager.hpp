@@ -11,6 +11,7 @@
 #pragma once
 #include "memory"
 #include "array"
+#include "chrono"
 
 #include "DataTypes/commands.hpp"
 #include "DataTypes/responses.hpp"
@@ -18,9 +19,14 @@
 #include "Simulator/qubit_noise_interface.hpp"
 #include "DataTypes/configuration_options.hpp"
 #include "logger/profiler_api.hpp"
+#include "Simulator/SimulatorManager/operations_engine.hpp"
 
 class SimulatorManager
 {
+    using clock_type = std::chrono::steady_clock;
+    using time_point = typename clock_type::time_point;
+    using duration = typename clock_type::duration;
+    
 public:
     SimulatorManager(std::unique_ptr<ISimulator> simulator);
     ~SimulatorManager();
@@ -55,11 +61,18 @@ public:
      */
     bool unregister_node(int16_t node_id);
 
-    int proccess_command(uint16_t node_id, std::unique_ptr<CommandBase> command, ResponseData& response);
+    int add_new_command_to_process(uint16_t node_id, std::unique_ptr<CommandBase> command, ResponseData& response);
+    int try_get_ready_response(ResponseData& response, uint16_t &node_id);
 
     const uint16_t get_registered_nodes() const { return registered_nodes; }
     const uint16_t get_registered_qubits() const { return registered_qubits; }
 private:
+    struct CommandTimingInfo
+    {
+        uint64_t target_delay_ns = 0;
+        int32_t global_qubit_1 = -1;
+        int32_t global_qubit_2 = -1;
+    };
 
     using SimCommandFn = ResponseData (SimulatorManager::*)(std::unique_ptr<CommandBase> command,
                                                             int16_t qubit_offset,
@@ -81,13 +94,21 @@ private:
     uint16_t registered_qubits = 0;
     std::array<std::unique_ptr<QubitNoiseInterface>, MAX_QUBITS_AVAILABLE> simulation_qubits;
 
+    /// Registry of delays per node. Keep it separate in order to keep the nodes array as ligh as possible
+    /// The array index is equal to the node index
+    std::array<QuantumOperationsDelaysNs, MAX_NODES_AVAILABLE> node_operation_delays;
     /// The underlying quantum simulator
     std::unique_ptr<ISimulator> simulator_inst;
 
     std::array<SimCommandFn, MAX_COMMANDS_AVAILABLE> sim_command_table = {};
 
+    //operations engine functions
+    OperationsEngine operations_engine;
+
     bool is_local_qubit_in_range(uint16_t node_id, uint16_t local_qubit) const;
     bool are_local_qubits_in_range(uint16_t node_id, uint16_t local_qubit1, uint16_t local_qubit2) const;
+    CommandTimingInfo build_command_timing_info(uint16_t node_id, int16_t qubit_offset, const CommandBase &command) const;
+    void apply_touch_with_delay(const CommandTimingInfo &timing_info, uint64_t wait_ns);
     
     ResponseData nop_command_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id);
     ResponseData single_qubit_gate_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id);

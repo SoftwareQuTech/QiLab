@@ -132,7 +132,7 @@ public:
      *          returns a result code
      */
     bool entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_address) override;
-
+    bool apply_qubit_noise(uint8_t qubit_address, float p_dephasing, float p_depolarizing) override;
     bool allocate_qubits(uint8_t num_qubits) override;
 private:
     // Cached objects for all quantum operations

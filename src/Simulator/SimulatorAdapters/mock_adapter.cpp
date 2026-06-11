@@ -80,3 +80,12 @@ bool MockAdapter::entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_addre
 
     return true;
 }
+
+bool MockAdapter::apply_qubit_noise(uint8_t qubit_address, float p_dephasing, float p_depolarizing)
+{
+    std::cout << "MOCK SIM: Apply qubit noise on address: " << qubit_address << std::endl;
+    std::cout << "MOCK SIM: Apply qubit noise with dephasing probability: " << p_dephasing << std::endl;
+    std::cout << "MOCK SIM: Apply qubit noise with depolarizing probability: " << p_depolarizing << std::endl;
+
+    return true;
+}
