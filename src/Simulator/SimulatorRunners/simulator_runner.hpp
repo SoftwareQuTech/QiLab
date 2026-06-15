@@ -111,6 +111,8 @@ class SimulatorRunner
     
     /// Time for simulation thread logging operations
     Profiler_id prof_event_simulation_thread_log = PROF_REGISTER_EVENT("simulation_thread_log");
+    Profiler_id prof_event_add_new_command = PROF_REGISTER_EVENT("add_new_command");
+    Profiler_id prof_event_try_new_response = PROF_REGISTER_EVENT("try_new_response");
 
     /// Non-copyable
     SimulatorRunner(const SimulatorRunner&) = delete;

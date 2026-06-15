@@ -35,6 +35,7 @@ bool OperationsEngine::add_new_response_to_wait(ResponseData response, uint16_t 
 
     auto current_time_ns = std::chrono::steady_clock::now();
     waiting_responses.push_back(Entry{std::move(response), node_id, current_time_ns + std::chrono::nanoseconds(wait_ns)});
+    PROF_START(prof_event_operation_time_wait);
     return true;
 }
 
@@ -48,6 +49,7 @@ bool OperationsEngine::try_get_ready_response(ResponseData& response, uint16_t &
             response = std::move(waiting_responses[i].response);
             node_id = waiting_responses[i].node_id;
             swap_pop_erase(waiting_responses, i);
+            PROF_STOP(prof_event_operation_time_wait);
             return true;
         }
     }

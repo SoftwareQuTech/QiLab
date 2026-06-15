@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cctype>
+#include <cstdint>
 #include <charconv>
 #include <cmath>
 #include <cstdlib>
@@ -86,6 +87,47 @@ inline bool parse_non_negative_float(const std::string& text, float& value) noex
     }
 
     value = parsed_value;
+    return true;
+}
+
+inline bool parse_non_negative_u16(const std::string& text, uint16_t& value) noexcept
+{
+    const std::string normalized = trim(text);
+    if (normalized.empty())
+    {
+        return false;
+    }
+
+    unsigned int parsed_value = 0;
+    const char* begin = normalized.data();
+    const char* end = normalized.data() + normalized.size();
+    const auto [ptr, ec] = std::from_chars(begin, end, parsed_value);
+    if (ec != std::errc() || ptr != end || parsed_value > static_cast<unsigned int>(UINT16_MAX))
+    {
+        return false;
+    }
+
+    value = static_cast<uint16_t>(parsed_value);
+    return true;
+}
+inline bool parse_non_negative_u64(const std::string& text, uint64_t& value) noexcept
+{
+    const std::string normalized = trim(text);
+    if (normalized.empty())
+    {
+        return false;
+    }
+
+    unsigned long long parsed_value = 0;
+    const char* begin = normalized.data();
+    const char* end = normalized.data() + normalized.size();
+    const auto [ptr, ec] = std::from_chars(begin, end, parsed_value);
+    if (ec != std::errc() || ptr != end || parsed_value > static_cast<unsigned long long>(UINT64_MAX))
+    {
+        return false;
+    }
+
+    value = static_cast<uint64_t>(parsed_value);
     return true;
 }
 

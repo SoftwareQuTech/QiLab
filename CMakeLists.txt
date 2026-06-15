@@ -119,7 +119,9 @@ add_library(qilab_lib STATIC
   src/Simulator/SimulatorAdapters/mock_adapter.cpp
   src/Simulator/SimulatorAdapters/stim_adapter.cpp
   src/Simulator/SimulatorAdapters/stim_nv_adapter.cpp
-  
+  src/Simulator/SimulatorManager/simulator_manager.cpp  
+  src/Simulator/SimulatorManager/operations_engine.cpp
+    
   #Message Broker
   src/MessageBroker/message_broker.cpp
   #Entanglement Manager

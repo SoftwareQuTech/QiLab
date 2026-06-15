@@ -81,13 +81,13 @@ struct QubitArrayConfig
 
 struct QuantumOperationsDelaysNs
 {
-    uint16_t single_gate_delay;
-    uint16_t two_gate_delay;
-    uint16_t measurement_delay;
-    uint16_t entanglement_delay;
-    uint16_t qubit_move_delay;
-    uint16_t qubit_swap_delay;
-    uint16_t qubit_init_delay;
+    uint64_t single_gate_delay;
+    uint64_t two_gate_delay;
+    uint64_t measurement_delay;
+    uint64_t entanglement_delay;
+    uint64_t qubit_move_delay;
+    uint64_t qubit_swap_delay;
+    uint64_t qubit_init_delay;
 };
 
 struct NodeConfig

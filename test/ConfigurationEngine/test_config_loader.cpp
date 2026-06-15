@@ -119,8 +119,44 @@ TEST_F(ConfigLoaderTest, LoadsModernQubitArraysAndEntanglementModel)
     EXPECT_EQ(node.qubit_arrays[0].num_qubits, 1);
     EXPECT_EQ(node.qubit_arrays[1].num_qubits, 2);
 
-    EXPECT_TRUE(std::holds_alternative<QubitNoiseBasicConfig>(node.qubit_noise_model.config_data));
+    EXPECT_TRUE(std::holds_alternative<QubitNoiseBasicConfig>(node.qubit_arrays[0].noise_model.config_data));
     EXPECT_TRUE(std::holds_alternative<PhaseFlipNoiseConfig>(node.qubit_arrays[1].noise_model.config_data));
+}
+
+TEST_F(ConfigLoaderTest, ParsesQuantumOperationDelays)
+{
+    const std::string yaml =
+        "nodes:\n"
+        "  - name: node_with_delays\n"
+        "    quantum_operations_delay_ns:\n"
+        "      single_gate_rotation: 11\n"
+        "      two_qubit_gate_rotation: 22\n"
+        "      measurement: 33\n"
+        "      entanglement: 44\n"
+        "      qubit_move: 55\n"
+        "      qubit_swap: 66\n"
+        "      qubit_init: 77\n"
+        "    node_type: GENERIC\n"
+        "    qubit_arrays:\n"
+        "      - num_qubits: 1\n"
+        "        noise_model:\n"
+        "          type: BASIC\n"
+        "          t2_value: 1000\n";
+
+    const auto path = write_config("node_with_delays.yaml", yaml);
+    const auto config = load_config(path.string());
+
+    ASSERT_TRUE(config.has_value());
+    ASSERT_EQ(config->nodes.size(), 1u);
+
+    const auto& delays = config->nodes.front().qubit_operations_delays;
+    EXPECT_EQ(delays.single_gate_delay, 11);
+    EXPECT_EQ(delays.two_gate_delay, 22);
+    EXPECT_EQ(delays.measurement_delay, 33);
+    EXPECT_EQ(delays.entanglement_delay, 44);
+    EXPECT_EQ(delays.qubit_move_delay, 55);
+    EXPECT_EQ(delays.qubit_swap_delay, 66);
+    EXPECT_EQ(delays.qubit_init_delay, 77);
 }
 
 TEST_F(ConfigLoaderTest, RejectsUnknownTopLevelKey)
@@ -335,7 +371,7 @@ TEST_F(ConfigLoaderTest, NodeLevelNoiseModelFollowsFirstArray)
     const auto config = load_config(path.string());
     ASSERT_TRUE(config.has_value());
     EXPECT_TRUE(std::holds_alternative<PhaseFlipNoiseConfig>(
-        config->nodes.front().qubit_noise_model.config_data));
+        config->nodes.front().qubit_arrays.front().noise_model.config_data));
 }
 
 // ---------------------------------------------------------------------------

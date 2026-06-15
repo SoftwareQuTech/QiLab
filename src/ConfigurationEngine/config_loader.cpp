@@ -23,6 +23,13 @@ constexpr const char* kNoiseModelKey = "noise_model";
 constexpr const char* kQubitArraysKey = "qubit_arrays";
 constexpr const char* kNodesKey = "nodes";
 constexpr const char* kQuantumOperationsDelays = "quantum_operations_delay_ns";
+constexpr const char* kSingleGateRotationKey = "single_gate_rotation";
+constexpr const char* kTwoQubitGateRotationKey = "two_qubit_gate_rotation";
+constexpr const char* kMeasurementKey = "measurement";
+constexpr const char* kEntanglementKey = "entanglement";
+constexpr const char* kQubitMoveKey = "qubit_move";
+constexpr const char* kQubitSwapKey = "qubit_swap";
+constexpr const char* kQubitInitKey = "qubit_init";
 constexpr const char* kEntanglementNoiseModelKey = "entanglement_noise_model";
 
 struct ParsedLine
@@ -333,6 +340,80 @@ bool parse_qubit_arrays(const std::vector<ParsedLine>& lines,
     return true;
 }
 
+bool parse_quantum_operation_delays(const std::vector<ParsedLine>& lines,
+                                    std::size_t& index,
+                                    int parent_indent,
+                                    QuantumOperationsDelaysNs& delays,
+                                    std::string& error) noexcept
+{
+    while (index < lines.size() && lines[index].indent > parent_indent)
+    {
+        if (lines[index].indent != parent_indent + kIndentStep)
+        {
+            return set_parse_error_near(error,
+                                        "quantum_operations_delay_ns",
+                                        "Invalid indentation",
+                                        lines[index].content);
+        }
+
+        const auto key_value = config_parse::split_key_value(lines[index].content);
+        if (!key_value.has_value())
+        {
+            return set_parse_error_near(error,
+                                        "quantum_operations_delay_ns",
+                                        "Invalid key/value",
+                                        lines[index].content);
+        }
+
+        uint64_t parsed_delay = 0;
+        if (!config_parse::parse_non_negative_u64(key_value->second, parsed_delay))
+        {
+            return set_parse_error(error,
+                                   "quantum_operations_delay_ns",
+                                   "Invalid value for '" + key_value->first + "': '" + key_value->second + "'");
+        }
+
+        if (key_value->first == kSingleGateRotationKey)
+        {
+            delays.single_gate_delay = parsed_delay;
+        }
+        else if (key_value->first == kTwoQubitGateRotationKey)
+        {
+            delays.two_gate_delay = parsed_delay;
+        }
+        else if (key_value->first == kMeasurementKey)
+        {
+            delays.measurement_delay = parsed_delay;
+        }
+        else if (key_value->first == kEntanglementKey)
+        {
+            delays.entanglement_delay = parsed_delay;
+        }
+        else if (key_value->first == kQubitMoveKey)
+        {
+            delays.qubit_move_delay = parsed_delay;
+        }
+        else if (key_value->first == kQubitSwapKey)
+        {
+            delays.qubit_swap_delay = parsed_delay;
+        }
+        else if (key_value->first == kQubitInitKey)
+        {
+            delays.qubit_init_delay = parsed_delay;
+        }
+        else
+        {
+            return set_parse_error(error,
+                                   "quantum_operations_delay_ns",
+                                   "Unknown key '" + key_value->first + "'");
+        }
+
+        ++index;
+    }
+
+    return true;
+}
+
 bool parse_node_field(const std::vector<ParsedLine>& lines,
                       std::size_t& index,
                       int item_indent,
@@ -380,6 +461,26 @@ bool parse_node_field(const std::vector<ParsedLine>& lines,
         }
 
         has_qubit_arrays = true;
+        return true;
+    }
+
+    if (key_value->first == kQuantumOperationsDelays)
+    {
+        if (!key_value->second.empty())
+        {
+            return set_parse_error(error, "node", "quantum_operations_delay_ns must be a map");
+        }
+
+        ++index;
+        if (!parse_quantum_operation_delays(lines,
+                                            index,
+                                            item_indent + kIndentStep,
+                                            node_config.qubit_operations_delays,
+                                            error))
+        {
+            return false;
+        }
+
         return true;
     }
 
@@ -583,6 +684,14 @@ bool create_default_config() noexcept {
     config_file << "\n";
     config_file << "nodes:\n";
     config_file << "  - name: node0\n";
+    config_file << "    quantum_operations_delay_ns:\n";
+    config_file << "      single_gate_rotation: 0\n";
+    config_file << "      two_qubit_gate_rotation: 0\n";
+    config_file << "      measurement: 0\n";
+    config_file << "      entanglement: 0\n";
+    config_file << "      qubit_move: 0\n";
+    config_file << "      qubit_swap: 0\n";
+    config_file << "      qubit_init: 0\n";
     config_file << "    node_type: GENERIC\n";
     config_file << "    qubit_arrays:\n";
     config_file << "      - num_qubits: 10\n";

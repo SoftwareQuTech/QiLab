@@ -55,6 +55,8 @@ int SimulatorRunner::on_run(int core_id)
 
         if (message_broker->get_command(command, DestinationType::SimRunner))
         {
+            PROF_START(prof_event_add_new_command);
+
             // ResponseData response_data;
             // LOG_INFO("Received command for node " + std::to_string(command.node_id) + " of type " + std::to_string(command.transport->command_type) + ".");
             auto ret_code = simulator_manager->add_new_command_to_process(command.node_id, std::move(command.transport), response_data);
@@ -63,7 +65,9 @@ int SimulatorRunner::on_run(int core_id)
             {
                 LOG_ERROR("Error processing command for node " + std::to_string(command.node_id) + ". Error code: " + std::to_string(ret_code));
             }
+            PROF_STOP(prof_event_add_new_command);
         }
+        PROF_START(prof_event_try_new_response);
         uint16_t node_id = 0; // Placeholder, actual node_id should be determined based on the command being processed
         if (simulator_manager->try_get_ready_response(response_data, node_id) == 0)
         {
@@ -80,6 +84,7 @@ int SimulatorRunner::on_run(int core_id)
             // No response ready, can perform other tasks or simply continue
             // LOG_INFO("No ready response from simulator manager.");
         }
+        PROF_STOP(prof_event_try_new_response);
         std::this_thread::sleep_for(std::chrono::microseconds(5));
         PROF_STOP(prof_event_simulation_thread_log);
         // CPU_PAUSE();

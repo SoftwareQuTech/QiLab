@@ -82,7 +82,9 @@ int main()
     std::shared_ptr<MessageBroker> broker = std::make_shared<MessageBroker>();
     
     // Load configuration from file
-    auto config = load_config();
+    const std::string config_path = get_default_config_path();
+    LOG_INFO("Using configuration file: " + config_path);
+    auto config = load_config(config_path);
     if (!config) {
         LOG_ERROR("Failed to load configuration, exiting");
         return 1;
