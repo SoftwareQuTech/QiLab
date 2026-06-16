@@ -262,6 +262,7 @@ int SimulatorManager::add_new_command_to_process(uint16_t node_id, std::unique_p
     const bool success = (response.outcome & static_cast<uint8_t>(Outcome_Status_t::SUCCESS)) != 0;
     if (success)
     {
+        // LOG_INFO("Command for node " + std::to_string(node_id) + " executed successfully in " + std::to_string(elapsed_ns) + " ns. Target delay was " + std::to_string(timing_info.target_delay_ns) + " ns.");
         wait_ns = (timing_info.target_delay_ns > elapsed_ns) ? (timing_info.target_delay_ns - elapsed_ns) : 0;
         apply_touch_with_delay(timing_info, wait_ns);
     }

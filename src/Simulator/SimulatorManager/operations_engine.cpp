@@ -35,6 +35,7 @@ bool OperationsEngine::add_new_response_to_wait(ResponseData response, uint16_t 
 
     auto current_time_ns = std::chrono::steady_clock::now();
     waiting_responses.push_back(Entry{std::move(response), node_id, current_time_ns + std::chrono::nanoseconds(wait_ns)});
+    LOG_INFO("Added response for node " + std::to_string(node_id) + " with wait time of " + std::to_string(wait_ns) + " ns. Total waiting responses: " + std::to_string(waiting_responses.size()) + ".");
     PROF_START(prof_event_operation_time_wait);
     return true;
 }
@@ -46,9 +47,11 @@ bool OperationsEngine::try_get_ready_response(ResponseData& response, uint16_t &
     {
         if (waiting_responses[i].ready_time_ns <= current_time_ns)
         {
+            
             response = std::move(waiting_responses[i].response);
             node_id = waiting_responses[i].node_id;
             swap_pop_erase(waiting_responses, i);
+            LOG_INFO("Response for node " + std::to_string(node_id) + " is ready after waiting. Remaining waiting responses: " + std::to_string(waiting_responses.size()) + ".");
             PROF_STOP(prof_event_operation_time_wait);
             return true;
         }

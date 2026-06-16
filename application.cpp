@@ -32,7 +32,7 @@
 #include "qilab/version.hpp"
 #include "ConfigurationEngine/config_loader.hpp"
 
-#define RUN_MOCKED_TRANSMISSION
+//#define RUN_MOCKED_TRANSMISSION
 
 bool abort_sim = false;
 
