@@ -13,7 +13,11 @@ if [[ $# -ne 2 ]]; then
   exit 1
 fi
 
-VERSION="$1"
+# Normalize version to match CI naming: CI uses VERSION="${CI_COMMIT_TAG#v}",
+# so the in-tarball binary/dir are "qilab-<X.Y.Z>" (no leading "v"), even though
+# the published asset is "qilab-v<X.Y.Z>-linux-arm64.tar.gz". Strip a leading "v"
+# here so passing either "v0.2.7" or "0.2.7" resolves to the same internal names.
+VERSION="${1#v}"
 TARBALL_PATH="$2"
 
 SERVICE_NAME="qilab"
@@ -85,7 +89,23 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
 fi
 
 echo "Switching active symlink to: $TARGET_DIR"
+# The whole scheme assumes $CURRENT_LINK is a symlink. If a previous/manual
+# install left it as a real directory (or any non-symlink), `ln -sfn` would
+# silently create the link *inside* it and exit 0 — the active path would never
+# move, and systemd would keep running the binary already in that directory.
+# Force it to be a fresh symlink so the swap actually takes effect.
+if [[ -e "$CURRENT_LINK" && ! -L "$CURRENT_LINK" ]]; then
+  echo "Warning: $CURRENT_LINK is not a symlink; replacing it so the update can take effect."
+  rm -rf "$CURRENT_LINK"
+fi
 ln -sfn "$TARGET_DIR" "$CURRENT_LINK"
+
+# Verify the active path now resolves to the binary we just installed.
+ACTIVE_BINARY="$(readlink -f "$CURRENT_LINK/qilab" || true)"
+if [[ "$ACTIVE_BINARY" != "$(readlink -f "$TARGET_DIR/qilab")" ]]; then
+  echo "Update aborted: $CURRENT_LINK/qilab does not resolve to the new binary ($ACTIVE_BINARY)."
+  exit 1
+fi
 
 echo "Restarting service: $SERVICE_NAME"
 if systemctl restart "$SERVICE_NAME"; then

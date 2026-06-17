@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qilab/config.schema.json",
+  "title": "QILab Node Configuration",
+  "description": "Machine-readable mirror of the qilab config format documented in config_guide.md. Source of truth for the qilab_web_control structured editor. If you change the config format, update this file in the same change.",
+  "type": "object",
+  "required": ["nodes"],
+  "additionalProperties": false,
+  "properties": {
+    "entanglement_noise_model": {
+      "title": "Entanglement noise model",
+      "description": "Optional. Defaults to BASIC with t2_value 1000 if omitted.",
+      "$ref": "#/$defs/entanglement_noise_model"
+    },
+    "nodes": {
+      "title": "Nodes",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/node" }
+    }
+  },
+  "$defs": {
+    "node": {
+      "title": "Node",
+      "type": "object",
+      "required": ["qubit_arrays"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "description": "Human-readable label for the node.",
+          "type": "string"
+        },
+        "node_type": {
+          "title": "Node type",
+          "description": "Hardware type.",
+          "type": "string",
+          "enum": ["GENERIC", "NV_CENTER", "ION_TRAP", "PROCESSOR"],
+          "default": "GENERIC"
+        },
+        "quantum_operations_delay_ns": {
+          "title": "Operation delays (ns)",
+          "description": "Optional per-operation delays in nanoseconds.",
+          "$ref": "#/$defs/operation_delays"
+        },
+        "qubit_arrays": {
+          "title": "Qubit arrays",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/qubit_array" }
+        }
+      }
+    },
+    "operation_delays": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "single_gate_rotation": { "type": "integer", "minimum": 0, "unit": "ns" },
+        "two_qubit_gate_rotation": { "type": "integer", "minimum": 0, "unit": "ns" },
+        "measurement": { "type": "integer", "minimum": 0, "unit": "ns" },
+        "entanglement": { "type": "integer", "minimum": 0, "unit": "ns" },
+        "qubit_move": { "type": "integer", "minimum": 0, "unit": "ns" },
+        "qubit_swap": { "type": "integer", "minimum": 0, "unit": "ns" },
+        "qubit_init": { "type": "integer", "minimum": 0, "unit": "ns" }
+      }
+    },
+    "qubit_array": {
+      "title": "Qubit array",
+      "type": "object",
+      "required": ["num_qubits", "noise_model"],
+      "additionalProperties": false,
+      "properties": {
+        "num_qubits": {
+          "title": "Number of qubits",
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "noise_model": { "$ref": "#/$defs/qubit_noise_model" }
+      }
+    },
+    "qubit_noise_model": {
+      "title": "Qubit noise model",
+      "type": "object",
+      "oneOf": [
+        {
+          "title": "BASIC",
+          "additionalProperties": false,
+          "required": ["type", "t2_value"],
+          "properties": {
+            "type": { "const": "BASIC" },
+            "t2_value": { "type": "number", "minimum": 0, "unit": "ns" }
+          }
+        },
+        {
+          "title": "ADVANCED",
+          "additionalProperties": false,
+          "required": ["type", "t1_value", "t2_value", "gate_error_rate"],
+          "properties": {
+            "type": { "const": "ADVANCED" },
+            "t1_value": { "type": "number", "minimum": 0, "unit": "ns" },
+            "t2_value": { "type": "number", "minimum": 0, "unit": "ns" },
+            "gate_error_rate": { "type": "number", "minimum": 0 }
+          }
+        },
+        {
+          "title": "DEPOLARIZING",
+          "additionalProperties": false,
+          "required": ["type", "error_rate", "gate_time_ns"],
+          "properties": {
+            "type": { "const": "DEPOLARIZING" },
+            "error_rate": { "type": "number", "minimum": 0 },
+            "gate_time_ns": { "type": "number", "minimum": 0, "unit": "ns" }
+          }
+        },
+        {
+          "title": "AMPLITUDE_DAMPING",
+          "additionalProperties": false,
+          "required": ["type", "t1_ns", "t2_ns"],
+          "properties": {
+            "type": { "const": "AMPLITUDE_DAMPING" },
+            "t1_ns": { "type": "number", "minimum": 0, "unit": "ns" },
+            "t2_ns": { "type": "number", "minimum": 0, "unit": "ns" }
+          }
+        },
+        {
+          "title": "PHASE_FLIP",
+          "additionalProperties": false,
+          "required": ["type", "flip_probability"],
+          "properties": {
+            "type": { "const": "PHASE_FLIP" },
+            "flip_probability": { "type": "number", "minimum": 0 }
+          }
+        }
+      ]
+    },
+    "entanglement_noise_model": {
+      "title": "Entanglement noise model",
+      "type": "object",
+      "oneOf": [
+        {
+          "title": "BASIC",
+          "additionalProperties": false,
+          "required": ["type", "t2_value"],
+          "properties": {
+            "type": { "const": "BASIC" },
+            "t2_value": { "type": "number", "minimum": 0, "unit": "ns" }
+          }
+        },
+        {
+          "title": "DEPOLARIZING",
+          "additionalProperties": false,
+          "required": ["type", "error_rate", "gate_time_ns"],
+          "properties": {
+            "type": { "const": "DEPOLARIZING" },
+            "error_rate": { "type": "number", "minimum": 0 },
+            "gate_time_ns": { "type": "number", "minimum": 0, "unit": "ns" }
+          }
+        }
+      ]
+    }
+  }
+}

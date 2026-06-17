@@ -18,3 +18,4 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Changed
 - busy wait on transmission core
 - fix for update script
+- add schema for new web config idea
