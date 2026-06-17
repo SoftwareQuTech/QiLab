@@ -26,7 +26,7 @@
  * Instances are not inherently thread-safe. Guard externally if accessed
  * from multiple threads.
  */
-class StimAdapter : public ISimulator
+class StimAdapterNVCenters : public ISimulator
 {
 public:
     /**
@@ -39,10 +39,10 @@ public:
      *       @p num_qubits. Behavior for operations outside this range is
      *       implementation-defined (typically rejected).
      */
-    StimAdapter(std::seed_seq &seed_seq, const uint8_t &num_qubits);
+    StimAdapterNVCenters(std::seed_seq &seed_seq, const uint8_t &num_qubits);
 
     /// @brief Virtual destructor to allow cleanup via base pointer.
-    ~StimAdapter() override;
+    ~StimAdapterNVCenters() override;
 
     // ===== ISimulator interface =====
 
@@ -132,7 +132,7 @@ public:
      *          returns a result code
      */
     bool entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_address) override;
-
+    bool apply_qubit_noise(uint8_t qubit_address, float p_dephasing, float p_depolarizing) override;
     bool allocate_qubits(uint8_t num_qubits) override;
 private:
     // Cached objects for all quantum operations
@@ -212,8 +212,8 @@ private:
     stim::TableauSimulator<64> stim_instance;
 
     // Non-copyable and non-movable: each adapter owns unique simulator state.
-    StimAdapter(const StimAdapter &) = delete;
-    StimAdapter(const StimAdapter &&) = delete;
-    StimAdapter &operator=(StimAdapter &) = delete;
-    StimAdapter &operator=(StimAdapter &&) = delete;
+    StimAdapterNVCenters(const StimAdapterNVCenters &) = delete;
+    StimAdapterNVCenters(const StimAdapterNVCenters &&) = delete;
+    StimAdapterNVCenters &operator=(StimAdapterNVCenters &) = delete;
+    StimAdapterNVCenters &operator=(StimAdapterNVCenters &&) = delete;
 };

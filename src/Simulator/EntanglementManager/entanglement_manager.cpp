@@ -1,10 +1,21 @@
 #include <iostream>
 
-#include "Simulator/entanglement/entanglement_manager.hpp"
+#include "entanglement_manager.hpp"
 #include "logger/logger_api.hpp"
 
 #define EXPECTED_MAX_REQUESTS 100
 #define EXPECTED_MAX_PAIRS 50
+
+
+template <typename T>
+void swap_pop_erase(std::vector<T> &vec, std::size_t idx)
+{
+    if (idx != vec.size() - 1)
+    {
+        vec[idx] = std::move(vec.back());
+    }
+    vec.pop_back();
+}
 
 EntanglementManager::EntanglementManager(std::function<void(int, Outcome_Status_t)> resp_cb, std::function<void(int, std::unique_ptr<CommandBase>)> cmd_cb) : response_callback(resp_cb), command_callback(cmd_cb)
 {
@@ -55,10 +66,11 @@ int EntanglementManager::update_requests()
         {
             if(check_request_is_expired(pending_requests[i]))
             {
+                const int failed_node_id = pending_requests[i].node_id;
                 //this returns data to the runner and adds the reponse to the message broker
-                response_callback(pending_requests[i].node_id, Outcome_Status_t::ENTANGLEMENT_SYNC_FAILURE);
-                pending_requests.erase(pending_requests.begin() + i);
-                LOG_INFO("Entanglement request from node " + std::to_string(pending_requests[i].node_id) + " has been marked as failed due to timeout.");
+                response_callback(failed_node_id, Outcome_Status_t::ENTANGLEMENT_SYNC_FAILURE);
+                swap_pop_erase(pending_requests, static_cast<std::size_t>(i));
+                LOG_INFO("Entanglement request from node " + std::to_string(failed_node_id) + " has been marked as failed due to timeout.");
             }
         }
     }
@@ -82,7 +94,7 @@ int EntanglementManager::update_requests()
                     command_callback(matched_pairs[i].node_id_1, std::move(matched_pairs[i].command1));
                 }
                 LOG_INFO("Entanglement commands sent to nodes " + std::to_string(matched_pairs[i].node_id_1) + " and " + std::to_string(matched_pairs[i].node_id_2) + ".");
-                matched_pairs.erase(matched_pairs.begin() + i);
+                swap_pop_erase(matched_pairs, static_cast<std::size_t>(i));
 
             }
         }
@@ -112,7 +124,7 @@ bool EntanglementManager::add_new_request(std::unique_ptr<CommandBase> command, 
                 .match_time = std::chrono::steady_clock::now(),
                 .calculated_success_time_delay = DEFAULT_SUCCESS_DELAY_NS // Placeholder for actual calculation
             });
-            pending_requests.erase(it);
+            swap_pop_erase(pending_requests, static_cast<std::size_t>(it - pending_requests.begin()));
             LOG_INFO("Entanglement request matched between node " + std::to_string(node_id) + " and neighbour " + std::to_string(neighbour_node) + ".");
             return true;
         }
@@ -130,6 +142,11 @@ bool EntanglementManager::add_new_request(std::unique_ptr<CommandBase> command, 
     new_request.node_id = node_id;
     new_request.neighbour_node = neighbour_node;
     new_request.command_issue_time = std::chrono::steady_clock::now();
+
+    if (pending_requests.size() == pending_requests.capacity())
+    {
+        LOG_WARNING("Pending entanglement request queue reached reserved capacity (" + std::to_string(pending_requests.capacity()) + "). Vector may reallocate.");
+    }
 
     // If a matching request is not found, add it to the pending requests
     pending_requests.push_back(std::move(new_request));

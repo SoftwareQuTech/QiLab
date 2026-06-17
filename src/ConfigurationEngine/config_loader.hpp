@@ -4,17 +4,13 @@
 #include <vector>
 #include <optional>
 
-/**
- * @brief Represents a single node configuration
- */
-struct NodeConfig {
-    int num_qubits;
-};
+#include "DataTypes/configuration_options.hpp"
 
-/**
+    /**
  * @brief Application configuration loaded from YAML file
  */
 struct AppConfig {
+    EntanglementNoiseConfigData entanglement_noise_model;
     std::vector<NodeConfig> nodes;
 };
 

@@ -48,6 +48,13 @@ bool StimAdapter::allocate_qubits(uint8_t num_qubits)
     return true;
 }
 
+bool StimAdapter::apply_qubit_noise(uint8_t qubit_address, float p_dephasing, float p_depolarizing)
+{
+    LOG_INFO("Applying qubit noise: qubit=" + std::to_string(qubit_address) + " p_dephasing=" + std::to_string(p_dephasing) + " p_depolarizing=" + std::to_string(p_depolarizing));
+    // Implement the noise application logic here
+    return true;
+}
+
 bool StimAdapter::qubit_initialize(uint8_t qubit_address)
 {
     // Use our cached single_target array

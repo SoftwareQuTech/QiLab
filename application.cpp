@@ -6,14 +6,17 @@
 
 
 //Simulator implementations
-#include <Simulator/adapters/mock_adapter.hpp>
-#include <Simulator/adapters/stim_adapter.hpp>
-#include <Simulator/adapters/stim_nv_adapter.hpp>
+#include <Simulator/SimulatorAdapters/mock_adapter.hpp>
+#include <Simulator/SimulatorAdapters/stim_adapter.hpp>
+#include <Simulator/SimulatorAdapters/stim_nv_adapter.hpp>
 
 //Runners
-#include <SimulatorRunners/simulator_runner.hpp>
+#include "Simulator/SimulatorRunners/simulator_runner.hpp"
 #include "DataTransmission/TransmissionRunner/transmission_runner.hpp"
-#include "SimulatorRunners/entanglement_runner.hpp"
+#include "Simulator/SimulatorRunners/entanglement_runner.hpp"
+
+//Intermediaries
+#include "Simulator/SimulatorManager/simulator_manager.hpp"
 
 //Data transmission
 #include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
@@ -27,7 +30,9 @@
 
 //Config
 #include "qilab/version.hpp"
-#include "utils/config_loader.hpp"
+#include "ConfigurationEngine/config_loader.hpp"
+
+//#define RUN_MOCKED_TRANSMISSION
 
 bool abort_sim = false;
 
@@ -77,7 +82,9 @@ int main()
     std::shared_ptr<MessageBroker> broker = std::make_shared<MessageBroker>();
     
     // Load configuration from file
-    auto config = load_config();
+    const std::string config_path = get_default_config_path();
+    LOG_INFO("Using configuration file: " + config_path);
+    auto config = load_config(config_path);
     if (!config) {
         LOG_ERROR("Failed to load configuration, exiting");
         return 1;
@@ -91,23 +98,31 @@ int main()
     LOG_INFO("Configuration loaded with " + std::to_string(config->nodes.size()) + " nodes");
     
     std::unique_ptr<StimAdapterNVCenters> stim_adapter =  std::make_unique<StimAdapterNVCenters>(seq, 0); //the seed is problematic
-    SimulatorRunner sim(std::move(stim_adapter), broker);
+    std::unique_ptr<SimulatorManager> sim_manager = std::make_unique<SimulatorManager>(std::move(stim_adapter));
+    
     
     // Register nodes dynamically from configuration
     std::vector<int16_t> node_ids;
     for (size_t i = 0; i < config->nodes.size(); ++i) {
-        int num_qubits = config->nodes[i].num_qubits;
-        int16_t node_id = sim.register_node(num_qubits);
+        int16_t node_id = sim_manager->register_node(config->nodes[i]);
         node_ids.push_back(node_id);
         LOG_INFO("Registered node " + std::to_string(i) + " with ID " + 
-                 std::to_string(node_id) + " (" + std::to_string(num_qubits) + " qubits)");
+                 std::to_string(node_id) + " (" + std::to_string(sim_manager->get_registered_qubits()) + " qubits)");
     }
 
+    SimulatorRunner sim(std::move(sim_manager), broker);
 
-    std::unique_ptr<ITransmissionHandler> transportB = std::make_unique<MockHandler>();
+#ifndef RUN_MOCKED_TRANSMISSION
+    LOG_INFO("Using SPI transmission handler");
     std::unique_ptr<ITransmissionHandler> transportA = std::make_unique<SPIHandler>();
     std::unique_ptr<TransmissionProcessor> command_handlerA = std::make_unique<TransmissionProcessor>(std::move(transportA));
-    DataTransmissionRunner nodeA(node_ids, std::move(command_handlerA), broker);
+    DataTransmissionRunner transmission_node(node_ids, std::move(command_handlerA), broker);
+#else
+    LOG_INFO("Using mocked transmission handler");
+    std::unique_ptr<ITransmissionHandler> transportB = std::make_unique<MockHandler>();
+    std::unique_ptr<TransmissionProcessor> command_handlerB = std::make_unique<TransmissionProcessor>(std::move(transportB));
+    DataTransmissionRunner transmission_node(node_ids, std::move(command_handlerB), broker);
+#endif
 
     EntanglementRunner ent_runner(broker);
 
@@ -145,10 +160,10 @@ int main()
 
     // Start transmission thread with affinity check
     LOG_INFO("Starting transmission thread on core: " + std::to_string(TRANSMISSION_CORE));
-    std::jthread thread_node_a([&nodeA, TRANSMISSION_CORE]() {
+    std::jthread thread_node_a([&transmission_node, TRANSMISSION_CORE]() {
         // Set name for easier identification
         pthread_setname_np(pthread_self(), "transmit");
-        return nodeA.on_run(TRANSMISSION_CORE);
+        return transmission_node.on_run(TRANSMISSION_CORE);
     });
 
     PROF_SAVE_DATA("test_trace");
@@ -166,7 +181,7 @@ int main()
     ent_runner.on_abort();
     entanglement_thread.join();
 
-    nodeA.on_abort();    
+    transmission_node.on_abort();    
     thread_node_a.join();
 
     PROF_SAVE_DATA("test_trace");

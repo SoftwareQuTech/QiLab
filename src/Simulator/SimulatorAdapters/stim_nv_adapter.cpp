@@ -48,6 +48,20 @@ bool StimAdapterNVCenters::allocate_qubits(uint8_t num_qubits)
     return true;
 }
 
+bool StimAdapterNVCenters::apply_qubit_noise(uint8_t qubit_address, float p_dephasing, float p_depolarizing)
+{
+    // Apply dephasing noise
+    if (p_dephasing > 0) {
+        // apply the noise
+    }
+    // Apply depolarizing noise
+    if (p_depolarizing > 0) {
+        //apply the noise
+    }
+    LOG_INFO("Applied noise to qubit " + std::to_string(qubit_address) + ": dephasing=" + std::to_string(p_dephasing) + ", depolarizing=" + std::to_string(p_depolarizing));
+    return true;
+}
+
 bool StimAdapterNVCenters::qubit_initialize(uint8_t qubit_address)
 {
     // Use our cached single_target array

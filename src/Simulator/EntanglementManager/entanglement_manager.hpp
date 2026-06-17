@@ -125,8 +125,8 @@ protected:
     /**
      * @brief Checks if an entanglement request has exceeded the timeout period.
      *
-     * Requests that do not find a match within ENTANGLEMENT_TIMEOUT (500 microseconds)
-     * are considered expired and should be failed.
+     * Requests that do not find a match within ENTANGLEMENT_TIMEOUT are considered
+     * expired and should be failed.
      *
      * @param request The request to check
      * @return true if the request has expired and should be failed
@@ -137,17 +137,13 @@ protected:
     /**
      * @brief Attempts to find a matching request for the given request.
      *
-     * Searches pending_requests for a request where:
-     * - The existing request's neighbour_node equals the given request's node_id
-     * - The existing request's node_id equals the given request's neighbour_node
-     *
-     * This ensures bidirectional agreement: A wants B AND B wants A.
+     * This ensures bidirectional agreement: A wants B and B wants A.
      *
      * @param request The request to match
      * @return true if a matching request was found in pending_requests
      * @return false if no matching request exists yet
      */
-    bool match_request(const EntanglementRequest& request);
+    bool match_request(const EntanglementRequest &request);
 
 private:
     /// Timeout duration for unmatched entanglement requests (50000 microseconds)
@@ -162,9 +158,9 @@ private:
     /// Callback invoked when a matched pair reaches execution time
     std::function<void(int, std::unique_ptr<CommandBase>)> command_callback;
 
-    /// Collection of unmatched entanglement requests awaiting partners
+    /// Collection of unmatched entanglement requests awaiting partners.
     std::vector<EntanglementRequest> pending_requests;
 
-    /// Collection of matched request pairs awaiting execution time
+    /// Collection of matched request pairs awaiting execution time.
     std::vector<EntanglementPair> matched_pairs;
 };

@@ -81,6 +81,19 @@ enum Command_t
     INVALID_COMMAND =                   0xFF
 };
 
+struct EntanglementNoise
+{
+    explicit EntanglementNoise(float place_holder_1, float place_holder_2, float place_holder_3) noexcept
+        : place_holder_1(place_holder_1)
+        , place_holder_2(place_holder_2)
+        , place_holder_3(place_holder_3)
+    {}
+    
+    float place_holder_1;
+    float place_holder_2;
+    float place_holder_3;
+};
+
 struct CommandBase
 {
     explicit CommandBase(const uint8_t* data) noexcept
@@ -173,6 +186,7 @@ struct EntanglementAttempt final: public CommandBase
     uint8_t fidelity;
     uint8_t nghbr;
     uint8_t qid;
+    EntanglementNoise noise_parameters{0.0f, 0.0f, 0.0f}; // Placeholder for noise parameters
 };
 
 struct EntangleMeasure final: public CommandBase
@@ -193,6 +207,7 @@ struct EntangleMeasure final: public CommandBase
     uint8_t basis;
     bool immediate;
     uint8_t repetitions;
+    EntanglementNoise noise_parameters{0.0f, 0.0f, 0.0f}; // Placeholder for noise parameters
 };
 
 struct PreMeasureGatesSelection final: public CommandBase
@@ -246,3 +261,4 @@ struct EntanglementSwap final: public CommandBase
     uint8_t qubit1_address;
     uint8_t qubit2_address;
 };
+

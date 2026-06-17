@@ -23,7 +23,7 @@ class MockAdapter final : public ISimulator
     bool qubit_move(uint8_t qubit1_address, uint8_t qubit2_address) ;
     bool qubit_swap(uint8_t qubit1_address, uint8_t qubit2_address) ;
     bool entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_address) ;
-
+    bool apply_qubit_noise(uint8_t qubit_address, float p_dephasing, float p_depolarizing);
     private:
     //have a reference to the logger used for performance estimations
     //ILogger* local_logger;

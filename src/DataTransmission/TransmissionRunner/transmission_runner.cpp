@@ -6,7 +6,7 @@
 #include "logger/logger_api.hpp"
 #include "utils/thread_utils.hpp"
 
-#define TRANSMISSION_STEP_DELAY 10  // microseconds
+#define TRANSMISSION_STEP_DELAY 5  // microseconds
 
 DataTransmissionRunner::DataTransmissionRunner(std::vector<int16_t> nodes, std::unique_ptr<TransmissionProcessor> processor, std::shared_ptr<MessageBroker> broker) 
     : transmission_processor(std::move(processor)), registered_nodes(nodes), message_broker(broker) 
@@ -72,6 +72,8 @@ int DataTransmissionRunner::on_run(int core_id)
             {
                 responses[response.node_id] = std::move(response.transport);
             }
+            LOG_INFO("Sending response data " + std::to_string(static_cast<uint8_t>(responses[response.node_id]->status)) + " for node " + std::to_string(registered_nodes[response.node_id]) + ".");
+
         }
 
         PROF_STOP(prof_event_serialize);
