@@ -362,16 +362,5 @@ TEST_F(EntanglementManagerTest, SelfEntanglementRequest) {
     bool result = manager->add_new_request(std::move(cmd1), 1, 1);
     
     // Should reject or handle gracefully
-    // Behavior depends on implementation - document expected behavior
-    // For now, assume it's added but won't match
-    
-    manager->update_requests();
-    
-    // Wait for timeout
-    std::this_thread::sleep_for(std::chrono::milliseconds(600));
-    manager->update_requests();
-    
-    // Should timeout with failure
-    ASSERT_EQ(responses.size(), 1);
-    EXPECT_EQ(responses[0].second, Outcome_Status_t::ENTANGLEMENT_SYNC_FAILURE);
+    EXPECT_FALSE(result);
 }
