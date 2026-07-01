@@ -45,6 +45,57 @@ bool SimulatorManager::are_local_qubits_in_range(uint16_t node_id, uint16_t loca
            is_local_qubit_in_range(node_id, local_qubit2);
 }
 
+uint16_t SimulatorManager::encode_pair_key(uint8_t node_a, uint8_t node_b)
+{
+    const uint8_t lo = (node_a < node_b) ? node_a : node_b;
+    const uint8_t hi = (node_a < node_b) ? node_b : node_a;
+    return (static_cast<uint16_t>(lo) << 8) | static_cast<uint16_t>(hi);
+}
+
+int8_t SimulatorManager::resolve_pair_bell_state(uint8_t node_id, uint8_t neighbour_id, bool is_initiator, int8_t local_bell)
+{
+    const uint16_t pair_key = encode_pair_key(node_id, neighbour_id);
+
+    if (is_initiator)
+    {
+        // The initiator identifies the Bell state from the intact joint state and
+        // caches it so the responder (processed next) reports the same value.
+        pair_bell_states[pair_key] = local_bell;
+        return local_bell;
+    }
+
+    // Responder: consume the value the initiator cached for this pair.
+    auto it = pair_bell_states.find(pair_key);
+    if (it != pair_bell_states.end())
+    {
+        const int8_t cached_bell = it->second;
+        pair_bell_states.erase(it);
+        return cached_bell;
+    }
+
+    LOG_WARNING("No cached Bell state for pair (" + std::to_string(node_id) + "," + std::to_string(neighbour_id) +
+                "); the initiator may not have been processed first. Falling back to the local reading.");
+    return local_bell;
+}
+
+void SimulatorManager::apply_pre_measure_gates(uint8_t node_id, uint16_t global_qubit, bool target)
+{
+    PreMeasureGates &gates = pre_measure_gates[node_id][target ? 1 : 0];
+    if (!gates.enabled)
+    {
+        return;
+    }
+
+    LOG_INFO("Applying pre-measurement gates for node " + std::to_string(node_id) + " to Q" + std::to_string(global_qubit) +
+             ": X(" + std::to_string(gates.angle1) + ") Y(" + std::to_string(gates.angle2) + ") X(" + std::to_string(gates.angle3) + ")");
+    // X-Y-X rotation sequence into the requested measurement basis.
+    simulator_inst->single_qubit_gate(global_qubit, gates.angle1, Axis_t::X_AXIS);
+    simulator_inst->single_qubit_gate(global_qubit, gates.angle2, Axis_t::Y_AXIS);
+    simulator_inst->single_qubit_gate(global_qubit, gates.angle3, Axis_t::X_AXIS);
+
+    gates.enabled = false; // one-shot: consumed by this measurement
+}
+
 SimulatorManager::CommandTimingInfo SimulatorManager::build_command_timing_info(uint16_t node_id, int16_t qubit_offset, const CommandBase &command) const
 {
     CommandTimingInfo info;
@@ -447,8 +498,13 @@ ResponseData SimulatorManager::entanglement_attempt_handler(std::unique_ptr<Comm
         return response;
     }
 
+    // Both nodes of the pair must report the same 4-way Bell state. Only the
+    // initiator can read it from the intact joint state; the responder gets it
+    // from the manager's per-pair cache.
+    const int8_t bell_state = resolve_pair_bell_state(node_id, cmd->nghbr, is_initiator, res & 0x03);
+
     response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
-    Entaglement_t ent_state = static_cast<Entaglement_t>(res & 0x03);
+    Entaglement_t ent_state = static_cast<Entaglement_t>(bell_state & 0x03);
     response.outcome = static_cast<int>(ent_state) | static_cast<int>(Outcome_Status_t::SUCCESS);
     PROF_STOP(prof_event_entanglement_attempt);
     return response;
@@ -467,18 +523,30 @@ ResponseData SimulatorManager::entanglement_measure_handler(std::unique_ptr<Comm
         PROF_STOP(prof_event_entanglement_measure);
         return response;
     }
-    uint8_t neighbour_address = cmd->nghbr;
+    // Resolve the neighbour's global qubit address (qubit 0 of the neighbour node
+    // for now), mirroring entanglement_attempt_handler. Using the raw node id here
+    // only worked when node_id == qubit index (one qubit per node); resolving it
+    // through the node registry is what makes this scale to multiple qubits/nodes.
+    uint8_t neighbour_address = nodes[cmd->nghbr].first;
     bool is_initiator = (node_id < cmd->nghbr);
 
-    int8_t res = simulator_inst->entanglement_measure(cmd->fidelity,
-                                                      qubit_offset,
+    // Entanglement measurement is orchestrated here, in one atomic handler call,
+    // instead of a single adapter method. This decouples the steps and keeps the
+    // adapter free of pre-measurement state:
+    //   1) establish + identify the Bell state (initiator builds the pair and
+    //      peeks it from the intact joint state; responder is a no-op),
+    //   2) apply this node's basis-rotation gates to its own qubit (target=1),
+    //   3) measure this node's own qubit.
+    const uint16_t local_qubit = static_cast<uint16_t>(qubit_offset);
+
+    // Step 1: establish + identify. attempt_entanglement is the shared primitive
+    // (H+CNOT + Bell-state peek for the initiator; no-op for the responder).
+    int8_t est = simulator_inst->attempt_entanglement(cmd->fidelity,
+                                                      local_qubit,
                                                       neighbour_address,
-                                                      cmd->basis,
                                                       is_initiator,
-                                                      cmd->qid,
-                                                      cmd->immediate,
-                                                      cmd->repetitions);
-    if (res < 0)
+                                                      cmd->qid);
+    if (est < 0)
     {
         LOG_ERROR("Entanglement measure failed with neighbor " + std::to_string(cmd->nghbr) + " due to simulator error.");
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
@@ -487,8 +555,19 @@ ResponseData SimulatorManager::entanglement_measure_handler(std::unique_ptr<Comm
         return response;
     }
 
+    // Both nodes must report the same 4-way Bell state. The initiator caches its
+    // pre-collapse reading; the responder reads it back from the manager cache.
+    const int8_t bell_state = resolve_pair_bell_state(node_id, cmd->nghbr, is_initiator, est & 0x03);
+
+    // Step 2: basis rotation on this node's own qubit (must land AFTER the peek in
+    // step 1 and BEFORE the measurement in step 3 -- which is exactly this order).
+    apply_pre_measure_gates(node_id, local_qubit, /*target=*/true);
+
+    // Step 3: measure this node's own qubit for its (correlated) outcome bit.
+    const uint8_t measurement = simulator_inst->qubit_measure(local_qubit, cmd->basis);
+
     response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
-    response.outcome = res | static_cast<int>(Outcome_Status_t::SUCCESS);
+    response.outcome = (bell_state & 0x03) | ((measurement & 0x01) << 2) | static_cast<int>(Outcome_Status_t::SUCCESS);
     PROF_STOP(prof_event_entanglement_measure);
     return response;
 }
@@ -544,17 +623,24 @@ ResponseData SimulatorManager::pre_measure_and_entangle_measure_handler(std::uni
 ResponseData SimulatorManager::pre_measurement_gates_selection_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id)
 {
     PROF_START(prof_event_pre_measure_select);
-    (void)node_id;
+    (void)qubit_offset;
     ResponseData response;
     auto *cmd = static_cast<PreMeasureGatesSelection *>(command.get());
 
-    // no need to apply delay, as the gates are applied when measuring
-    // which begs the question do we apply the gate delay multiple times when measuring
+    // Store the selection per node (and per target), NOT in the adapter. The next
+    // matching measurement for THIS node applies and consumes it. This prevents
+    // cross-node contamination: previously a single adapter-global latch could be
+    // consumed by whichever node measured next.
+    // (cmd->target: 0 = regular qubit_measure, 1 = entanglement measure.)
+    PreMeasureGates &gates = pre_measure_gates[node_id][cmd->target ? 1 : 0];
+    gates.enabled = true;
+    gates.angle1 = cmd->angle1;
+    gates.angle2 = cmd->angle2;
+    gates.angle3 = cmd->angle3;
 
-    simulator_inst->pre_measure_gates_selection(cmd->target + qubit_offset,
-                                                cmd->angle1,
-                                                cmd->angle2,
-                                                cmd->angle3);
+    LOG_INFO("Stored pre-measurement gates for node " + std::to_string(node_id) + " (target=" + std::to_string(cmd->target) +
+             "): angle1=" + std::to_string(cmd->angle1) + " angle2=" + std::to_string(cmd->angle2) + " angle3=" + std::to_string(cmd->angle3));
+
     response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
     response.outcome = Outcome_Status_t::SUCCESS;
     PROF_STOP(prof_event_pre_measure_select);
@@ -650,7 +736,13 @@ ResponseData SimulatorManager::qubit_measure_handler(std::unique_ptr<CommandBase
         return response;
     }
 
-    auto res = simulator_inst->qubit_measure(cmd->qubit1_address + qubit_offset, cmd->basis);
+    // Apply this node's pending basis-rotation gates (target=0) to its own qubit
+    // immediately before measuring, within this single atomic handler call, so no
+    // other node's command can consume them first.
+    const uint16_t global_qubit = static_cast<uint16_t>(cmd->qubit1_address + qubit_offset);
+    apply_pre_measure_gates(node_id, global_qubit, /*target=*/false);
+
+    auto res = simulator_inst->qubit_measure(global_qubit, cmd->basis);
     response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
     response.outcome = res ? (static_cast<uint8_t>(Measurement_t::MEASURE_OUTCOME_MINUS_1) | static_cast<uint8_t>(Outcome_Status_t::SUCCESS))
                            : (static_cast<uint8_t>(Measurement_t::MEASURE_OUTCOME_PLUS_1) | static_cast<uint8_t>(Outcome_Status_t::SUCCESS));

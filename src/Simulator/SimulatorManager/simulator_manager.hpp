@@ -12,6 +12,7 @@
 #include "memory"
 #include "array"
 #include "chrono"
+#include "unordered_map"
 
 #include "DataTypes/commands.hpp"
 #include "DataTypes/responses.hpp"
@@ -93,6 +94,41 @@ private:
     /// Total number of qubits already allocated across all nodes
     uint16_t registered_qubits = 0;
     std::array<std::unique_ptr<QubitNoiseInterface>, MAX_QUBITS_AVAILABLE> simulation_qubits;
+
+    /// Per-pair cache of the 4-way Bell state identified by the initiator of an
+    /// entanglement pair (the lower node id, which is dispatched and processed
+    /// first). The responder reads and erases the entry so both nodes report the
+    /// same Bell state, without the simulator adapter having to hold any per-pair
+    /// coordination state. Keyed by encode_pair_key(node_a, node_b).
+    std::unordered_map<uint16_t, int8_t> pair_bell_states;
+
+    /// Build an order-independent key for a node pair: (min << 8) | max.
+    static uint16_t encode_pair_key(uint8_t node_a, uint8_t node_b);
+
+    /// Pending basis-rotation (pre-measurement) gates for a node, set by a
+    /// PRE_MEASUREMENT_GATES_SELECTION command and consumed by the next matching
+    /// measurement. Kept per node (and per target) in the manager -- NOT in the
+    /// adapter -- so one node's selection can never be applied to another node's
+    /// qubit when commands interleave across the shared simulator.
+    struct PreMeasureGates
+    {
+        bool enabled = false;
+        Angle_t angle1{};
+        Angle_t angle2{};
+        Angle_t angle3{};
+    };
+
+    /// [node_id][target]: target 0 = regular qubit_measure, 1 = entanglement measure.
+    std::array<std::array<PreMeasureGates, 2>, MAX_NODES_AVAILABLE> pre_measure_gates{};
+
+    /// Apply this node's pending pre-measurement rotation (if any) to @p global_qubit
+    /// via single_qubit_gate, then clear it (one-shot). @p target selects the slot.
+    void apply_pre_measure_gates(uint8_t node_id, uint16_t global_qubit, bool target);
+
+    /// Resolve the 4-way Bell state to report for one side of a matched pair:
+    /// the initiator caches its freshly identified state; the responder reads the
+    /// cached value (and erases it). Falls back to @p local_bell on a cache miss.
+    int8_t resolve_pair_bell_state(uint8_t node_id, uint8_t neighbour_id, bool is_initiator, int8_t local_bell);
 
     /// Registry of delays per node. Keep it separate in order to keep the nodes array as ligh as possible
     /// The array index is equal to the node index

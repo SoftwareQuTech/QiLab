@@ -95,23 +95,10 @@ public:
      */
     int8_t attempt_entanglement(uint16_t fidelity, uint8_t local_qubit, uint8_t neighbour_address, bool is_initiator, uint8_t qid) override;
 
-    /**
-     * @copydoc ISimulator::entanglement_measure
-     *
-     * @details Typically mocked: optionally performs @p repetitions attempts
-     *          when @p try_now is true and returns a synthesized outcome.
-     * @param is_initiator Whether this node initiates entanglement (applies gates) or just measures.
-     */
-    int8_t entanglement_measure(uint16_t fidelity, uint8_t local_qubit, uint8_t neighbour_address, bool basis,
-                                 bool is_initiator, uint8_t qid, bool try_now, uint8_t repetitions) override;
-
-    /**
-     * @copydoc ISimulator::pre_measure_gates_selection
-     *
-     * @details Stores a policy used to inject pre-measurement single-qubit
-     *          rotations in subsequent @c qubit_measure calls.
-     */
-    void pre_measure_gates_selection(bool target, Angle_t angle_1, Angle_t angle_2, Angle_t angle_3) override;
+    // Note: there is no entanglement_measure / pre_measure_gates_selection here.
+    // Entanglement measurement is orchestrated by the SimulatorManager
+    // (attempt_entanglement -> single_qubit_gate rotations -> qubit_measure), so
+    // the adapter holds no per-node pre-measurement state.
 
     /**
      * @copydoc ISimulator::qubit_move
@@ -171,20 +158,6 @@ private:
     stim::CircuitInstruction sqrt_yy_dag_inst;    // Custom instruction for SQRT_YY_DAG
     stim::CircuitInstruction sqrt_xx_inst;        // Custom instruction for SQRT_XX
     stim::CircuitInstruction sqrt_xx_dag_inst;    // Custom instruction for SQRT_XX_DAG
-    
-    // Pre-measurement gate configuration storage
-    struct PreMeasureConfig {
-        bool enabled = false;
-        Angle_t angle1;
-        Angle_t angle2;
-        Angle_t angle3;
-    };
-    
-    PreMeasureConfig pre_measure_config;         // target=0: for qubit_measure
-    PreMeasureConfig pre_entangle_measure_config; // target=1: for entanglement_measure
-    
-    // Helper to apply pre-measurement gates from a configuration
-    void apply_pre_measure_gates(uint8_t qubit_address, const PreMeasureConfig& config);
     
     // Threshold for measurement record clearing
     static constexpr size_t MEASUREMENT_CLEAR_THRESHOLD = 1024;
