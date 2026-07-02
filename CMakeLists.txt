@@ -84,6 +84,7 @@ endif()
 # ---- Options ----
 option(ENABLE_PROFILING "Enable fast TLS profiler" ON)
 option(ENABLE_LOGGING "Enable logging functionality" ON)  # Default ON
+option(ENABLE_DATA_ACQUISITION "Enable structured research data acquisition" ON)
 
 if(ENABLE_PROFILING)
   add_library(profiler STATIC src/logger/profiler.cpp)
@@ -107,6 +108,18 @@ else()
   # Empty interface library when disabled
   add_library(logger INTERFACE)
   target_compile_definitions(logger INTERFACE LOGGING_ENABLED=0)
+endif()
+
+if(ENABLE_DATA_ACQUISITION)
+  add_library(data_acquisition STATIC src/logger/data_acquisition.cpp)
+  target_compile_definitions(data_acquisition PUBLIC DAQ_ENABLED=1)
+  target_include_directories(data_acquisition PUBLIC ${PROJECT_SOURCE_DIR}/src)
+  # data_acquisition.cpp uses the logger for its own status messages.
+  target_link_libraries(data_acquisition PUBLIC logger)
+else()
+  # Empty interface library when disabled
+  add_library(data_acquisition INTERFACE)
+  target_compile_definitions(data_acquisition INTERFACE DAQ_ENABLED=0)
 endif()
 
 add_library(qilab_lib STATIC
@@ -136,7 +149,7 @@ target_include_directories(qilab_lib PUBLIC
   ${PROJECT_SOURCE_DIR}/src
   ${CMAKE_BINARY_DIR}/generated
 )
-target_link_libraries(qilab_lib PRIVATE libstim profiler)
+target_link_libraries(qilab_lib PRIVATE libstim profiler data_acquisition)
 
 include_directories("src")
 
@@ -163,7 +176,7 @@ add_executable(qilab
   src/ConfigurationEngine/config_loader.cpp
     )
 target_include_directories(qilab PRIVATE ${CMAKE_BINARY_DIR}/generated)
-target_link_libraries(qilab PRIVATE libstim profiler logger)
+target_link_libraries(qilab PRIVATE libstim profiler logger data_acquisition)
 
 include(CTest)                 # defines BUILD_TESTING (default ON)
 

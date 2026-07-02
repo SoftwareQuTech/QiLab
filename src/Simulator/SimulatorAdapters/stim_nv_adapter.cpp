@@ -419,9 +419,23 @@ int8_t StimAdapterNVCenters::attempt_entanglement(uint16_t fidelity, uint8_t loc
 }
 bool StimAdapterNVCenters::qubit_move(uint8_t qubit1_address, uint8_t qubit2_address)
 {
-    // assert(("This function is not implemented", 0));
-    LOG_ERROR("qubit_move is not implemented yet!");
-    return false;
+    // Validate: cannot move a qubit to itself
+    if (qubit1_address == qubit2_address)
+    {
+        LOG_ERROR("Cannot move qubit : " + std::to_string(qubit1_address) + " to itself!");
+        return false;
+    }
+    // Use cached two_target for SWAP gate
+    two_target[0] = stim::GateTarget{qubit1_address};
+    two_target[1] = stim::GateTarget{qubit2_address};
+    stim_instance.do_SWAP(swap_inst);
+
+    // Force initialize the previous location of qubit1 to |0⟩
+    single_target[0] = stim::GateTarget{qubit1_address};
+    stim_instance.do_RZ(init_inst);
+
+    LOG_INFO("Moved qubit " + std::to_string(qubit1_address) + " to " + std::to_string(qubit2_address));
+    return true;
 }
 bool StimAdapterNVCenters::qubit_swap(uint8_t qubit1_address, uint8_t qubit2_address)
 {

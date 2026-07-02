@@ -1,6 +1,7 @@
 // in a source code file
 #include <iostream>
 #include <random>
+#include <string_view>
 #include <thread>
 #include <signal.h>
 
@@ -27,6 +28,7 @@
 //Loggers and profilers
 #include "logger/profiler_api.hpp"
 #include "logger/logger_api.hpp"
+#include "logger/data_acquisition_api.hpp"
 
 //Config
 #include "qilab/version.hpp"
@@ -69,6 +71,11 @@ int main()
     } else {
         LOG_LEVEL("DEBUG"); // default log level
     }
+    // Structured research data acquisition is opt-in via QILAB_DAQ=1. Output
+    // goes to ~/.qilab/logs/data_acquisition.jsonl, next to the profiler data.
+    const char* daq_env = std::getenv("QILAB_DAQ");
+    const bool daq_enabled = daq_env && std::string_view(daq_env) == "1";
+    DAQ_CONFIGURE(daq_enabled, "");
 
 #if defined(__linux) && defined(__GLIBCXX__) && __GLIBCXX__ >= 20200128
     // Workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=94087

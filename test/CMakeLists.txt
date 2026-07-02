@@ -90,17 +90,35 @@ target_compile_definitions(prof_tests_enabled PRIVATE PROF_ENABLED=1)
 add_test(NAME prof_enabled COMMAND prof_tests_enabled)
 
 # -------- Disabled tests (always build) --------
-add_executable(prof_tests_disabled 
+add_executable(prof_tests_disabled
     ${CMAKE_CURRENT_SOURCE_DIR}/logger/test_profiler_disabled.cpp)
 target_include_directories(prof_tests_disabled PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(prof_tests_disabled PRIVATE PROF_ENABLED=0)
 target_link_libraries(prof_tests_disabled PRIVATE GTest::gtest_main qilab_lib)
 add_test(NAME prof_disabled COMMAND prof_tests_disabled)
 
+# -------- Data acquisition: enabled (links the real implementation) --------
+add_executable(daq_tests_enabled
+    ${CMAKE_CURRENT_SOURCE_DIR}/logger/test_data_acquisition.cpp)
+target_include_directories(daq_tests_enabled PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+# DAQ_ENABLED=1 propagates from the data_acquisition target (PUBLIC).
+target_link_libraries(daq_tests_enabled PRIVATE GTest::gtest_main data_acquisition qilab_lib)
+add_test(NAME daq_enabled COMMAND daq_tests_enabled)
+
+# -------- Data acquisition: disabled (no-op macros, no linking) --------
+add_executable(daq_tests_disabled
+    ${CMAKE_CURRENT_SOURCE_DIR}/logger/test_data_acquisition.cpp)
+target_include_directories(daq_tests_disabled PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(daq_tests_disabled PRIVATE DAQ_ENABLED=0)
+target_link_libraries(daq_tests_disabled PRIVATE GTest::gtest_main qilab_lib)
+add_test(NAME daq_disabled COMMAND daq_tests_disabled)
+
 include(GoogleTest)
 gtest_discover_tests(transmission_processor_test)
 gtest_discover_tests(prof_tests_disabled)
 gtest_discover_tests(prof_tests_enabled)
+gtest_discover_tests(daq_tests_enabled)
+gtest_discover_tests(daq_tests_disabled)
 gtest_discover_tests(entanglement_manager_test)
 gtest_discover_tests(message_broker_test)
 gtest_discover_tests(config_loader_test)
