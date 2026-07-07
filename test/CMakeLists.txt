@@ -62,6 +62,16 @@ target_link_libraries(qubit_models_test PRIVATE
 GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
 add_test(NAME qubit_models_test COMMAND qubit_models_test)
 
+add_executable(noise_models_test
+                ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/NoiseModels/test_gate_noise_models.cpp
+                ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/NoiseModels/test_entanglement_generation_noise.cpp
+                )
+target_compile_definitions(noise_models_test PRIVATE PROF_ENABLED=0 LOGGING_ENABLED=0)
+target_include_directories(noise_models_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(noise_models_test PRIVATE
+GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
+add_test(NAME noise_models_test COMMAND noise_models_test)
+
 # -------- Enabled tests (only build if PROF_ENABLED is set) --------
 add_executable(prof_tests_enabled 
 ${CMAKE_CURRENT_SOURCE_DIR}/logger/test_profiler_enabled.cpp)
@@ -87,4 +97,5 @@ gtest_discover_tests(entanglement_manager_test)
 gtest_discover_tests(message_broker_test)
 gtest_discover_tests(config_loader_test)
 gtest_discover_tests(qubit_models_test)
+gtest_discover_tests(noise_models_test)
 
