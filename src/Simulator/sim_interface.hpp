@@ -64,6 +64,23 @@ struct ISimulator
                                    Axis_t axis) = 0;
 
     /**
+     * @brief Apply a single-qubit noise channel to the specified qubit.
+     *     * Applies a Pauli noise channel to @p qubit_address with the specified
+     * probabilities for X, Y, and Z errors. The sum of the probabilities should
+     * not exceed 1.0. The implementation uses the underlying simulator's noise
+     * functionality to apply the noise.
+     *     * @param qubit_address Target qubit address.
+     * @param x_noise_probability Probability of an X error occurring on the qubit.
+     * @param y_noise_probability Probability of a Y error occurring on the qubit.
+     * @param z_noise_probability Probability of a Z error occurring on the qubit.
+     * @return true on success; false on invalid parameters or unsupported noise channel.
+     */
+    virtual bool single_qubit_noise(uint8_t qubit_address,
+                                   float x_noise_probability,
+                                   float y_noise_probability,
+                                   float z_noise_probability) = 0;
+
+    /**
      * @brief Apply a two-qubit gate between a control/target pair.
      *
      * Applies the two-qubit operation selected by @p axis and parameterized by

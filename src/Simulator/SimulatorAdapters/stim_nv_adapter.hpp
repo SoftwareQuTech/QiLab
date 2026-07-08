@@ -61,6 +61,16 @@ public:
     bool single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t axis) override;
 
     /**
+     * @copydoc ISimulator::single_qubit_noise
+     * 
+     * @details Applies a Pauli channel to the specified qubit with the given probabilities.
+     *          The probabilities for X, Y, and Z errors are specified by the parameters.
+     *          The sum of the probabilities should not exceed 1.0.
+     *          The implementation uses Stim's Pauli channel functionality to apply the noise.
+     */
+    bool single_qubit_noise(uint8_t qubit_address, float x_noise_probability, float y_noise_probability, float z_noise_probability);
+
+    /**
      * @copydoc ISimulator::two_qubit_gate
      *
      * @details Implementations typically realize CX/CZ/iSWAP via Stim’s
@@ -171,7 +181,12 @@ private:
     stim::CircuitInstruction sqrt_yy_dag_inst;    // Custom instruction for SQRT_YY_DAG
     stim::CircuitInstruction sqrt_xx_inst;        // Custom instruction for SQRT_XX
     stim::CircuitInstruction sqrt_xx_dag_inst;    // Custom instruction for SQRT_XX_DAG
-    
+
+    // Additional parameters for noise channels
+    stim::CircuitInstruction pauli_channel_1_inst; // Custom instruction for PAULI_CHANNEL_1
+    std::array<double, 3> pauli_channel_probs; // Probabilities for X, Y, Z errors
+    stim::SpanRef<double> pauli_probs_span;   // SpanRef for the probabilities array
+
     // Pre-measurement gate configuration storage
     struct PreMeasureConfig {
         bool enabled = false;

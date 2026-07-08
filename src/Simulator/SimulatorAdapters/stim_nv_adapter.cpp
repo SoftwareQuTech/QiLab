@@ -29,7 +29,10 @@ StimAdapterNVCenters::StimAdapterNVCenters(std::seed_seq &seed_seq, const uint8_
     sqrt_yy_inst(stim::GateType::SQRT_YY, {}, two_span, ""),
     sqrt_yy_dag_inst(stim::GateType::SQRT_YY_DAG, {}, two_span, ""),
     sqrt_xx_inst(stim::GateType::SQRT_XX, {}, two_span, ""),
-    sqrt_xx_dag_inst(stim::GateType::SQRT_XX_DAG, {}, two_span, "")
+    sqrt_xx_dag_inst(stim::GateType::SQRT_XX_DAG, {}, two_span, ""),
+    pauli_channel_probs{0.0f, 0.0f, 0.0f},
+    pauli_probs_span(pauli_channel_probs.data(), pauli_channel_probs.data() + 3),
+    pauli_channel_1_inst(stim::GateType::PAULI_CHANNEL_1, pauli_probs_span, single_span, "")
 {
     // Pre-allocate enough space for all qubits
     stim_instance.ensure_large_enough_for_qubits(num_qubits);
@@ -57,6 +60,21 @@ bool StimAdapterNVCenters::qubit_initialize(uint8_t qubit_address)
     LOG_INFO("Initialized qubit " + std::to_string(qubit_address) + " to |0> state.");
     return true;
 }
+bool StimAdapterNVCenters::single_qubit_noise(uint8_t qubit_address, float x_noise_probability, float y_noise_probability, float z_noise_probability)
+{
+    // Update target qubit address
+    single_target[0] = stim::GateTarget{qubit_address};
+    
+    // Maybe do checks for valid probabilities here (e.g., sum <= 1.0), but for now, just apply the noise
+    
+    pauli_channel_probs[0] = static_cast<double>(x_noise_probability);
+    pauli_channel_probs[1] = static_cast<double>(y_noise_probability);
+    pauli_channel_probs[2] = static_cast<double>(z_noise_probability);
+    stim_instance.do_PAULI_CHANNEL_1(pauli_channel_1_inst);
+    LOG_INFO("Applied single-qubit noise: qubit=" + std::to_string(qubit_address) + " x_noise=" + std::to_string(x_noise_probability) + " y_noise=" + std::to_string(y_noise_probability) + " z_noise=" + std::to_string(z_noise_probability));
+    return true;
+}
+
 bool StimAdapterNVCenters::single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t axis)
 {
     // Update target qubit address

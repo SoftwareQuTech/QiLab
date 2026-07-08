@@ -189,8 +189,11 @@ ResponseData SimulatorManager::single_qubit_gate_handler(std::unique_ptr<Command
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         return response;
     }
-    float qubit_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
-    //simulator_inst->apply_qubit_noise(cmd->qubit1_address + qubit_offset, qubit_noise);
+   
+    // Get the dephasing probability for the qubit and apply it as noise before the gate operation
+    float z_qubit_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
+    simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0, 0.0, z_qubit_noise);
+
     simulator_inst->single_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->angle, cmd->axis);
     simulation_qubits[cmd->qubit1_address + qubit_offset]->mark_touched();
     response.outcome = Outcome_Status_t::SUCCESS;
@@ -221,6 +224,12 @@ ResponseData SimulatorManager::two_qubit_gate_handler(std::unique_ptr<CommandBas
         return response;
     }
 
+    // Get the dephasing probability for the qubit and apply it as noise before the gate operation
+    float z_qubit1_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
+    simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0, 0.0, z_qubit1_noise);
+    float z_qubit2_noise = simulation_qubits[cmd->qubit2_address + qubit_offset]->get_qubit_decoherence_probability();
+    simulator_inst->single_qubit_noise(cmd->qubit2_address + qubit_offset, 0.0, 0.0, z_qubit2_noise);
+    
     if (!simulator_inst->two_qubit_gate(cmd->qubit1_address + qubit_offset,
                                         cmd->qubit2_address + qubit_offset,
                                         cmd->angle,
@@ -234,6 +243,9 @@ ResponseData SimulatorManager::two_qubit_gate_handler(std::unique_ptr<CommandBas
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         return response;
     }
+
+    simulation_qubits[cmd->qubit1_address + qubit_offset]->mark_touched();
+    simulation_qubits[cmd->qubit2_address + qubit_offset]->mark_touched();
 
     response.outcome = Outcome_Status_t::SUCCESS;
     response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
@@ -463,8 +475,13 @@ ResponseData SimulatorManager::qubit_measure_handler(std::unique_ptr<CommandBase
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         return response;
     }
+   
+    // Get the dephasing probability for the qubit and apply it as noise before the measurement operation
+    float z_qubit_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
+    simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0, 0.0, z_qubit_noise);
 
     auto res = simulator_inst->qubit_measure(cmd->qubit1_address + qubit_offset, cmd->basis);
+    simulation_qubits[cmd->qubit1_address + qubit_offset]->mark_touched();
     response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
     response.outcome = res ? (static_cast<uint8_t>(Measurement_t::MEASURE_OUTCOME_MINUS_1) | static_cast<uint8_t>(Outcome_Status_t::SUCCESS))
                            : (static_cast<uint8_t>(Measurement_t::MEASURE_OUTCOME_PLUS_1) | static_cast<uint8_t>(Outcome_Status_t::SUCCESS));
