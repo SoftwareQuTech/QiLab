@@ -23,12 +23,35 @@ void MockHandler::create_commands()
 {
     const int number_of_nodes = 1;
 
-    for (auto y = 0; y < (2 * number_of_nodes) - 2; y++)
+    // for (auto y = 0; y < (2 * number_of_nodes) - 2; y++)
+    // {
+        //  command_list.push_back(new InitQubit(y));
+         
+    // }
+    // command_list.push_back(new Nop());
+    // command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::Z_AXIS));
+    bool do_h_gate = true;
+    bool measure_x_basis = true;
+    int nop_count = 12;
+    command_list.push_back(new InitQubit(0));
+    if (do_h_gate)
     {
-         command_list.push_back(new InitQubit(y));
+        command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::Z_AXIS));
+        command_list.push_back(new SingleQGate(0, Angle_t::_8_PI_16, Axis_t::Y_AXIS));
     }
-    command_list.push_back(new Nop());
-    command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::Z_AXIS));
+    for (int i = 1; i < nop_count; i++)
+    {
+        command_list.push_back(new Nop());
+    }
+    if (measure_x_basis)
+    {
+        command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::Z_AXIS));
+        command_list.push_back(new SingleQGate(0, Angle_t::_8_PI_16, Axis_t::Y_AXIS));
+    }
+    command_list.push_back(new QMeasure(0, 0, Axis_t::Z_AXIS));
+
+    // command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::Z_AXIS));
+    // command_list.push_back(new QMeasure(2 * i - 1, 0, Axis_t::Z_AXIS));
     // command_list.push_back(new Entangle(1, 1, 0));
     // int i = 0;
     // for (i = 1; i < (number_of_nodes - 1); i++)
