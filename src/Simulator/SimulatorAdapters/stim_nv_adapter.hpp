@@ -183,9 +183,9 @@ private:
     stim::CircuitInstruction sqrt_xx_dag_inst;    // Custom instruction for SQRT_XX_DAG
 
     // Additional parameters for noise channels
-    stim::CircuitInstruction pauli_channel_1_inst; // Custom instruction for PAULI_CHANNEL_1
     std::array<double, 3> pauli_channel_probs; // Probabilities for X, Y, Z errors
     stim::SpanRef<double> pauli_probs_span;   // SpanRef for the probabilities array
+    stim::CircuitInstruction pauli_channel_1_inst; // Custom instruction for PAULI_CHANNEL_1
 
     // Pre-measurement gate configuration storage
     struct PreMeasureConfig {
