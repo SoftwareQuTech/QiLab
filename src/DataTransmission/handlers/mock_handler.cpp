@@ -32,10 +32,10 @@ void MockHandler::create_commands()
     // command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::Z_AXIS));
     bool do_h_gate = true;
     bool measure_x_basis = true;
-    int nop_count = 12;
+    int nop_count = 240;
     command_list.push_back(new InitQubit(0));
     if (do_h_gate)
-    {
+    { 
         command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::Z_AXIS));
         command_list.push_back(new SingleQGate(0, Angle_t::_8_PI_16, Axis_t::Y_AXIS));
     }

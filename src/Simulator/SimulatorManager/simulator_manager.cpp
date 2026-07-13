@@ -4,6 +4,7 @@
 #include "logger/logger_api.hpp"
 #include "logger/profiler_api.hpp"
 
+#include <chrono>
 
 SimulatorManager::SimulatorManager(std::unique_ptr<ISimulator> simulator)
     : simulator_inst(std::move(simulator))
@@ -191,11 +192,22 @@ ResponseData SimulatorManager::single_qubit_gate_handler(std::unique_ptr<Command
     }
    
     // Get the dephasing probability for the qubit and apply it as noise before the gate operation
+    auto start_time = std::chrono::steady_clock::now();
+    std::string start_time_str = std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(start_time.time_since_epoch()).count());
+    // LOG_INFO("$$ START_TIME: " + start_time_str);
     float z_qubit_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
+    auto end_time = std::chrono::steady_clock::now();
+    std::string end_time_str = std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(end_time.time_since_epoch()).count());
+    // LOG_INFO("$$ END_TIME: " + end_time_str);
+    LOG_INFO("$$ TOTAL_TIME: " + std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - start_time).count()));
     simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0, 0.0, z_qubit_noise);
-
+    
     simulator_inst->single_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->angle, cmd->axis);
+
     simulation_qubits[cmd->qubit1_address + qubit_offset]->mark_touched();
+    auto after_touch_time = std::chrono::steady_clock::now();
+    std::string after_touch_time_str = std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(after_touch_time.time_since_epoch()).count());
+    LOG_INFO("$$ AFTER_TOUCH_TIME: " + after_touch_time_str);
     response.outcome = Outcome_Status_t::SUCCESS;
     response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
     return response;
