@@ -190,10 +190,15 @@ ResponseData SimulatorManager::single_qubit_gate_handler(std::unique_ptr<Command
         return response;
     }
    
-    // Get the dephasing probability for the qubit and apply it as noise before the gate operation
-    float z_qubit_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
-    simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0, 0.0, z_qubit_noise);
-    
+    // Get the idling dephasing probability (between touches) for the qubit and apply it as noise before the gate operation
+    float z_idle_noise_prob = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
+    // Get gate operation noise
+    // Fidelity to depolar F=1-2p/3
+    float depolar_gate_prob = 0.3f; // Replace with actual gate noise calculation
+    // combine noise and normalize noise -> returns normalized PX, PY, PZ for composed noise channel
+    PauliChannelWeights composed_weights = simulator_inst->compose_single_qubit_noise_channel(depolar_gate_prob/3, depolar_gate_prob/3, depolar_gate_prob/3, 0.0, 0.0, z_idle_noise_prob);
+    simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, composed_weights.q_x, composed_weights.q_y, composed_weights.q_z);
+
     simulator_inst->single_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->angle, cmd->axis);
 
     simulation_qubits[cmd->qubit1_address + qubit_offset]->mark_touched();
@@ -479,7 +484,7 @@ ResponseData SimulatorManager::qubit_measure_handler(std::unique_ptr<CommandBase
    
     // Get the dephasing probability for the qubit and apply it as noise before the measurement operation
     float z_qubit_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
-    simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0, 0.0, z_qubit_noise);
+    // simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0, 0.0, z_qubit_noise);
 
     auto res = simulator_inst->qubit_measure(cmd->qubit1_address + qubit_offset, cmd->basis);
     simulation_qubits[cmd->qubit1_address + qubit_offset]->mark_touched();

@@ -9,6 +9,7 @@
 #include "stim.h"
 #include "Simulator/sim_interface.hpp"
 #include "logger/logger.hpp"
+#include "Simulator/entanglement_generation_noise_interface.hpp"
 
 /**
  * @brief Adapter implementing ISimulator on top of the Stim tableau simulator.
@@ -50,6 +51,20 @@ public:
      * @copydoc ISimulator::qubit_initialize
      */
     bool qubit_initialize(uint8_t qubit_address) override;
+
+    /**
+     * @brief Compose a single-qubit noise channel from specified Pauli error probabilities.
+     *
+     * @param x1_noise_probability Probability of X error on qubit 1.
+     * @param y1_noise_probability Probability of Y error on qubit 1.
+     * @param z1_noise_probability Probability of Z error on qubit 1.
+     * @param x2_noise_probability Probability of X error on qubit 2.
+     * @param y2_noise_probability Probability of Y error on qubit 2.
+     * @param z2_noise_probability Probability of Z error on qubit 2.
+     * @return Composed Pauli channel weights.
+     */
+    PauliChannelWeights compose_single_qubit_noise_channel(float x1_noise_probability, float y1_noise_probability, float z1_noise_probability, float x2_noise_probability, float y2_noise_probability, float z2_noise_probability);
+
 
     /**
      * @copydoc ISimulator::single_qubit_gate

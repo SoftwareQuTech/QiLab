@@ -60,6 +60,32 @@ bool StimAdapterNVCenters::qubit_initialize(uint8_t qubit_address)
     LOG_INFO("Initialized qubit " + std::to_string(qubit_address) + " to |0> state.");
     return true;
 }
+
+struct PauliChannelWeights StimAdapterNVCenters::compose_single_qubit_noise_channel(float x1_noise_probability, float y1_noise_probability, float z1_noise_probability, float x2_noise_probability, float y2_noise_probability, float z2_noise_probability)
+{
+    struct PauliChannelWeights composed_weights;
+
+    // Maybe do checks for valid probabilities here (e.g., sum <= 1.0), but for now, just apply the noise
+    float identity1_probability = 1.0f - (x1_noise_probability + y1_noise_probability + z1_noise_probability);
+    float identity2_probability = 1.0f - (x2_noise_probability + y2_noise_probability + z2_noise_probability);
+
+    composed_weights.q_x = identity1_probability * x2_noise_probability + x1_noise_probability * identity2_probability + y1_noise_probability * z2_noise_probability + z1_noise_probability * y2_noise_probability;
+    composed_weights.q_y = identity1_probability * y2_noise_probability + y1_noise_probability * identity2_probability + x1_noise_probability * z2_noise_probability + z1_noise_probability * x2_noise_probability;
+    composed_weights.q_z = identity1_probability * z2_noise_probability + z1_noise_probability * identity2_probability + x1_noise_probability * y2_noise_probability + y1_noise_probability * x2_noise_probability;
+
+    // maybe follow up check that probabilities are valid (sum <= 1.0)
+    if (composed_weights.q_x + composed_weights.q_y + composed_weights.q_z > 1.0f)
+    {
+        LOG_WARNING("Composed single-qubit noise channel has invalid probabilities.");
+        return {0.0f, 0.0f, 0.0f}; // Return zeroed weights on error
+    }
+    LOG_INFO("Probabilities before composing: q1_x=" + std::to_string(x1_noise_probability) + " q1_y=" + std::to_string(y1_noise_probability) + " q1_z=" + std::to_string(z1_noise_probability) +
+             " q2_x=" + std::to_string(x2_noise_probability) + " q2_y=" + std::to_string(y2_noise_probability) + " q2_z=" + std::to_string(z2_noise_probability));
+    LOG_INFO("Composed single-qubit noise channel: q_x=" + std::to_string(composed_weights.q_x) + " q_y=" + std::to_string(composed_weights.q_y) + " q_z=" + std::to_string(composed_weights.q_z));
+    return composed_weights;
+}
+
+
 bool StimAdapterNVCenters::single_qubit_noise(uint8_t qubit_address, float x_noise_probability, float y_noise_probability, float z_noise_probability)
 {
     // Update target qubit address
