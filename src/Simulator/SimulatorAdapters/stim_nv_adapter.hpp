@@ -9,6 +9,7 @@
 #include "stim.h"
 #include "Simulator/sim_interface.hpp"
 #include "logger/logger.hpp"
+#include "Simulator/entanglement_generation_noise_interface.hpp"
 
 /**
  * @brief Adapter implementing ISimulator on top of the Stim tableau simulator.
@@ -52,6 +53,20 @@ public:
     bool qubit_initialize(uint8_t qubit_address) override;
 
     /**
+     * @brief Compose a single-qubit noise channel from specified Pauli error probabilities.
+     *
+     * @param x1_noise_probability Probability of X error on qubit 1.
+     * @param y1_noise_probability Probability of Y error on qubit 1.
+     * @param z1_noise_probability Probability of Z error on qubit 1.
+     * @param x2_noise_probability Probability of X error on qubit 2.
+     * @param y2_noise_probability Probability of Y error on qubit 2.
+     * @param z2_noise_probability Probability of Z error on qubit 2.
+     * @return Composed Pauli channel weights.
+     */
+    PauliChannelWeights compose_single_qubit_noise_channel(float x1_noise_probability, float y1_noise_probability, float z1_noise_probability, float x2_noise_probability, float y2_noise_probability, float z2_noise_probability);
+
+
+    /**
      * @copydoc ISimulator::single_qubit_gate
      *
      * @details Mapped to Stim single-qubit tableau operations. The mapping
@@ -59,6 +74,16 @@ public:
      *          implementation
      */
     bool single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t axis) override;
+
+    /**
+     * @copydoc ISimulator::single_qubit_noise
+     * 
+     * @details Applies a Pauli channel to the specified qubit with the given probabilities.
+     *          The probabilities for X, Y, and Z errors are specified by the parameters.
+     *          The sum of the probabilities should not exceed 1.0.
+     *          The implementation uses Stim's Pauli channel functionality to apply the noise.
+     */
+    bool single_qubit_noise(uint8_t qubit_address, float x_noise_probability, float y_noise_probability, float z_noise_probability);
 
     /**
      * @copydoc ISimulator::two_qubit_gate
@@ -163,6 +188,11 @@ private:
     stim::CircuitInstruction sqrt_yy_dag_inst;    // Custom instruction for SQRT_YY_DAG
     stim::CircuitInstruction sqrt_xx_inst;        // Custom instruction for SQRT_XX
     stim::CircuitInstruction sqrt_xx_dag_inst;    // Custom instruction for SQRT_XX_DAG
+
+    // Additional parameters for noise channels
+    std::array<double, 3> pauli_channel_probs; // Probabilities for X, Y, Z errors
+    stim::SpanRef<double> pauli_probs_span;   // SpanRef for the probabilities array
+    stim::CircuitInstruction pauli_channel_1_inst; // Custom instruction for PAULI_CHANNEL_1
     
     // Threshold for measurement record clearing
     static constexpr size_t MEASUREMENT_CLEAR_THRESHOLD = 1024;

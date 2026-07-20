@@ -274,6 +274,10 @@ int16_t SimulatorManager::register_node(const NodeConfig &node_config)
     // Update the total count of registered qubits
     registered_qubits += requested_qubits;
 
+    // Call the simulator to allocate qubits for this node
+    // This is necessary to ensure that the STIM Tableau is aware of the new qubits and can manage their state correctly.
+    simulator_inst->allocate_qubits(registered_qubits);
+
     LOG_INFO("Registered new node " + std::to_string(node_id) + " with " + std::to_string(requested_qubits) + " qubits at offset " + std::to_string(nodes[node_id].first) + ".");
     return node_id;
 }
@@ -382,17 +386,19 @@ ResponseData SimulatorManager::single_qubit_gate_handler(std::unique_ptr<Command
         PROF_STOP(prof_event_single_qubit_gate);
         return response;
     }
+   
+    // Get the idling dephasing probability (between touches) for the qubit and apply it as noise before the gate operation
+    float z_idle_noise_prob = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
+    // Get gate operation noise
+    // Fidelity to depolar F=1-2p/3
+    float depolar_gate_prob = 0.3f; // Replace with actual gate noise calculation
+    // combine noise and normalize noise -> returns normalized PX, PY, PZ for composed noise channel
+    PauliChannelWeights composed_weights = simulator_inst->compose_single_qubit_noise_channel(depolar_gate_prob/3, depolar_gate_prob/3, depolar_gate_prob/3, 0.0, 0.0, z_idle_noise_prob);
+    simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, composed_weights.q_x, composed_weights.q_y, composed_weights.q_z);
 
-    /// Apply the operations noises here, before the operation is executed, in order to ensure the noise is applied even if the operation fails due to invalid qubits or other reasons, which would be more realistic
-    if (qubit_noise_enabled)
-    {
-        // Qubit-in-memory noise, which should be dephasing (PhaseFlip). Gate (depolarizing) noise is not modeled yet.
-        auto p_dephasing = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
-        simulator_inst->apply_qubit_noise(cmd->qubit1_address + qubit_offset, p_dephasing, 0.0f);
-    }
-
-    time_point start_time = clock_type::now();
     simulator_inst->single_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->angle, cmd->axis);
+
+    simulation_qubits[cmd->qubit1_address + qubit_offset]->mark_touched();
     response.outcome = Outcome_Status_t::SUCCESS;
     response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
     PROF_STOP(prof_event_single_qubit_gate);
@@ -425,6 +431,12 @@ ResponseData SimulatorManager::two_qubit_gate_handler(std::unique_ptr<CommandBas
         return response;
     }
 
+    // Get the dephasing probability for the qubit and apply it as noise before the gate operation
+    float z_qubit1_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
+    simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0, 0.0, z_qubit1_noise);
+    float z_qubit2_noise = simulation_qubits[cmd->qubit2_address + qubit_offset]->get_qubit_decoherence_probability();
+    simulator_inst->single_qubit_noise(cmd->qubit2_address + qubit_offset, 0.0, 0.0, z_qubit2_noise);
+    
     if (!simulator_inst->two_qubit_gate(cmd->qubit1_address + qubit_offset,
                                         cmd->qubit2_address + qubit_offset,
                                         cmd->angle,
@@ -439,6 +451,9 @@ ResponseData SimulatorManager::two_qubit_gate_handler(std::unique_ptr<CommandBas
         PROF_STOP(prof_event_two_qubit_gate);
         return response;
     }
+
+    simulation_qubits[cmd->qubit1_address + qubit_offset]->mark_touched();
+    simulation_qubits[cmd->qubit2_address + qubit_offset]->mark_touched();
 
     response.outcome = Outcome_Status_t::SUCCESS;
     response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
@@ -735,6 +750,10 @@ ResponseData SimulatorManager::qubit_measure_handler(std::unique_ptr<CommandBase
         PROF_STOP(prof_event_qubit_measurement);
         return response;
     }
+   
+    // Get the dephasing probability for the qubit and apply it as noise before the measurement operation
+    float z_qubit_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
+    // simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0, 0.0, z_qubit_noise);
 
     // Apply this node's pending basis-rotation gates (target=0) to its own qubit
     // immediately before measuring, within this single atomic handler call, so no

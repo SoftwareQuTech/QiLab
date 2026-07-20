@@ -33,7 +33,10 @@ StimAdapterNVCenters::StimAdapterNVCenters(std::seed_seq &seed_seq, const uint8_
     sqrt_yy_inst(stim::GateType::SQRT_YY, {}, two_span, ""),
     sqrt_yy_dag_inst(stim::GateType::SQRT_YY_DAG, {}, two_span, ""),
     sqrt_xx_inst(stim::GateType::SQRT_XX, {}, two_span, ""),
-    sqrt_xx_dag_inst(stim::GateType::SQRT_XX_DAG, {}, two_span, "")
+    sqrt_xx_dag_inst(stim::GateType::SQRT_XX_DAG, {}, two_span, ""),
+    pauli_channel_probs{0.0f, 0.0f, 0.0f},
+    pauli_probs_span(pauli_channel_probs.data(), pauli_channel_probs.data() + 3),
+    pauli_channel_1_inst(stim::GateType::PAULI_CHANNEL_1, pauli_probs_span, single_span, "")
 {
     // Pre-allocate enough space for all qubits
     stim_instance.ensure_large_enough_for_qubits(num_qubits);
@@ -77,6 +80,47 @@ bool StimAdapterNVCenters::qubit_initialize(uint8_t qubit_address)
     LOG_INFO("Initialized qubit " + std::to_string(qubit_address) + " to |0> state.");
     return true;
 }
+
+struct PauliChannelWeights StimAdapterNVCenters::compose_single_qubit_noise_channel(float x1_noise_probability, float y1_noise_probability, float z1_noise_probability, float x2_noise_probability, float y2_noise_probability, float z2_noise_probability)
+{
+    struct PauliChannelWeights composed_weights;
+
+    // Maybe do checks for valid probabilities here (e.g., sum <= 1.0), but for now, just apply the noise
+    float identity1_probability = 1.0f - (x1_noise_probability + y1_noise_probability + z1_noise_probability);
+    float identity2_probability = 1.0f - (x2_noise_probability + y2_noise_probability + z2_noise_probability);
+
+    composed_weights.q_x = identity1_probability * x2_noise_probability + x1_noise_probability * identity2_probability + y1_noise_probability * z2_noise_probability + z1_noise_probability * y2_noise_probability;
+    composed_weights.q_y = identity1_probability * y2_noise_probability + y1_noise_probability * identity2_probability + x1_noise_probability * z2_noise_probability + z1_noise_probability * x2_noise_probability;
+    composed_weights.q_z = identity1_probability * z2_noise_probability + z1_noise_probability * identity2_probability + x1_noise_probability * y2_noise_probability + y1_noise_probability * x2_noise_probability;
+
+    // maybe follow up check that probabilities are valid (sum <= 1.0)
+    if (composed_weights.q_x + composed_weights.q_y + composed_weights.q_z > 1.0f)
+    {
+        LOG_WARNING("Composed single-qubit noise channel has invalid probabilities.");
+        return {0.0f, 0.0f, 0.0f}; // Return zeroed weights on error
+    }
+    LOG_INFO("Probabilities before composing: q1_x=" + std::to_string(x1_noise_probability) + " q1_y=" + std::to_string(y1_noise_probability) + " q1_z=" + std::to_string(z1_noise_probability) +
+             " q2_x=" + std::to_string(x2_noise_probability) + " q2_y=" + std::to_string(y2_noise_probability) + " q2_z=" + std::to_string(z2_noise_probability));
+    LOG_INFO("Composed single-qubit noise channel: q_x=" + std::to_string(composed_weights.q_x) + " q_y=" + std::to_string(composed_weights.q_y) + " q_z=" + std::to_string(composed_weights.q_z));
+    return composed_weights;
+}
+
+
+bool StimAdapterNVCenters::single_qubit_noise(uint8_t qubit_address, float x_noise_probability, float y_noise_probability, float z_noise_probability)
+{
+    // Update target qubit address
+    single_target[0] = stim::GateTarget{qubit_address};
+    
+    // Maybe do checks for valid probabilities here (e.g., sum <= 1.0), but for now, just apply the noise
+    
+    pauli_channel_probs[0] = static_cast<double>(x_noise_probability);
+    pauli_channel_probs[1] = static_cast<double>(y_noise_probability);
+    pauli_channel_probs[2] = static_cast<double>(z_noise_probability);
+    stim_instance.do_PAULI_CHANNEL_1(pauli_channel_1_inst);
+    LOG_INFO("Applied single-qubit noise: qubit=" + std::to_string(qubit_address) + " x_noise=" + std::to_string(x_noise_probability) + " y_noise=" + std::to_string(y_noise_probability) + " z_noise=" + std::to_string(z_noise_probability));
+    return true;
+}
+
 bool StimAdapterNVCenters::single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t axis)
 {
     // Update target qubit address
