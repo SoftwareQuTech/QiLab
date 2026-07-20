@@ -6,8 +6,8 @@
 #include "logger/profiler_api.hpp"
 
 
-SimulatorManager::SimulatorManager(std::unique_ptr<ISimulator> simulator)
-    : simulator_inst(std::move(simulator))
+SimulatorManager::SimulatorManager(std::unique_ptr<ISimulator> simulator, bool qubit_noise_enabled)
+    : simulator_inst(std::move(simulator)), qubit_noise_enabled(qubit_noise_enabled)
 {
     // Initialize the simulation command table with simulator functions.
     // for each command type, assign the corresponding handler function
@@ -115,7 +115,7 @@ SimulatorManager::CommandTimingInfo SimulatorManager::build_command_timing_info(
     case Command_t::SINGLE_QUBIT_GATE:
     {
         auto *cmd = static_cast<const SingleQubitGate *>(&command);
-        if (cmd->angle != 0)
+        if (cmd->angle != Angle_t::_0_PI_16)
         {
             info.target_delay_ns = node_operation_delays[node_id].single_gate_delay;
             info.global_qubit_1 = qubit_offset + cmd->qubit1_address;
@@ -125,7 +125,7 @@ SimulatorManager::CommandTimingInfo SimulatorManager::build_command_timing_info(
     case Command_t::TWO_QUBIT_GATE:
     {
         auto *cmd = static_cast<const TwoQubitGate *>(&command);
-        if (cmd->angle != 0)
+        if (cmd->angle != Angle_t::_0_PI_16)
         {
             info.target_delay_ns = node_operation_delays[node_id].two_gate_delay;
             info.global_qubit_1 = qubit_offset + cmd->qubit1_address;
@@ -374,8 +374,9 @@ ResponseData SimulatorManager::single_qubit_gate_handler(std::unique_ptr<Command
         return response;
     }
 
-    if (cmd->angle == 0)
+    if (cmd->angle == Angle_t::_0_PI_16)
     {
+        LOG_INFO("Single-qubit gate with zero angle, no operation performed. No noise as well");
         response.outcome = Outcome_Status_t::SUCCESS;
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         PROF_STOP(prof_event_single_qubit_gate);
@@ -383,14 +384,12 @@ ResponseData SimulatorManager::single_qubit_gate_handler(std::unique_ptr<Command
     }
 
     /// Apply the operations noises here, before the operation is executed, in order to ensure the noise is applied even if the operation fails due to invalid qubits or other reasons, which would be more realistic
-    // Get the qubit in memory noise which shold be dephasing
-    auto p_dephasing = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
-    // Get the qubit noise for the single gate operation, which should be depolarizing
-    //auto p_dephasing = simulation_gates->get_single_qubit_gate_noise_probability(angle, axis);
-    // Combine the noises to get the total noise probability for the operation, this is a simple model, in reality the noise would be more complex and depend on the specific operation and the qubit state, but this is a good starting point
-    //auto total_noise_probability = 1 - (1 - p_dephasing) * (1 - p_single_gate);
-    // Apply the noise
-    //simualtor_inst->apply_qubit_noise(cmd->qubit1_address + qubit_offset, p_dephasing, p_polarizing);
+    if (qubit_noise_enabled)
+    {
+        // Qubit-in-memory noise, which should be dephasing (PhaseFlip). Gate (depolarizing) noise is not modeled yet.
+        auto p_dephasing = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
+        simulator_inst->apply_qubit_noise(cmd->qubit1_address + qubit_offset, p_dephasing, 0.0f);
+    }
 
     time_point start_time = clock_type::now();
     simulator_inst->single_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->angle, cmd->axis);
@@ -417,11 +416,12 @@ ResponseData SimulatorManager::two_qubit_gate_handler(std::unique_ptr<CommandBas
         return response;
     }
 
-    if (cmd->angle == 0)
+    if (cmd->angle == Angle_t::_0_PI_16)
     {
+        LOG_INFO("Two-qubit gate with zero angle, no operation performed. No noise as well");
         response.outcome = Outcome_Status_t::SUCCESS;
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
-PROF_STOP(prof_event_two_qubit_gate);
+        PROF_STOP(prof_event_two_qubit_gate);
         return response;
     }
 

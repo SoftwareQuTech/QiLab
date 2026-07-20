@@ -986,4 +986,135 @@ TEST_F(ConfigLoaderTest, RejectsQubitArraysWithInlineValue)
     EXPECT_FALSE(load_config(path.string()).has_value());
 }
 
+// ---------------------------------------------------------------------------
+// System configuration
+// ---------------------------------------------------------------------------
+
+TEST_F(ConfigLoaderTest, SystemSectionDefaultsWhenOmitted)
+{
+    const std::string yaml = single_node_with_noise(
+        "          type: BASIC\n"
+        "          t2_value: 1000\n");
+
+    const auto path = write_config("system_omitted.yaml", yaml);
+    const auto config = load_config(path.string());
+    ASSERT_TRUE(config.has_value());
+    EXPECT_FLOAT_EQ(config->system.transmission_cycle_time_us, 5.0f);
+    EXPECT_TRUE(config->system.qubit_noise_enabled);
+}
+
+TEST_F(ConfigLoaderTest, SystemSectionParsesValues)
+{
+    const std::string yaml =
+        "system:\n"
+        "  transmission_cycle_time_us: 12.5\n"
+        "  qubit_noise_enabled: false\n"
+        + single_node_with_noise(
+            "          type: BASIC\n"
+            "          t2_value: 1000\n");
+
+    const auto path = write_config("system_values.yaml", yaml);
+    const auto config = load_config(path.string());
+    ASSERT_TRUE(config.has_value());
+    EXPECT_FLOAT_EQ(config->system.transmission_cycle_time_us, 12.5f);
+    EXPECT_FALSE(config->system.qubit_noise_enabled);
+}
+
+TEST_F(ConfigLoaderTest, SystemSectionPartialKeepsOtherDefault)
+{
+    const std::string yaml =
+        "system:\n"
+        "  qubit_noise_enabled: false\n"
+        + single_node_with_noise(
+            "          type: BASIC\n"
+            "          t2_value: 1000\n");
+
+    const auto path = write_config("system_partial.yaml", yaml);
+    const auto config = load_config(path.string());
+    ASSERT_TRUE(config.has_value());
+    EXPECT_FLOAT_EQ(config->system.transmission_cycle_time_us, 5.0f);
+    EXPECT_FALSE(config->system.qubit_noise_enabled);
+}
+
+TEST_F(ConfigLoaderTest, RejectsSystemSectionWithInlineValue)
+{
+    const std::string yaml =
+        "system: 5\n"
+        + single_node_with_noise(
+            "          type: BASIC\n"
+            "          t2_value: 1000\n");
+
+    const auto path = write_config("system_inline.yaml", yaml);
+    EXPECT_FALSE(load_config(path.string()).has_value());
+}
+
+TEST_F(ConfigLoaderTest, RejectsSystemSectionNegativeCycleTime)
+{
+    const std::string yaml =
+        "system:\n"
+        "  transmission_cycle_time_us: -1\n"
+        + single_node_with_noise(
+            "          type: BASIC\n"
+            "          t2_value: 1000\n");
+
+    const auto path = write_config("system_negative_cycle_time.yaml", yaml);
+    EXPECT_FALSE(load_config(path.string()).has_value());
+}
+
+TEST_F(ConfigLoaderTest, RejectsSystemSectionNonNumericCycleTime)
+{
+    const std::string yaml =
+        "system:\n"
+        "  transmission_cycle_time_us: not_a_number\n"
+        + single_node_with_noise(
+            "          type: BASIC\n"
+            "          t2_value: 1000\n");
+
+    const auto path = write_config("system_bad_cycle_time.yaml", yaml);
+    EXPECT_FALSE(load_config(path.string()).has_value());
+}
+
+TEST_F(ConfigLoaderTest, RejectsSystemSectionNonBoolNoiseEnabled)
+{
+    const std::string yaml =
+        "system:\n"
+        "  qubit_noise_enabled: yes\n"
+        + single_node_with_noise(
+            "          type: BASIC\n"
+            "          t2_value: 1000\n");
+
+    const auto path = write_config("system_bad_noise_flag.yaml", yaml);
+    EXPECT_FALSE(load_config(path.string()).has_value());
+}
+
+TEST_F(ConfigLoaderTest, RejectsUnknownKeyInSystemSection)
+{
+    const std::string yaml =
+        "system:\n"
+        "  unknown_key: 1\n"
+        + single_node_with_noise(
+            "          type: BASIC\n"
+            "          t2_value: 1000\n");
+
+    const auto path = write_config("system_unknown_key.yaml", yaml);
+    EXPECT_FALSE(load_config(path.string()).has_value());
+}
+
+TEST_F(ConfigLoaderTest, CreatesDefaultConfigWithSystemSection)
+{
+    EnvVarGuard path_guard("QILAB_CONFIG_PATH");
+    EnvVarGuard dir_guard("QILAB_CONFIG_DIR");
+
+    unsetenv("QILAB_CONFIG_PATH");
+    setenv("QILAB_CONFIG_DIR", temp_dir.string().c_str(), 1);
+
+    ASSERT_TRUE(create_default_config());
+
+    const std::filesystem::path expected = temp_dir / "nodes.yaml";
+    const auto config = load_config(expected.string());
+    ASSERT_TRUE(config.has_value());
+    EXPECT_FLOAT_EQ(config->system.transmission_cycle_time_us, 5.0f);
+    EXPECT_TRUE(config->system.qubit_noise_enabled);
+}
+
 } // namespace

@@ -5,6 +5,7 @@
 */
 
 #pragma once
+#include <chrono>
 #include <functional>
 
 #include "DataTypes/command_data.hpp"
@@ -45,8 +46,10 @@ class DataTransmissionRunner
      *                              low-level transmission operations.
      * @param broker                Shared pointer to MessageBroker for command/response
      *                              exchange with other components.
+     * @param cycle_time_us         Transmission cycle period in microseconds (from
+     *                              system.transmission_cycle_time_us config), default 5.0.
      */
-    DataTransmissionRunner(std::vector<int16_t> nodes, std::unique_ptr<TransmissionProcessor> processor, std::shared_ptr<MessageBroker> broker); 
+    DataTransmissionRunner(std::vector<int16_t> nodes, std::unique_ptr<TransmissionProcessor> processor, std::shared_ptr<MessageBroker> broker, float cycle_time_us = 5.0f);
     
     /**
      * @brief Destructor.
@@ -98,6 +101,9 @@ class DataTransmissionRunner
     
     /// Processor for low-level transmission operations
     std::unique_ptr<TransmissionProcessor> transmission_processor;
+
+    /// Transmission loop cycle period, from system.transmission_cycle_time_us config
+    std::chrono::nanoseconds transmission_cycle_time;
 
     /// Profiling event IDs for performance monitoring
     

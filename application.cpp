@@ -105,7 +105,7 @@ int main()
     LOG_INFO("Configuration loaded with " + std::to_string(config->nodes.size()) + " nodes");
     
     std::unique_ptr<StimAdapterNVCenters> stim_adapter =  std::make_unique<StimAdapterNVCenters>(seq, 0); //the seed is problematic
-    std::unique_ptr<SimulatorManager> sim_manager = std::make_unique<SimulatorManager>(std::move(stim_adapter));
+    std::unique_ptr<SimulatorManager> sim_manager = std::make_unique<SimulatorManager>(std::move(stim_adapter), config->system.qubit_noise_enabled);
     
     
     // Register nodes dynamically from configuration
@@ -123,12 +123,12 @@ int main()
     LOG_INFO("Using SPI transmission handler");
     std::unique_ptr<ITransmissionHandler> transportA = std::make_unique<SPIHandler>();
     std::unique_ptr<TransmissionProcessor> command_handlerA = std::make_unique<TransmissionProcessor>(std::move(transportA));
-    DataTransmissionRunner transmission_node(node_ids, std::move(command_handlerA), broker);
+    DataTransmissionRunner transmission_node(node_ids, std::move(command_handlerA), broker, config->system.transmission_cycle_time_us);
 #else
     LOG_INFO("Using mocked transmission handler");
     std::unique_ptr<ITransmissionHandler> transportB = std::make_unique<MockHandler>();
     std::unique_ptr<TransmissionProcessor> command_handlerB = std::make_unique<TransmissionProcessor>(std::move(transportB));
-    DataTransmissionRunner transmission_node(node_ids, std::move(command_handlerB), broker);
+    DataTransmissionRunner transmission_node(node_ids, std::move(command_handlerB), broker, config->system.transmission_cycle_time_us);
 #endif
 
     EntanglementRunner ent_runner(broker);

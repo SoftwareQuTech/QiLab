@@ -11,6 +11,7 @@
  */
 struct AppConfig {
     EntanglementNoiseConfigData entanglement_noise_model;
+    SystemConfig system;
     std::vector<NodeConfig> nodes;
 };
 

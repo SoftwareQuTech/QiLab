@@ -12,6 +12,11 @@
       "description": "Optional. Defaults to BASIC with t2_value 1000 if omitted.",
       "$ref": "#/$defs/entanglement_noise_model"
     },
+    "system": {
+      "title": "QiLab System Configuration",
+      "description": "Optional. Global runtime parameters; defaults apply if omitted.",
+      "$ref": "#/$defs/system"
+    },
     "nodes": {
       "title": "Nodes",
       "type": "array",
@@ -125,13 +130,34 @@
         {
           "title": "PHASE_FLIP",
           "additionalProperties": false,
-          "required": ["type", "flip_probability"],
+          "required": ["type", "t2_value"],
           "properties": {
             "type": { "const": "PHASE_FLIP" },
-            "flip_probability": { "type": "number", "minimum": 0 }
+            "t2_value": { "type": "number", "minimum": 0, "unit": "ns" }
           }
         }
       ]
+    },
+    "system": {
+      "title": "QiLab System Configuration",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "transmission_cycle_time_us": {
+          "title": "Transmission cycle time",
+          "description": "Period of the transmission runner's busy-spin cycle. Defaults to 5 if omitted.",
+          "type": "number",
+          "minimum": 0,
+          "unit": "us",
+          "default": 5
+        },
+        "qubit_noise_enabled": {
+          "title": "Qubit noise enabled",
+          "description": "Enables applying qubit-in-memory noise during simulation. Defaults to true if omitted.",
+          "type": "boolean",
+          "default": true
+        }
+      }
     },
     "entanglement_noise_model": {
       "title": "Entanglement noise model",

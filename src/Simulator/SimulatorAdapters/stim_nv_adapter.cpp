@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <random>
 #include "stim.h"
 #include "logger/logger_api.hpp"
@@ -7,9 +8,12 @@ StimAdapterNVCenters::StimAdapterNVCenters(std::seed_seq &seed_seq, const uint8_
     : generator(seed_seq), stim_instance(std::move(generator), num_qubits), 
     single_target{}, 
     single_span(single_target.data(), single_target.data() + 1), 
-    measure_inst(stim::GateType::M, {}, single_span, ""), 
-    init_inst(stim::GateType::R, {}, single_span, ""), 
-    h_gate_inst(stim::GateType::H, {}, single_span, ""), 
+    measure_inst(stim::GateType::M, {}, single_span, ""),
+    init_inst(stim::GateType::R, {}, single_span, ""),
+    z_error_prob{0.0},
+    z_error_args(z_error_prob.data(), z_error_prob.data() + 1),
+    z_error_inst(stim::GateType::Z_ERROR, z_error_args, single_span, ""),
+    h_gate_inst(stim::GateType::H, {}, single_span, ""),
     x_gate_inst(stim::GateType::X, {}, single_span, ""), 
     sqrt_x_gate_inst(stim::GateType::SQRT_X, {}, single_span, ""), 
     x_gate_dag_inst(stim::GateType::SQRT_X_DAG, {}, single_span, ""), 
@@ -50,13 +54,15 @@ bool StimAdapterNVCenters::allocate_qubits(uint8_t num_qubits)
 
 bool StimAdapterNVCenters::apply_qubit_noise(uint8_t qubit_address, float p_dephasing, float p_depolarizing)
 {
-    // Apply dephasing noise
-    if (p_dephasing > 0) {
-        // apply the noise
+    // Apply dephasing (qubit-in-memory / phase-flip) noise as a STIM Z_ERROR
+    if (p_dephasing > 0.0f) {
+        single_target[0] = stim::GateTarget{qubit_address};
+        z_error_prob[0] = std::min(static_cast<double>(p_dephasing), 1.0); // defensive clamp; model already bounds p <= 0.5
+        stim_instance.do_Z_ERROR(z_error_inst);
     }
-    // Apply depolarizing noise
-    if (p_depolarizing > 0) {
-        //apply the noise
+    // Depolarizing (gate) noise intentionally not implemented yet -- only qubit-in-memory noise is modeled.
+    if (p_depolarizing > 0.0f) {
+        LOG_WARNING("Depolarizing noise requested but not implemented; ignoring.");
     }
     LOG_INFO("Applied noise to qubit " + std::to_string(qubit_address) + ": dephasing=" + std::to_string(p_dephasing) + ", depolarizing=" + std::to_string(p_depolarizing));
     return true;

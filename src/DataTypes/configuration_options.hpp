@@ -98,3 +98,10 @@ struct NodeConfig
     QuantumOperationsDelaysNs qubit_operations_delays;
     std::vector<QubitArrayConfig> qubit_arrays;
 };
+
+/// "QiLab System Configuration" -- global runtime parameters (optional section, defaults apply)
+struct SystemConfig
+{
+    float transmission_cycle_time_us = 5.0f; // transmission runner cycle period, microseconds
+    bool  qubit_noise_enabled = true;        // gate qubit-in-memory noise application in the sim manager
+};

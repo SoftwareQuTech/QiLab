@@ -31,6 +31,9 @@ constexpr const char* kQubitMoveKey = "qubit_move";
 constexpr const char* kQubitSwapKey = "qubit_swap";
 constexpr const char* kQubitInitKey = "qubit_init";
 constexpr const char* kEntanglementNoiseModelKey = "entanglement_noise_model";
+constexpr const char* kSystemKey = "system";
+constexpr const char* kTransmissionCycleTimeKey = "transmission_cycle_time_us";
+constexpr const char* kQubitNoiseEnabledKey = "qubit_noise_enabled";
 
 struct ParsedLine
 {
@@ -414,6 +417,60 @@ bool parse_quantum_operation_delays(const std::vector<ParsedLine>& lines,
     return true;
 }
 
+bool parse_system_section(const std::vector<ParsedLine>& lines,
+                          std::size_t& index,
+                          int parent_indent,
+                          SystemConfig& system,
+                          std::string& error) noexcept
+{
+    while (index < lines.size() && lines[index].indent > parent_indent)
+    {
+        if (lines[index].indent != parent_indent + kIndentStep)
+        {
+            return set_parse_error_near(error, "system", "Invalid indentation", lines[index].content);
+        }
+
+        const auto key_value = config_parse::split_key_value(lines[index].content);
+        if (!key_value.has_value())
+        {
+            return set_parse_error_near(error, "system", "Invalid key/value", lines[index].content);
+        }
+
+        if (key_value->first == kTransmissionCycleTimeKey)
+        {
+            float parsed_value = 0.0f;
+            if (!config_parse::parse_non_negative_float(key_value->second, parsed_value))
+            {
+                return set_parse_error(error,
+                                       "system",
+                                       "Invalid value for '" + key_value->first + "': '" + key_value->second + "'");
+            }
+
+            system.transmission_cycle_time_us = parsed_value;
+        }
+        else if (key_value->first == kQubitNoiseEnabledKey)
+        {
+            bool parsed_value = false;
+            if (!config_parse::parse_bool(key_value->second, parsed_value))
+            {
+                return set_parse_error(error,
+                                       "system",
+                                       "Invalid value for '" + key_value->first + "': '" + key_value->second + "'");
+            }
+
+            system.qubit_noise_enabled = parsed_value;
+        }
+        else
+        {
+            return set_parse_error(error, "system", "Unknown key '" + key_value->first + "'");
+        }
+
+        ++index;
+    }
+
+    return true;
+}
+
 bool parse_node_field(const std::vector<ParsedLine>& lines,
                       std::size_t& index,
                       int item_indent,
@@ -682,6 +739,11 @@ bool create_default_config() noexcept {
     config_file << "  type: BASIC\n";
     config_file << "  t2_value: 1000\n";
     config_file << "\n";
+    config_file << "# QiLab System Configuration\n";
+    config_file << "system:\n";
+    config_file << "  transmission_cycle_time_us: 5\n";
+    config_file << "  qubit_noise_enabled: true\n";
+    config_file << "\n";
     config_file << "nodes:\n";
     config_file << "  - name: node0\n";
     config_file << "    quantum_operations_delay_ns:\n";
@@ -788,6 +850,25 @@ std::optional<AppConfig> load_config(const std::string& config_path) noexcept {
                                    parse_error))
             {
                 LOG_ERROR("entanglement_noise_model parsing error: " + parse_error);
+                return std::nullopt;
+            }
+
+            continue;
+        }
+
+        if (key_value->first == kSystemKey)
+        {
+            if (!key_value->second.empty())
+            {
+                LOG_ERROR("'system' must be a map block");
+                return std::nullopt;
+            }
+
+            ++index;
+            std::string parse_error;
+            if (!parse_system_section(lines, index, 0, app_config.system, parse_error))
+            {
+                LOG_ERROR("system parsing error: " + parse_error);
                 return std::nullopt;
             }
 

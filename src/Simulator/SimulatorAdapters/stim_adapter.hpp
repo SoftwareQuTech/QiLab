@@ -132,6 +132,11 @@ private:
     
     // Initialization specific
     stim::CircuitInstruction init_inst;
+
+    // Qubit-in-memory (dephasing / phase-flip) noise; args[0] holds the flip probability
+    std::array<double, 1> z_error_prob;
+    stim::SpanRef<const double> z_error_args;
+    stim::CircuitInstruction z_error_inst;
     
     // Single qubit gate specific
     stim::CircuitInstruction h_gate_inst;       // H

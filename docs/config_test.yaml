@@ -7,6 +7,11 @@ entanglement_noise_model:
   type: BASIC
   t2_value: 0
 
+# QiLab System Configuration
+system:
+  transmission_cycle_time_us: 5
+  qubit_noise_enabled: true
+
 nodes:
   - name: test_node
     node_type: GENERIC

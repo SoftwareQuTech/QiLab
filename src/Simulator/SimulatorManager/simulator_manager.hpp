@@ -29,7 +29,7 @@ class SimulatorManager
     using duration = typename clock_type::duration;
     
 public:
-    SimulatorManager(std::unique_ptr<ISimulator> simulator);
+    SimulatorManager(std::unique_ptr<ISimulator> simulator, bool qubit_noise_enabled = true);
     ~SimulatorManager();
 
         /**
@@ -135,6 +135,9 @@ private:
     std::array<QuantumOperationsDelaysNs, MAX_NODES_AVAILABLE> node_operation_delays;
     /// The underlying quantum simulator
     std::unique_ptr<ISimulator> simulator_inst;
+
+    /// Gates qubit-in-memory noise application in single_qubit_gate_handler, from system.qubit_noise_enabled config
+    bool qubit_noise_enabled = true;
 
     std::array<SimCommandFn, MAX_COMMANDS_AVAILABLE> sim_command_table = {};
 

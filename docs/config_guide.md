@@ -29,6 +29,10 @@ entanglement_noise_model:   # optional
   type: BASIC
   t2_value: 1000
 
+system:                      # optional
+  transmission_cycle_time_us: 5
+  qubit_noise_enabled: true
+
 nodes:                       # required, must be non-empty
   - ...
 ```
@@ -37,6 +41,7 @@ nodes:                       # required, must be non-empty
 |-----|----------|-------------|
 | `nodes` | Yes | List of quantum node definitions |
 | `entanglement_noise_model` | No | Noise model for entanglement operations (defaults to `BASIC` with `t2_value: 1000`) |
+| `system` | No | QiLab System Configuration — global runtime parameters (see [System Configuration](#system-configuration)) |
 
 Field order at the top level does not matter.
 
@@ -198,12 +203,12 @@ Phase flip (dephasing) channel.
 ```yaml
 noise_model:
   type: PHASE_FLIP
-  flip_probability: 0.05
+  t2_value: 1000
 ```
 
 | Field | Required | Type | Description |
 |-------|----------|------|-------------|
-| `flip_probability` | Yes | float ≥ 0 | Probability of a phase flip per operation |
+| `t2_value` | Yes | float ≥ 0 | T2 dephasing time in nanoseconds |
 
 ---
 
@@ -241,6 +246,23 @@ entanglement_noise_model:
 
 ---
 
+## System Configuration
+
+Set under `system` at the top level. The whole section is optional; each key defaults independently if omitted.
+
+```yaml
+system:
+  transmission_cycle_time_us: 5
+  qubit_noise_enabled: true
+```
+
+| Field | Required | Type | Description |
+|-------|----------|------|-------------|
+| `transmission_cycle_time_us` | No | float ≥ 0 | Period of the transmission runner's busy-spin cycle, in microseconds. Defaults to `5`. |
+| `qubit_noise_enabled` | No | boolean (`true`/`false`) | Enables applying qubit-in-memory (dephasing) noise during simulation. Defaults to `true`. |
+
+---
+
 ## Full Example
 
 ```yaml
@@ -250,6 +272,10 @@ entanglement_noise_model:
   type: DEPOLARIZING
   error_rate: 0.05
   gate_time_ns: 200
+
+system:
+  transmission_cycle_time_us: 5
+  qubit_noise_enabled: true
 
 nodes:
   - name: alice
@@ -282,7 +308,7 @@ nodes:
       - num_qubits: 2
         noise_model:
           type: PHASE_FLIP
-          flip_probability: 0.02
+          t2_value: 900
       - num_qubits: 2
         noise_model:
           type: BASIC

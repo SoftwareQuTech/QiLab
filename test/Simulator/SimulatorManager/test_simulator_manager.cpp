@@ -33,7 +33,8 @@ struct RecordedOp
     {
         SingleGate,
         Measure,
-        Establish
+        Establish,
+        Noise
     };
 
     Kind kind{};
@@ -43,6 +44,8 @@ struct RecordedOp
     bool basis = false;      // Measure only
     bool is_initiator = false; // Establish only
     uint8_t neighbour = 0;   // Establish only
+    float p_dephasing = 0.0f;   // Noise only
+    float p_depolarizing = 0.0f; // Noise only
 };
 
 class SpyAdapter : public ISimulator
@@ -95,7 +98,18 @@ public:
     bool qubit_move(uint8_t, uint8_t) override { return true; }
     bool qubit_swap(uint8_t, uint8_t) override { return true; }
     bool entanglement_swap(uint8_t, uint8_t) override { return true; }
-    bool apply_qubit_noise(uint8_t, float, float) override { return true; }
+
+    bool apply_qubit_noise(uint8_t qubit_address, float p_dephasing, float p_depolarizing) override
+    {
+        RecordedOp op;
+        op.kind = RecordedOp::Kind::Noise;
+        op.qubit = qubit_address;
+        op.p_dephasing = p_dephasing;
+        op.p_depolarizing = p_depolarizing;
+        ops.push_back(op);
+        return true;
+    }
+
     bool allocate_qubits(uint8_t) override { return true; }
 };
 
@@ -128,6 +142,8 @@ std::unique_ptr<CommandBase> build_command(const BaseC &builder)
         return std::make_unique<EntangleMeasure>(buf);
     case Command_t::ENTANGLEMENT_ATTEMPT:
         return std::make_unique<EntanglementAttempt>(buf);
+    case Command_t::SINGLE_QUBIT_GATE:
+        return std::make_unique<SingleQubitGate>(buf);
     default:
         return nullptr;
     }
@@ -144,6 +160,29 @@ protected:
         // Node 0 -> global qubits {0,1}; Node 1 -> global qubits {2,3}.
         ASSERT_EQ(mgr->register_node(make_node_config(2)), 0);
         ASSERT_EQ(mgr->register_node(make_node_config(2)), 1);
+    }
+
+    ResponseData run(uint16_t node_id, std::unique_ptr<CommandBase> cmd)
+    {
+        ResponseData response;
+        EXPECT_EQ(mgr->add_new_command_to_process(node_id, std::move(cmd), response), 0);
+        return response;
+    }
+
+    SpyAdapter *spy = nullptr; // owned by mgr
+    std::unique_ptr<SimulatorManager> mgr;
+};
+
+// Same setup as SimulatorManagerTest, but qubit noise is disabled at construction.
+class SimulatorManagerNoiseDisabledTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        auto spy_owned = std::make_unique<SpyAdapter>();
+        spy = spy_owned.get();
+        mgr = std::make_unique<SimulatorManager>(std::move(spy_owned), /*qubit_noise_enabled=*/false);
+        ASSERT_EQ(mgr->register_node(make_node_config(2)), 0);
     }
 
     ResponseData run(uint16_t node_id, std::unique_ptr<CommandBase> cmd)
@@ -278,6 +317,39 @@ TEST_F(SimulatorManagerTest, EntanglementMeasureEncodesOwnOutcomeBit)
     ResponseData r = run(/*node=*/0, build_command(EntanMeasure(0, wire_nghbr(1), 0, true, false, 0)));
     EXPECT_EQ(r.outcome & 0x04, 0x04);
     EXPECT_EQ(r.outcome & 0x03, static_cast<int>(STATE_PHI_PLUS));
+}
+
+// ---- Qubit-in-memory noise --------------------------------------------------
+
+// A single-qubit gate with a nonzero angle applies qubit-in-memory (dephasing)
+// noise to the target qubit before the gate itself, when noise is enabled.
+TEST_F(SimulatorManagerTest, SingleQubitGateAppliesNoiseWhenEnabled)
+{
+    run(/*node=*/0, build_command(SingleQGate(/*addr=*/1, _2_PI_16, X_AXIS)));
+
+    ASSERT_EQ(spy->ops.size(), 2u);
+    EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Noise);
+    EXPECT_EQ(spy->ops[0].qubit, 1u);
+    EXPECT_FLOAT_EQ(spy->ops[0].p_depolarizing, 0.0f);
+    EXPECT_EQ(spy->ops[1].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[1].qubit, 1u);
+}
+
+// The angle==0 early-return path performs no gate and no noise.
+TEST_F(SimulatorManagerTest, SingleQubitGateWithZeroAngleAppliesNoNoise)
+{
+    run(/*node=*/0, build_command(SingleQGate(/*addr=*/1, _0_PI_16, X_AXIS)));
+    EXPECT_TRUE(spy->ops.empty());
+}
+
+// When qubit_noise_enabled is false, no noise is applied for single-qubit gates.
+TEST_F(SimulatorManagerNoiseDisabledTest, SingleQubitGateAppliesNoNoiseWhenDisabled)
+{
+    run(/*node=*/0, build_command(SingleQGate(/*addr=*/1, _2_PI_16, X_AXIS)));
+
+    ASSERT_EQ(spy->ops.size(), 1u);
+    EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[0].qubit, 1u);
 }
 
 } // namespace
