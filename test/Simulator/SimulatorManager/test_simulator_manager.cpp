@@ -19,7 +19,7 @@
 #include "DataTypes/configuration_options.hpp"
 #include "Simulator/sim_interface.hpp"
 #include "Simulator/SimulatorManager/simulator_manager.hpp"
-#include "Simulator/NoiseModels/qubit_noise_basic.hpp"
+#include "Simulator/NoiseModels/QubitDecoherenceNoise/qubit_noise_basic.hpp"
 #include "mocks/command_mock.hpp"
 
 namespace
@@ -44,8 +44,9 @@ struct RecordedOp
     bool basis = false;      // Measure only
     bool is_initiator = false; // Establish only
     uint8_t neighbour = 0;   // Establish only
-    float p_dephasing = 0.0f;   // Noise only
-    float p_depolarizing = 0.0f; // Noise only
+    float q_x = 0.0f;   // Noise only
+    float q_y = 0.0f;   // Noise only
+    float q_z = 0.0f;   // Noise only
 };
 
 class SpyAdapter : public ISimulator
@@ -99,13 +100,14 @@ public:
     bool qubit_swap(uint8_t, uint8_t) override { return true; }
     bool entanglement_swap(uint8_t, uint8_t) override { return true; }
 
-    bool apply_qubit_noise(uint8_t qubit_address, float p_dephasing, float p_depolarizing) override
+    bool single_qubit_noise(uint8_t qubit_address, float x_noise_probability, float y_noise_probability, float z_noise_probability) override
     {
         RecordedOp op;
         op.kind = RecordedOp::Kind::Noise;
         op.qubit = qubit_address;
-        op.p_dephasing = p_dephasing;
-        op.p_depolarizing = p_depolarizing;
+        op.q_x = x_noise_probability;
+        op.q_y = y_noise_probability;
+        op.q_z = z_noise_probability;
         ops.push_back(op);
         return true;
     }
@@ -215,19 +217,22 @@ TEST_F(SimulatorManagerTest, RegularMeasureRotatesOwnQubitThenMeasures)
     // Node 0, local qubit 1 -> global qubit 1.
     run(/*node=*/0, build_command(QMeasure(/*addr=*/1, /*basis=*/false, X_AXIS)));
 
-    ASSERT_EQ(spy->ops.size(), 4u);
-    EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::SingleGate);
+    // Idle-dephasing noise is applied first, then the X-Y-X rotation, then the measurement.
+    ASSERT_EQ(spy->ops.size(), 5u);
+    EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Noise);
     EXPECT_EQ(spy->ops[0].qubit, 1u);
-    EXPECT_EQ(spy->ops[0].axis, X_AXIS);
-    EXPECT_EQ(spy->ops[0].angle, a1);
-    EXPECT_EQ(spy->ops[1].axis, Y_AXIS);
+    EXPECT_EQ(spy->ops[1].kind, RecordedOp::Kind::SingleGate);
     EXPECT_EQ(spy->ops[1].qubit, 1u);
-    EXPECT_EQ(spy->ops[1].angle, a2);
-    EXPECT_EQ(spy->ops[2].axis, X_AXIS);
+    EXPECT_EQ(spy->ops[1].axis, X_AXIS);
+    EXPECT_EQ(spy->ops[1].angle, a1);
+    EXPECT_EQ(spy->ops[2].axis, Y_AXIS);
     EXPECT_EQ(spy->ops[2].qubit, 1u);
-    EXPECT_EQ(spy->ops[2].angle, a3);
-    EXPECT_EQ(spy->ops[3].kind, RecordedOp::Kind::Measure);
+    EXPECT_EQ(spy->ops[2].angle, a2);
+    EXPECT_EQ(spy->ops[3].axis, X_AXIS);
     EXPECT_EQ(spy->ops[3].qubit, 1u);
+    EXPECT_EQ(spy->ops[3].angle, a3);
+    EXPECT_EQ(spy->ops[4].kind, RecordedOp::Kind::Measure);
+    EXPECT_EQ(spy->ops[4].qubit, 1u);
 }
 
 // The core cross-node regression: node 0 selects pre-measure gates, but node 1
@@ -237,21 +242,25 @@ TEST_F(SimulatorManagerTest, SelectionIsNotConsumedByAnotherNode)
 {
     run(/*node=*/0, build_command(PreMeasureGateSelect(_2_PI_16, _3_PI_16, _4_PI_16, /*target=*/false)));
 
-    // Node 1 measures first (local qubit 0 -> global qubit 2): no rotation.
+    // Node 1 measures first (local qubit 0 -> global qubit 2): noise but no rotation.
     run(/*node=*/1, build_command(QMeasure(/*addr=*/0, /*basis=*/false, X_AXIS)));
-    ASSERT_EQ(spy->ops.size(), 1u);
-    EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Measure);
+    ASSERT_EQ(spy->ops.size(), 2u);
+    EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Noise);
     EXPECT_EQ(spy->ops[0].qubit, 2u);
+    EXPECT_EQ(spy->ops[1].kind, RecordedOp::Kind::Measure);
+    EXPECT_EQ(spy->ops[1].qubit, 2u);
 
     // Node 0 measures (local qubit 0 -> global qubit 0): rotation still applied.
     run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/false, X_AXIS)));
-    ASSERT_EQ(spy->ops.size(), 5u);
-    EXPECT_EQ(spy->ops[1].kind, RecordedOp::Kind::SingleGate);
-    EXPECT_EQ(spy->ops[1].qubit, 0u);
+    ASSERT_EQ(spy->ops.size(), 7u);
+    EXPECT_EQ(spy->ops[2].kind, RecordedOp::Kind::Noise);
     EXPECT_EQ(spy->ops[2].qubit, 0u);
+    EXPECT_EQ(spy->ops[3].kind, RecordedOp::Kind::SingleGate);
     EXPECT_EQ(spy->ops[3].qubit, 0u);
-    EXPECT_EQ(spy->ops[4].kind, RecordedOp::Kind::Measure);
     EXPECT_EQ(spy->ops[4].qubit, 0u);
+    EXPECT_EQ(spy->ops[5].qubit, 0u);
+    EXPECT_EQ(spy->ops[6].kind, RecordedOp::Kind::Measure);
+    EXPECT_EQ(spy->ops[6].qubit, 0u);
 }
 
 // A selection is one-shot: consumed by the first matching measurement only.
@@ -260,11 +269,12 @@ TEST_F(SimulatorManagerTest, SelectionAppliesOnlyOnce)
     run(/*node=*/0, build_command(PreMeasureGateSelect(_2_PI_16, _3_PI_16, _4_PI_16, /*target=*/false)));
 
     run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/false, X_AXIS)));
-    ASSERT_EQ(spy->ops.size(), 4u); // 3 rotations + measure
+    ASSERT_EQ(spy->ops.size(), 5u); // noise + 3 rotations + measure
 
     run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/false, X_AXIS)));
-    ASSERT_EQ(spy->ops.size(), 5u); // only a measure this time, no new rotations
-    EXPECT_EQ(spy->ops[4].kind, RecordedOp::Kind::Measure);
+    ASSERT_EQ(spy->ops.size(), 7u); // noise + measure this time, no new rotations
+    EXPECT_EQ(spy->ops[5].kind, RecordedOp::Kind::Noise);
+    EXPECT_EQ(spy->ops[6].kind, RecordedOp::Kind::Measure);
 }
 
 // The entanglement measure path: establish (identify Bell state) must come
@@ -321,8 +331,13 @@ TEST_F(SimulatorManagerTest, EntanglementMeasureEncodesOwnOutcomeBit)
 
 // ---- Qubit-in-memory noise --------------------------------------------------
 
-// A single-qubit gate with a nonzero angle applies qubit-in-memory (dephasing)
-// noise to the target qubit before the gate itself, when noise is enabled.
+// A single-qubit gate with a nonzero angle applies a composed Pauli noise
+// channel (idle dephasing + gate depolarizing) to the target qubit before the
+// gate itself, when noise is enabled. The gate-depolarizing contribution to
+// q_x/q_y is timing-independent (channel composition with a pure-Z channel
+// leaves the X/Y weights at exactly depolar_gate_prob/3), so it can be
+// asserted exactly; q_z additionally carries the idle-dephasing share, which
+// depends on wall-clock timing, so it's only checked to be at least as large.
 TEST_F(SimulatorManagerTest, SingleQubitGateAppliesNoiseWhenEnabled)
 {
     run(/*node=*/0, build_command(SingleQGate(/*addr=*/1, _2_PI_16, X_AXIS)));
@@ -330,7 +345,9 @@ TEST_F(SimulatorManagerTest, SingleQubitGateAppliesNoiseWhenEnabled)
     ASSERT_EQ(spy->ops.size(), 2u);
     EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Noise);
     EXPECT_EQ(spy->ops[0].qubit, 1u);
-    EXPECT_FLOAT_EQ(spy->ops[0].p_depolarizing, 0.0f);
+    EXPECT_NEAR(spy->ops[0].q_x, 0.1f, 1e-6f);
+    EXPECT_NEAR(spy->ops[0].q_y, 0.1f, 1e-6f);
+    EXPECT_GE(spy->ops[0].q_z, spy->ops[0].q_x - 1e-6f);
     EXPECT_EQ(spy->ops[1].kind, RecordedOp::Kind::SingleGate);
     EXPECT_EQ(spy->ops[1].qubit, 1u);
 }

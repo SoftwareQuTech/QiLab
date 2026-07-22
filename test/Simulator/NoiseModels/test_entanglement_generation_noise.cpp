@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cstdint>
 
-#include "Simulator/NoiseModels/entanglement_generation_noise.hpp"
+#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_generation_noise.hpp"
 
 namespace {
 

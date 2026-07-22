@@ -4,6 +4,7 @@
 #include "simulator_manager.hpp"
 #include "logger/logger_api.hpp"
 #include "logger/profiler_api.hpp"
+#include "Simulator/pauli_channel_math.hpp"
 
 
 SimulatorManager::SimulatorManager(std::unique_ptr<ISimulator> simulator, bool qubit_noise_enabled)
@@ -85,7 +86,7 @@ void SimulatorManager::apply_pre_measure_gates(uint8_t node_id, uint16_t global_
     {
         return;
     }
-
+    //TODO: add zero angle nahdler
     LOG_INFO("Applying pre-measurement gates for node " + std::to_string(node_id) + " to Q" + std::to_string(global_qubit) +
              ": X(" + std::to_string(gates.angle1) + ") Y(" + std::to_string(gates.angle2) + ") X(" + std::to_string(gates.angle3) + ")");
     // X-Y-X rotation sequence into the requested measurement basis.
@@ -387,18 +388,20 @@ ResponseData SimulatorManager::single_qubit_gate_handler(std::unique_ptr<Command
         return response;
     }
    
-    // Get the idling dephasing probability (between touches) for the qubit and apply it as noise before the gate operation
-    float z_idle_noise_prob = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
-    // Get gate operation noise
-    // Fidelity to depolar F=1-2p/3
-    float depolar_gate_prob = 0.3f; // Replace with actual gate noise calculation
-    // combine noise and normalize noise -> returns normalized PX, PY, PZ for composed noise channel
-    PauliChannelWeights composed_weights = simulator_inst->compose_single_qubit_noise_channel(depolar_gate_prob/3, depolar_gate_prob/3, depolar_gate_prob/3, 0.0, 0.0, z_idle_noise_prob);
-    simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, composed_weights.q_x, composed_weights.q_y, composed_weights.q_z);
+    if (qubit_noise_enabled)
+    {
+        // Get the idling dephasing probability (between touches) for the qubit and apply it as noise before the gate operation
+        float z_idle_noise_prob = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
+        // Get gate operation noise
+        // Fidelity to depolar F=1-2p/3
+        float depolar_gate_prob = 0.3f; // Replace with actual gate noise calculation
+        // combine noise and normalize noise -> returns normalized PX, PY, PZ for composed noise channel
+        PauliChannelWeights composed_weights = compose_pauli_channels(0.0f, 0.0f, z_idle_noise_prob, depolar_gate_prob/3.0f, depolar_gate_prob/3.0f, depolar_gate_prob/3.0f);
+        simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, composed_weights.q_x, composed_weights.q_y, composed_weights.q_z);
+    }
 
     simulator_inst->single_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->angle, cmd->axis);
 
-    simulation_qubits[cmd->qubit1_address + qubit_offset]->mark_touched();
     response.outcome = Outcome_Status_t::SUCCESS;
     response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
     PROF_STOP(prof_event_single_qubit_gate);
@@ -431,12 +434,16 @@ ResponseData SimulatorManager::two_qubit_gate_handler(std::unique_ptr<CommandBas
         return response;
     }
 
-    // Get the dephasing probability for the qubit and apply it as noise before the gate operation
-    float z_qubit1_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
-    simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0, 0.0, z_qubit1_noise);
-    float z_qubit2_noise = simulation_qubits[cmd->qubit2_address + qubit_offset]->get_qubit_decoherence_probability();
-    simulator_inst->single_qubit_noise(cmd->qubit2_address + qubit_offset, 0.0, 0.0, z_qubit2_noise);
-    
+    if (qubit_noise_enabled)
+    {
+        // Get the dephasing probability for each qubit and apply it as noise before the gate operation
+        float z_qubit1_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
+        simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0f, 0.0f, z_qubit1_noise);
+        float z_qubit2_noise = simulation_qubits[cmd->qubit2_address + qubit_offset]->get_qubit_decoherence_probability();
+        simulator_inst->single_qubit_noise(cmd->qubit2_address + qubit_offset, 0.0f, 0.0f, z_qubit2_noise);
+    }
+
+
     if (!simulator_inst->two_qubit_gate(cmd->qubit1_address + qubit_offset,
                                         cmd->qubit2_address + qubit_offset,
                                         cmd->angle,
@@ -451,9 +458,6 @@ ResponseData SimulatorManager::two_qubit_gate_handler(std::unique_ptr<CommandBas
         PROF_STOP(prof_event_two_qubit_gate);
         return response;
     }
-
-    simulation_qubits[cmd->qubit1_address + qubit_offset]->mark_touched();
-    simulation_qubits[cmd->qubit2_address + qubit_offset]->mark_touched();
 
     response.outcome = Outcome_Status_t::SUCCESS;
     response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
@@ -751,9 +755,12 @@ ResponseData SimulatorManager::qubit_measure_handler(std::unique_ptr<CommandBase
         return response;
     }
    
-    // Get the dephasing probability for the qubit and apply it as noise before the measurement operation
-    float z_qubit_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
-    // simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0, 0.0, z_qubit_noise);
+    if (qubit_noise_enabled)
+    {
+        // Get the dephasing probability for the qubit and apply it as noise before the measurement operation
+        float z_qubit_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
+        simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0f, 0.0f, z_qubit_noise);
+    }
 
     // Apply this node's pending basis-rotation gates (target=0) to its own qubit
     // immediately before measuring, within this single atomic handler call, so no

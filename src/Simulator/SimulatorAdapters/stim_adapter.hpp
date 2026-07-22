@@ -61,6 +61,16 @@ public:
     bool single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t axis) override;
 
     /**
+     * @copydoc ISimulator::single_qubit_noise
+     *
+     * @details Applies a Pauli channel to the specified qubit with the given probabilities.
+     *          The probabilities for X, Y, and Z errors are specified by the parameters.
+     *          The sum of the probabilities should not exceed 1.0.
+     *          The implementation uses Stim's Pauli channel functionality to apply the noise.
+     */
+    bool single_qubit_noise(uint8_t qubit_address, float x_noise_probability, float y_noise_probability, float z_noise_probability) override;
+
+    /**
      * @copydoc ISimulator::two_qubit_gate
      *
      * @details Implementations typically realize CX/CZ/iSWAP via Stim’s
@@ -118,7 +128,6 @@ public:
      *          returns a result code
      */
     bool entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_address) override;
-    bool apply_qubit_noise(uint8_t qubit_address, float p_dephasing, float p_depolarizing) override;
     bool allocate_qubits(uint8_t num_qubits) override;
 private:
     // Cached objects for all quantum operations
@@ -133,11 +142,6 @@ private:
     // Initialization specific
     stim::CircuitInstruction init_inst;
 
-    // Qubit-in-memory (dephasing / phase-flip) noise; args[0] holds the flip probability
-    std::array<double, 1> z_error_prob;
-    stim::SpanRef<const double> z_error_args;
-    stim::CircuitInstruction z_error_inst;
-    
     // Single qubit gate specific
     stim::CircuitInstruction h_gate_inst;       // H
     stim::CircuitInstruction x_gate_inst;       // X
@@ -162,7 +166,12 @@ private:
     stim::CircuitInstruction sqrt_yy_dag_inst;    // Custom instruction for SQRT_YY_DAG
     stim::CircuitInstruction sqrt_xx_inst;        // Custom instruction for SQRT_XX
     stim::CircuitInstruction sqrt_xx_dag_inst;    // Custom instruction for SQRT_XX_DAG
-    
+
+    // Additional parameters for noise channels
+    std::array<double, 3> pauli_channel_probs; // Probabilities for X, Y, Z errors
+    stim::SpanRef<double> pauli_probs_span;   // SpanRef for the probabilities array
+    stim::CircuitInstruction pauli_channel_1_inst; // Custom instruction for PAULI_CHANNEL_1
+
     // Threshold for measurement record clearing
     static constexpr size_t MEASUREMENT_CLEAR_THRESHOLD = 1024;
     

@@ -14,9 +14,7 @@
 
 #include "ConfigurationEngine/parse_scalar_helpers.hpp"
 #include "ConfigurationEngine/model_parsers/qubit_advanced_parser.hpp"
-#include "ConfigurationEngine/model_parsers/qubit_amplitude_damping_parser.hpp"
 #include "ConfigurationEngine/model_parsers/qubit_basic_parser.hpp"
-#include "ConfigurationEngine/model_parsers/qubit_depolarizing_parser.hpp"
 #include "ConfigurationEngine/model_parsers/qubit_phase_flip_parser.hpp"
 #include "DataTypes/configuration_options.hpp"
 
@@ -55,8 +53,6 @@ inline const std::unordered_map<std::string, QubitModelParser>& qubit_model_pars
     static const std::unordered_map<std::string, QubitModelParser> parsers = {
         {"BASIC", &parse_qubit_basic_model},
         {"ADVANCED", &parse_qubit_advanced_model},
-        {"DEPOLARIZING", &parse_qubit_depolarizing_model},
-        {"AMPLITUDE_DAMPING", &parse_qubit_amplitude_damping_model},
         {"PHASE_FLIP", &parse_qubit_phase_flip_model},
     };
 

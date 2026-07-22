@@ -11,18 +11,14 @@
 #pragma once
 #include <cstdint>
 
-// Weights of the combined dephasing + depolarizing channel expressed as a
-// single-qubit Pauli channel (Eq. 16/17). Feeds STIM's PAULI_CHANNEL_1 with
-// (q_x, q_y, q_z); q_i is the inferred identity weight.
-// NOTE: this is a SINGLE-qubit channel - it is applied to only one of the two
-// qubits forming the entangled pair (e.g., always the node with lower id).
-struct PauliChannelWeights
-{
-    float q_i;
-    float q_x;
-    float q_y;
-    float q_z;
-};
+#include "Simulator/pauli_channel_math.hpp"
+
+// PauliChannelWeights (feeds STIM's PAULI_CHANNEL_1 with q_x, q_y, q_z; q_i is
+// the inferred identity weight) is defined in pauli_channel_math.hpp, shared
+// with single-qubit gate noise composition.
+// NOTE: for entanglement-generation noise this is a SINGLE-qubit channel - it
+// is applied to only one of the two qubits forming the entangled pair (e.g.,
+// always the node with lower id).
 
 // Outcome of one batch of entanglement attempts (Sec. 4.2).
 // On success: attempts = k (the successful attempt), duration_ns = k * t_attempt.

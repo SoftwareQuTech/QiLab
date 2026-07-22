@@ -4,8 +4,8 @@
 namespace QILab {
 
 constexpr int VERSION_MAJOR = 0;
-constexpr int VERSION_MINOR = 0;
-constexpr int VERSION_PATCH = 3;
+constexpr int VERSION_MINOR = 4;
+constexpr int VERSION_PATCH = 0;
 
 }  // namespace QILab
 

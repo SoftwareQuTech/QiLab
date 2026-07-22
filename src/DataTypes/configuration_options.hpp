@@ -14,11 +14,9 @@
 #include <string>
 #include <vector>
 
-#include "Simulator/NoiseModels/qubit_noise_basic.hpp"
-#include "Simulator/NoiseModels/depolarizing_qubit_noise.hpp"
-#include "Simulator/NoiseModels/phase_flip_noise.hpp"
-#include "Simulator/NoiseModels/entanglement_noise_basic.hpp"
-#include "Simulator/NoiseModels/depolarizing_entanglement_noise.hpp"
+#include "Simulator/NoiseModels/QubitDecoherenceNoise/qubit_noise_basic.hpp"
+#include "Simulator/NoiseModels/QubitDecoherenceNoise/phase_flip_noise.hpp"
+#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_noise_basic.hpp"
 
 enum class QuantumNodeType : uint8_t
 {
@@ -32,35 +30,23 @@ enum class QubitNoiseModelType : uint8_t
 {
     BASIC = 0,
     ADVANCED = 1,
-    DEPOLARIZING = 2,
-    AMPLITUDE_DAMPING = 3,
-    PHASE_FLIP = 4,
+    PHASE_FLIP = 2,
 };
 
 enum class EntanglementNoiseModelType : uint8_t
 {
     BASIC = 0,
     ADVANCED = 1,
-    DEPOLARIZING = 2,
-};
-
-struct AmplitudeDampingNoiseConfig
-{
-    float t1_ns;         // relaxation time in nanoseconds
-    float t2_ns;         // dephasing time in nanoseconds
 };
 
 using QubitNoiseConfigData = std::variant<
     QubitNoiseBasicConfig,
     QubitNoiseAdvancedConfig,
-    DepolarizingQubitNoiseConfig,
-    AmplitudeDampingNoiseConfig,
     PhaseFlipNoiseConfig
 >;
 
 using EntanglementNoiseConfigData = std::variant<
-    EntanglementNoiseBasicConfig,
-    DepolarizingEntanglementNoiseConfig
+    EntanglementNoiseBasicConfig
 >;
 
 struct QubitNoiseModelConfig

@@ -5,7 +5,6 @@
 #include <unordered_map>
 
 #include "ConfigurationEngine/model_parsers/entanglement_basic_parser.hpp"
-#include "ConfigurationEngine/model_parsers/entanglement_depolarizing_parser.hpp"
 #include "ConfigurationEngine/parse_scalar_helpers.hpp"
 #include "DataTypes/configuration_options.hpp"
 
@@ -17,7 +16,6 @@ inline const std::unordered_map<std::string, EntanglementModelParser>& entanglem
 {
     static const std::unordered_map<std::string, EntanglementModelParser> parsers = {
         {"BASIC", &parse_entanglement_basic_model},
-        {"DEPOLARIZING", &parse_entanglement_depolarizing_model},
     };
 
     return parsers;

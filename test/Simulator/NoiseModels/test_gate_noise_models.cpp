@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "Simulator/NoiseModels/depolarizing_gate_noise.hpp"
+#include "Simulator/NoiseModels/EntanglementGenerationNoise/depolarizing_gate_noise.hpp"
 
 namespace {
 

@@ -1,6 +1,8 @@
 # QILab Configuration Guide
 
 > **Maintainers:** if you change the config format (add/remove a noise model, field, or node type), update [`config.schema.json`](config.schema.json) in this directory in the same change. It is the source of truth for the `qilab_web_control` structured config editor.
+>
+> The release pipeline packages `config.schema.json` into the release tarball, stamped with that release's version (`x-qilab-schema-version`), so it lands next to the binary at `/opt/qilab/current/config.schema.json` on every deploy via `update_release.sh`'s symlink swap. `qilab_web_control` should point `QILAB_WEB_SCHEMA_PATH` there to always track the exact schema of the qilab version it's controlling.
 
 ## File Location
 
@@ -101,9 +103,8 @@ qubit_arrays:
       t2_value: 2000
   - num_qubits: 2
     noise_model:
-      type: DEPOLARIZING
-      error_rate: 0.01
-      gate_time_ns: 50
+      type: PHASE_FLIP
+      t2_value: 900
 ```
 
 ### Qubit Array Fields
@@ -163,40 +164,6 @@ noise_model:
 
 ---
 
-### `DEPOLARIZING`
-Symmetric depolarizing channel.
-
-```yaml
-noise_model:
-  type: DEPOLARIZING
-  error_rate: 0.01
-  gate_time_ns: 100
-```
-
-| Field | Required | Type | Description |
-|-------|----------|------|-------------|
-| `error_rate` | Yes | float ≥ 0 | Depolarizing error probability per gate |
-| `gate_time_ns` | Yes | float ≥ 0 | Gate duration in nanoseconds |
-
----
-
-### `AMPLITUDE_DAMPING`
-Amplitude damping (energy relaxation) channel.
-
-```yaml
-noise_model:
-  type: AMPLITUDE_DAMPING
-  t1_ns: 3000
-  t2_ns: 1500
-```
-
-| Field | Required | Type | Description |
-|-------|----------|------|-------------|
-| `t1_ns` | Yes | float ≥ 0 | T1 relaxation time in nanoseconds |
-| `t2_ns` | Yes | float ≥ 0 | T2 dephasing time in nanoseconds |
-
----
-
 ### `PHASE_FLIP`
 Phase flip (dephasing) channel.
 
@@ -230,22 +197,6 @@ entanglement_noise_model:
 
 ---
 
-### `DEPOLARIZING`
-
-```yaml
-entanglement_noise_model:
-  type: DEPOLARIZING
-  error_rate: 0.05
-  gate_time_ns: 200
-```
-
-| Field | Required | Type | Description |
-|-------|----------|------|-------------|
-| `error_rate` | Yes | float ≥ 0 | Depolarizing error probability |
-| `gate_time_ns` | Yes | float ≥ 0 | Gate duration in nanoseconds |
-
----
-
 ## System Configuration
 
 Set under `system` at the top level. The whole section is optional; each key defaults independently if omitted.
@@ -269,9 +220,8 @@ system:
 # QILab Node Configuration
 
 entanglement_noise_model:
-  type: DEPOLARIZING
-  error_rate: 0.05
-  gate_time_ns: 200
+  type: BASIC
+  t2_value: 1000
 
 system:
   transmission_cycle_time_us: 5
@@ -289,18 +239,16 @@ nodes:
           gate_error_rate: 0.001
       - num_qubits: 1
         noise_model:
-          type: AMPLITUDE_DAMPING
-          t1_ns: 3000
-          t2_ns: 1500
+          type: PHASE_FLIP
+          t2_value: 900
 
   - name: bob
     node_type: ION_TRAP
     qubit_arrays:
       - num_qubits: 4
         noise_model:
-          type: DEPOLARIZING
-          error_rate: 0.01
-          gate_time_ns: 50
+          type: BASIC
+          t2_value: 800
 
   - name: relay
     node_type: GENERIC
@@ -317,5 +265,5 @@ nodes:
 
 In this example:
 - `alice` has 3 total qubits (2 + 1) across two arrays with different noise models.
-- `bob` has 4 qubits with a single depolarizing array.
+- `bob` has 4 qubits with a single basic array.
 - `relay` has 4 qubits split across a phase-flip array and a basic array.

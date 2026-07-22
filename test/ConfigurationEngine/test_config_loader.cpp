@@ -88,9 +88,8 @@ TEST_F(ConfigLoaderTest, LoadsModernQubitArraysAndEntanglementModel)
 {
     const std::string yaml =
         "entanglement_noise_model:\n"
-        "  type: DEPOLARIZING\n"
-        "  error_rate: 0.15\n"
-        "  gate_time_ns: 50\n"
+        "  type: BASIC\n"
+        "  t2_value: 3500\n"
         "nodes:\n"
         "  - name: nodeA\n"
         "    node_type: PROCESSOR\n"
@@ -108,7 +107,7 @@ TEST_F(ConfigLoaderTest, LoadsModernQubitArraysAndEntanglementModel)
 
     const auto config = load_config(path.string());
     ASSERT_TRUE(config.has_value());
-    ASSERT_TRUE(std::holds_alternative<DepolarizingEntanglementNoiseConfig>(config->entanglement_noise_model));
+    ASSERT_TRUE(std::holds_alternative<EntanglementNoiseBasicConfig>(config->entanglement_noise_model));
     ASSERT_EQ(config->nodes.size(), 1u);
 
     const auto& node = config->nodes.front();
@@ -612,84 +611,6 @@ TEST_F(ConfigLoaderTest, QubitNoiseAdvancedRejectsMissingGateErrorRate)
 }
 
 // ---------------------------------------------------------------------------
-// Qubit noise model: DEPOLARIZING
-// ---------------------------------------------------------------------------
-
-TEST_F(ConfigLoaderTest, QubitNoiseDepolarizingLoadsCorrectValues)
-{
-    const std::string yaml = single_node_with_noise(
-        "          type: DEPOLARIZING\n"
-        "          error_rate: 0.03\n"
-        "          gate_time_ns: 75\n");
-
-    const auto path = write_config("qubit_depol.yaml", yaml);
-    const auto config = load_config(path.string());
-    ASSERT_TRUE(config.has_value());
-    const auto& model = config->nodes.front().qubit_arrays.front().noise_model.config_data;
-    ASSERT_TRUE(std::holds_alternative<DepolarizingQubitNoiseConfig>(model));
-    const auto& depol = std::get<DepolarizingQubitNoiseConfig>(model);
-    EXPECT_FLOAT_EQ(depol.error_rate, 0.03f);
-    EXPECT_FLOAT_EQ(depol.gate_time_ns, 75.0f);
-}
-
-TEST_F(ConfigLoaderTest, QubitNoiseDepolarizingRejectsMissingErrorRate)
-{
-    const std::string yaml = single_node_with_noise(
-        "          type: DEPOLARIZING\n"
-        "          gate_time_ns: 75\n");
-    const auto path = write_config("depol_no_error_rate.yaml", yaml);
-    EXPECT_FALSE(load_config(path.string()).has_value());
-}
-
-TEST_F(ConfigLoaderTest, QubitNoiseDepolarizingRejectsMissingGateTimeNs)
-{
-    const std::string yaml = single_node_with_noise(
-        "          type: DEPOLARIZING\n"
-        "          error_rate: 0.03\n");
-    const auto path = write_config("depol_no_gate_time.yaml", yaml);
-    EXPECT_FALSE(load_config(path.string()).has_value());
-}
-
-// ---------------------------------------------------------------------------
-// Qubit noise model: AMPLITUDE_DAMPING
-// ---------------------------------------------------------------------------
-
-TEST_F(ConfigLoaderTest, QubitNoiseAmplitudeDampingLoadsCorrectValues)
-{
-    const std::string yaml = single_node_with_noise(
-        "          type: AMPLITUDE_DAMPING\n"
-        "          t1_ns: 4000\n"
-        "          t2_ns: 2000\n");
-
-    const auto path = write_config("qubit_amp_damp.yaml", yaml);
-    const auto config = load_config(path.string());
-    ASSERT_TRUE(config.has_value());
-    const auto& model = config->nodes.front().qubit_arrays.front().noise_model.config_data;
-    ASSERT_TRUE(std::holds_alternative<AmplitudeDampingNoiseConfig>(model));
-    const auto& amp = std::get<AmplitudeDampingNoiseConfig>(model);
-    EXPECT_FLOAT_EQ(amp.t1_ns, 4000.0f);
-    EXPECT_FLOAT_EQ(amp.t2_ns, 2000.0f);
-}
-
-TEST_F(ConfigLoaderTest, QubitNoiseAmplitudeDampingRejectsMissingT1Ns)
-{
-    const std::string yaml = single_node_with_noise(
-        "          type: AMPLITUDE_DAMPING\n"
-        "          t2_ns: 2000\n");
-    const auto path = write_config("amp_damp_no_t1.yaml", yaml);
-    EXPECT_FALSE(load_config(path.string()).has_value());
-}
-
-TEST_F(ConfigLoaderTest, QubitNoiseAmplitudeDampingRejectsMissingT2Ns)
-{
-    const std::string yaml = single_node_with_noise(
-        "          type: AMPLITUDE_DAMPING\n"
-        "          t1_ns: 4000\n");
-    const auto path = write_config("amp_damp_no_t2.yaml", yaml);
-    EXPECT_FALSE(load_config(path.string()).has_value());
-}
-
-// ---------------------------------------------------------------------------
 // Qubit noise model: PHASE_FLIP
 // ---------------------------------------------------------------------------
 
@@ -779,26 +700,6 @@ TEST_F(ConfigLoaderTest, EntanglementNoiseBasicLoadsCorrectValues)
     ASSERT_TRUE(config.has_value());
     ASSERT_TRUE(std::holds_alternative<EntanglementNoiseBasicConfig>(config->entanglement_noise_model));
     EXPECT_FLOAT_EQ(std::get<EntanglementNoiseBasicConfig>(config->entanglement_noise_model).t2_value, 3500.0f);
-}
-
-TEST_F(ConfigLoaderTest, EntanglementNoiseDepolarizingLoadsCorrectValues)
-{
-    const std::string yaml =
-        "entanglement_noise_model:\n"
-        "  type: DEPOLARIZING\n"
-        "  error_rate: 0.08\n"
-        "  gate_time_ns: 300\n"
-        + std::string(single_node_with_noise(
-            "          type: BASIC\n"
-            "          t2_value: 1000\n"));
-
-    const auto path = write_config("entanglement_depol.yaml", yaml);
-    const auto config = load_config(path.string());
-    ASSERT_TRUE(config.has_value());
-    ASSERT_TRUE(std::holds_alternative<DepolarizingEntanglementNoiseConfig>(config->entanglement_noise_model));
-    const auto& depol = std::get<DepolarizingEntanglementNoiseConfig>(config->entanglement_noise_model);
-    EXPECT_FLOAT_EQ(depol.error_rate, 0.08f);
-    EXPECT_FLOAT_EQ(depol.gate_time_ns, 300.0f);
 }
 
 TEST_F(ConfigLoaderTest, RejectsUnsupportedEntanglementNoiseModelType)

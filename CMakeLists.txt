@@ -29,8 +29,8 @@ set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -DNDEBUG")
 
 # Version information (single source of truth for local builds)
 set(QILAB_VERSION_MAJOR 0)
-set(QILAB_VERSION_MINOR 0)
-set(QILAB_VERSION_PATCH 3)
+set(QILAB_VERSION_MINOR 4)
+set(QILAB_VERSION_PATCH 0)
 
 # Optional CI tag override (accepts vX.Y.Z or X.Y.Z)
 set(QILAB_CI_TAG "${QILAB_CI_TAG}")

@@ -9,7 +9,6 @@
 #include "stim.h"
 #include "Simulator/sim_interface.hpp"
 #include "logger/logger.hpp"
-#include "Simulator/entanglement_generation_noise_interface.hpp"
 
 /**
  * @brief Adapter implementing ISimulator on top of the Stim tableau simulator.
@@ -53,20 +52,6 @@ public:
     bool qubit_initialize(uint8_t qubit_address) override;
 
     /**
-     * @brief Compose a single-qubit noise channel from specified Pauli error probabilities.
-     *
-     * @param x1_noise_probability Probability of X error on qubit 1.
-     * @param y1_noise_probability Probability of Y error on qubit 1.
-     * @param z1_noise_probability Probability of Z error on qubit 1.
-     * @param x2_noise_probability Probability of X error on qubit 2.
-     * @param y2_noise_probability Probability of Y error on qubit 2.
-     * @param z2_noise_probability Probability of Z error on qubit 2.
-     * @return Composed Pauli channel weights.
-     */
-    PauliChannelWeights compose_single_qubit_noise_channel(float x1_noise_probability, float y1_noise_probability, float z1_noise_probability, float x2_noise_probability, float y2_noise_probability, float z2_noise_probability);
-
-
-    /**
      * @copydoc ISimulator::single_qubit_gate
      *
      * @details Mapped to Stim single-qubit tableau operations. The mapping
@@ -83,7 +68,7 @@ public:
      *          The sum of the probabilities should not exceed 1.0.
      *          The implementation uses Stim's Pauli channel functionality to apply the noise.
      */
-    bool single_qubit_noise(uint8_t qubit_address, float x_noise_probability, float y_noise_probability, float z_noise_probability);
+    bool single_qubit_noise(uint8_t qubit_address, float x_noise_probability, float y_noise_probability, float z_noise_probability) override;
 
     /**
      * @copydoc ISimulator::two_qubit_gate
@@ -144,7 +129,6 @@ public:
      *          returns a result code
      */
     bool entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_address) override;
-    bool apply_qubit_noise(uint8_t qubit_address, float p_dephasing, float p_depolarizing) override;
     bool allocate_qubits(uint8_t num_qubits) override;
 private:
     // Cached objects for all quantum operations
@@ -159,11 +143,6 @@ private:
     // Initialization specific
     stim::CircuitInstruction init_inst;
 
-    // Qubit-in-memory (dephasing / phase-flip) noise; args[0] holds the flip probability
-    std::array<double, 1> z_error_prob;
-    stim::SpanRef<const double> z_error_args;
-    stim::CircuitInstruction z_error_inst;
-    
     // Single qubit gate specific
     stim::CircuitInstruction h_gate_inst;       // H
     stim::CircuitInstruction x_gate_inst;       // X

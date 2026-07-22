@@ -3,9 +3,8 @@
 #include <chrono>
 #include <thread>
 
-#include "Simulator/NoiseModels/depolarizing_qubit_noise.hpp"
-#include "Simulator/NoiseModels/phase_flip_noise.hpp"
-#include "Simulator/NoiseModels/qubit_noise_basic.hpp"
+#include "Simulator/NoiseModels/QubitDecoherenceNoise/phase_flip_noise.hpp"
+#include "Simulator/NoiseModels/QubitDecoherenceNoise/qubit_noise_basic.hpp"
 
 namespace {
 
@@ -32,35 +31,6 @@ TEST(QubitModelBasicTest, ProbabilityIncreasesWithElapsedTime)
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
     const float p1 = model.get_qubit_decoherence_probability();
 
-    EXPECT_GE(p1, p0);
-}
-
-TEST(DepolarizingQubitModelTest, MarkTouchedReturnsZero)
-{
-    DepolarizingQubitModel model(DepolarizingQubitNoiseConfig{.error_rate = 0.1f, .gate_time_ns = 10.0f});
-    EXPECT_EQ(model.mark_touched(), 0);
-}
-
-TEST(DepolarizingQubitModelTest, ReturnsZeroForInvalidParameters)
-{
-    DepolarizingQubitModel zero_error(DepolarizingQubitNoiseConfig{.error_rate = 0.0f, .gate_time_ns = 10.0f});
-    DepolarizingQubitModel zero_gate(DepolarizingQubitNoiseConfig{.error_rate = 0.1f, .gate_time_ns = 0.0f});
-
-    EXPECT_FLOAT_EQ(zero_error.get_qubit_decoherence_probability(), 0.0f);
-    EXPECT_FLOAT_EQ(zero_gate.get_qubit_decoherence_probability(), 0.0f);
-}
-
-TEST(DepolarizingQubitModelTest, ProbabilityIncreasesWithElapsedTime)
-{
-    DepolarizingQubitModel model(DepolarizingQubitNoiseConfig{.error_rate = 0.5f, .gate_time_ns = 1.0f});
-    model.mark_touched();
-
-    const float p0 = model.get_qubit_decoherence_probability();
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    const float p1 = model.get_qubit_decoherence_probability();
-
-    EXPECT_GE(p0, 0.0f);
-    EXPECT_LE(p1, 1.0f);
     EXPECT_GE(p1, p0);
 }
 

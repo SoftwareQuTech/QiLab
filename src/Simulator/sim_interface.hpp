@@ -8,7 +8,6 @@
 #include <cstdint>
 
 #include "DataTypes/commands.hpp"
-#include "entanglement_generation_noise_interface.hpp"
 
 /**
  * @file
@@ -48,7 +47,6 @@ struct ISimulator
      */
     virtual bool qubit_initialize(uint8_t qubit_address) = 0;
 
-    virtual PauliChannelWeights compose_single_qubit_noise_channel(float x1_noise_probability, float y1_noise_probability, float z1_noise_probability, float x2_noise_probability, float y2_noise_probability, float z2_noise_probability) = 0;
     /**
      * @brief Apply a single-qubit rotation or gate on the specified axis.
      *
@@ -187,8 +185,6 @@ struct ISimulator
     virtual bool entanglement_swap(uint8_t qubit1_address,
                                       uint8_t qubit2_address) = 0;
 
-    virtual bool apply_qubit_noise(uint8_t qubit_address, float p_dephasing, float p_depolarizing) = 0;
-    
     virtual bool allocate_qubits(uint8_t num_qubits) = 0;
 
 };

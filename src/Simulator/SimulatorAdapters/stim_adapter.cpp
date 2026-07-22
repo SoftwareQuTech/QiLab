@@ -10,9 +10,6 @@ StimAdapter::StimAdapter(std::seed_seq &seed_seq, const uint8_t &num_qubits)
     single_span(single_target.data(), single_target.data() + 1),
     measure_inst(stim::GateType::M, {}, single_span, ""),
     init_inst(stim::GateType::R, {}, single_span, ""),
-    z_error_prob{0.0},
-    z_error_args(z_error_prob.data(), z_error_prob.data() + 1),
-    z_error_inst(stim::GateType::Z_ERROR, z_error_args, single_span, ""),
     h_gate_inst(stim::GateType::H, {}, single_span, ""),
     x_gate_inst(stim::GateType::X, {}, single_span, ""), 
     sqrt_x_gate_inst(stim::GateType::SQRT_X, {}, single_span, ""), 
@@ -33,7 +30,10 @@ StimAdapter::StimAdapter(std::seed_seq &seed_seq, const uint8_t &num_qubits)
     sqrt_yy_inst(stim::GateType::SQRT_YY, {}, two_span, ""),
     sqrt_yy_dag_inst(stim::GateType::SQRT_YY_DAG, {}, two_span, ""),
     sqrt_xx_inst(stim::GateType::SQRT_XX, {}, two_span, ""),
-    sqrt_xx_dag_inst(stim::GateType::SQRT_XX_DAG, {}, two_span, "")
+    sqrt_xx_dag_inst(stim::GateType::SQRT_XX_DAG, {}, two_span, ""),
+    pauli_channel_probs{0.0f, 0.0f, 0.0f},
+    pauli_probs_span(pauli_channel_probs.data(), pauli_channel_probs.data() + 3),
+    pauli_channel_1_inst(stim::GateType::PAULI_CHANNEL_1, pauli_probs_span, single_span, "")
 {
     // Pre-allocate enough space for all qubits
     stim_instance.ensure_large_enough_for_qubits(num_qubits);
@@ -52,19 +52,16 @@ bool StimAdapter::allocate_qubits(uint8_t num_qubits)
     return true;
 }
 
-bool StimAdapter::apply_qubit_noise(uint8_t qubit_address, float p_dephasing, float p_depolarizing)
+bool StimAdapter::single_qubit_noise(uint8_t qubit_address, float x_noise_probability, float y_noise_probability, float z_noise_probability)
 {
-    // Apply dephasing (qubit-in-memory / phase-flip) noise as a STIM Z_ERROR
-    if (p_dephasing > 0.0f) {
-        single_target[0] = stim::GateTarget{qubit_address};
-        z_error_prob[0] = std::min(static_cast<double>(p_dephasing), 1.0); // defensive clamp; model already bounds p <= 0.5
-        stim_instance.do_Z_ERROR(z_error_inst);
-    }
-    // Depolarizing (gate) noise intentionally not implemented yet -- only qubit-in-memory noise is modeled.
-    if (p_depolarizing > 0.0f) {
-        LOG_WARNING("Depolarizing noise requested but not implemented; ignoring.");
-    }
-    LOG_INFO("Applying qubit noise: qubit=" + std::to_string(qubit_address) + " p_dephasing=" + std::to_string(p_dephasing) + " p_depolarizing=" + std::to_string(p_depolarizing));
+    // Update target qubit address
+    single_target[0] = stim::GateTarget{qubit_address};
+
+    pauli_channel_probs[0] = static_cast<double>(x_noise_probability);
+    pauli_channel_probs[1] = static_cast<double>(y_noise_probability);
+    pauli_channel_probs[2] = static_cast<double>(z_noise_probability);
+    stim_instance.do_PAULI_CHANNEL_1(pauli_channel_1_inst);
+    LOG_INFO("Applied single-qubit noise: qubit=" + std::to_string(qubit_address) + " x_noise=" + std::to_string(x_noise_probability) + " y_noise=" + std::to_string(y_noise_probability) + " z_noise=" + std::to_string(z_noise_probability));
     return true;
 }
 

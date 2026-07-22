@@ -25,6 +25,7 @@
 #include <string>
 
 #include "Simulator/entanglement_generation_noise_interface.hpp"
+#include "Simulator/pauli_channel_math.hpp"
 #include "logger/logger_api.hpp"
 
 class EntanglementGenerationModel : public EntanglementGenerationNoiseInterface
@@ -75,13 +76,10 @@ public:
             return; // Weights stay at the identity channel
         }
 
-        // Combined dephasing-then-depolarizing channel as one Pauli channel (Eq. 17).
-        // X and Y retain the depolarizing weight p_d/3, Z carries an additional
-        // share contributed by the dephasing step.
-        weights.q_x = p_depolarizing / 3.0f;
-        weights.q_y = p_depolarizing / 3.0f;
-        weights.q_z = p_dephasing * (1.0f - p_depolarizing) + (p_depolarizing / 3.0f) * (1.0f - p_dephasing);
-        weights.q_i = (1.0f - p_dephasing) * (1.0f - p_depolarizing) + (p_depolarizing / 3.0f) * p_dephasing;
+        // Combined dephasing-then-depolarizing channel as one Pauli channel (Eq. 17):
+        // a pure-Z dephasing channel composed with a symmetric depolarizing channel.
+        weights = compose_pauli_channels(0.0f, 0.0f, p_dephasing,
+                                         p_depolarizing / 3.0f, p_depolarizing / 3.0f, p_depolarizing / 3.0f);
     }
 
     ~EntanglementGenerationModel() override = default;

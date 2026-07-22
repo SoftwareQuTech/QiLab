@@ -3,6 +3,7 @@
   "$id": "https://qilab/config.schema.json",
   "title": "QILab Node Configuration",
   "description": "Machine-readable mirror of the qilab config format documented in config_guide.md. Source of truth for the qilab_web_control structured editor. If you change the config format, update this file in the same change.",
+  "x-qilab-schema-version": "dev",
   "type": "object",
   "required": ["nodes"],
   "additionalProperties": false,
@@ -108,26 +109,6 @@
           }
         },
         {
-          "title": "DEPOLARIZING",
-          "additionalProperties": false,
-          "required": ["type", "error_rate", "gate_time_ns"],
-          "properties": {
-            "type": { "const": "DEPOLARIZING" },
-            "error_rate": { "type": "number", "minimum": 0 },
-            "gate_time_ns": { "type": "number", "minimum": 0, "unit": "ns" }
-          }
-        },
-        {
-          "title": "AMPLITUDE_DAMPING",
-          "additionalProperties": false,
-          "required": ["type", "t1_ns", "t2_ns"],
-          "properties": {
-            "type": { "const": "AMPLITUDE_DAMPING" },
-            "t1_ns": { "type": "number", "minimum": 0, "unit": "ns" },
-            "t2_ns": { "type": "number", "minimum": 0, "unit": "ns" }
-          }
-        },
-        {
           "title": "PHASE_FLIP",
           "additionalProperties": false,
           "required": ["type", "t2_value"],
@@ -170,16 +151,6 @@
           "properties": {
             "type": { "const": "BASIC" },
             "t2_value": { "type": "number", "minimum": 0, "unit": "ns" }
-          }
-        },
-        {
-          "title": "DEPOLARIZING",
-          "additionalProperties": false,
-          "required": ["type", "error_rate", "gate_time_ns"],
-          "properties": {
-            "type": { "const": "DEPOLARIZING" },
-            "error_rate": { "type": "number", "minimum": 0 },
-            "gate_time_ns": { "type": "number", "minimum": 0, "unit": "ns" }
           }
         }
       ]
