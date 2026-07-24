@@ -73,7 +73,16 @@ public:
         return true;
     }
 
-    bool two_qubit_gate(uint8_t, uint8_t, Angle_t, Axis_t) override { return true; }
+    bool two_qubit_gate(uint8_t qubit1, uint8_t /*qubit2*/, Angle_t angle, Axis_t axis) override
+    {
+        RecordedOp op;
+        op.kind = RecordedOp::Kind::SingleGate;
+        op.qubit = qubit1;
+        op.angle = angle;
+        op.axis = axis;
+        ops.push_back(op);
+        return true;
+    }
 
     uint8_t qubit_measure(uint8_t qubit, bool basis) override
     {
@@ -148,6 +157,8 @@ std::unique_ptr<CommandBase> build_command(const BaseC &builder)
         return std::make_unique<EntanglementAttempt>(buf);
     case Command_t::SINGLE_QUBIT_GATE:
         return std::make_unique<SingleQubitGate>(buf);
+    case Command_t::TWO_QUBIT_GATE:
+        return std::make_unique<TwoQubitGate>(buf);
     default:
         return nullptr;
     }
@@ -253,22 +264,28 @@ TEST_F(SimulatorManagerTest, RegularMeasureRotatesOwnQubitThenMeasures)
     // Node 0, local qubit 1 -> global qubit 1.
     run(/*node=*/0, build_command(QMeasure(/*addr=*/1, /*basis=*/false, X_AXIS)));
 
-    // Idle-dephasing noise is applied first, then the X-Y-X rotation, then the measurement.
-    ASSERT_EQ(spy->ops.size(), 5u);
+    // Idle-dephasing noise is applied first for the measurement itself, then
+    // each non-zero-angle rotation gate gets its OWN preceding noise call, then
+    // the measurement.
+    ASSERT_EQ(spy->ops.size(), 8u);
     EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Noise);
     EXPECT_EQ(spy->ops[0].qubit, 1u);
-    EXPECT_EQ(spy->ops[1].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[1].kind, RecordedOp::Kind::Noise);
     EXPECT_EQ(spy->ops[1].qubit, 1u);
-    EXPECT_EQ(spy->ops[1].axis, X_AXIS);
-    EXPECT_EQ(spy->ops[1].angle, a1);
-    EXPECT_EQ(spy->ops[2].axis, Y_AXIS);
+    EXPECT_EQ(spy->ops[2].kind, RecordedOp::Kind::SingleGate);
     EXPECT_EQ(spy->ops[2].qubit, 1u);
-    EXPECT_EQ(spy->ops[2].angle, a2);
-    EXPECT_EQ(spy->ops[3].axis, X_AXIS);
-    EXPECT_EQ(spy->ops[3].qubit, 1u);
-    EXPECT_EQ(spy->ops[3].angle, a3);
-    EXPECT_EQ(spy->ops[4].kind, RecordedOp::Kind::Measure);
+    EXPECT_EQ(spy->ops[2].axis, X_AXIS);
+    EXPECT_EQ(spy->ops[2].angle, a1);
+    EXPECT_EQ(spy->ops[3].kind, RecordedOp::Kind::Noise);
+    EXPECT_EQ(spy->ops[4].axis, Y_AXIS);
     EXPECT_EQ(spy->ops[4].qubit, 1u);
+    EXPECT_EQ(spy->ops[4].angle, a2);
+    EXPECT_EQ(spy->ops[5].kind, RecordedOp::Kind::Noise);
+    EXPECT_EQ(spy->ops[6].axis, X_AXIS);
+    EXPECT_EQ(spy->ops[6].qubit, 1u);
+    EXPECT_EQ(spy->ops[6].angle, a3);
+    EXPECT_EQ(spy->ops[7].kind, RecordedOp::Kind::Measure);
+    EXPECT_EQ(spy->ops[7].qubit, 1u);
 }
 
 // The core cross-node regression: node 0 selects pre-measure gates, but node 1
@@ -288,29 +305,65 @@ TEST_F(SimulatorManagerTest, SelectionIsNotConsumedByAnotherNode)
 
     // Node 0 measures (local qubit 0 -> global qubit 0): rotation still applied.
     run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/false, X_AXIS)));
-    ASSERT_EQ(spy->ops.size(), 7u);
-    EXPECT_EQ(spy->ops[2].kind, RecordedOp::Kind::Noise);
+    ASSERT_EQ(spy->ops.size(), 10u);
+    EXPECT_EQ(spy->ops[2].kind, RecordedOp::Kind::Noise); // measurement's own idle noise
     EXPECT_EQ(spy->ops[2].qubit, 0u);
-    EXPECT_EQ(spy->ops[3].kind, RecordedOp::Kind::SingleGate);
-    EXPECT_EQ(spy->ops[3].qubit, 0u);
+    EXPECT_EQ(spy->ops[3].kind, RecordedOp::Kind::Noise); // per-gate noise, angle1
+    EXPECT_EQ(spy->ops[4].kind, RecordedOp::Kind::SingleGate);
     EXPECT_EQ(spy->ops[4].qubit, 0u);
-    EXPECT_EQ(spy->ops[5].qubit, 0u);
-    EXPECT_EQ(spy->ops[6].kind, RecordedOp::Kind::Measure);
+    EXPECT_EQ(spy->ops[5].kind, RecordedOp::Kind::Noise); // per-gate noise, angle2
+    EXPECT_EQ(spy->ops[6].kind, RecordedOp::Kind::SingleGate);
     EXPECT_EQ(spy->ops[6].qubit, 0u);
+    EXPECT_EQ(spy->ops[7].kind, RecordedOp::Kind::Noise); // per-gate noise, angle3
+    EXPECT_EQ(spy->ops[8].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[8].qubit, 0u);
+    EXPECT_EQ(spy->ops[9].kind, RecordedOp::Kind::Measure);
+    EXPECT_EQ(spy->ops[9].qubit, 0u);
 }
 
-// A selection is one-shot: consumed by the first matching measurement only.
-TEST_F(SimulatorManagerTest, SelectionAppliesOnlyOnce)
+// A selection is NOT one-shot: it persists across measurements and re-applies
+// (with its own per-gate noise) on every matching measurement, until a new
+// PRE_MEASUREMENT_GATES_SELECTION overwrites it.
+TEST_F(SimulatorManagerTest, SelectionPersistsAcrossMultipleMeasurements)
 {
     run(/*node=*/0, build_command(PreMeasureGateSelect(_2_PI_16, _3_PI_16, _4_PI_16, /*target=*/false)));
 
     run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/false, X_AXIS)));
-    ASSERT_EQ(spy->ops.size(), 5u); // noise + 3 rotations + measure
+    ASSERT_EQ(spy->ops.size(), 8u); // measurement noise + 3x(per-gate noise + rotation) + measure
 
     run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/false, X_AXIS)));
-    ASSERT_EQ(spy->ops.size(), 7u); // noise + measure this time, no new rotations
-    EXPECT_EQ(spy->ops[5].kind, RecordedOp::Kind::Noise);
-    EXPECT_EQ(spy->ops[6].kind, RecordedOp::Kind::Measure);
+    ASSERT_EQ(spy->ops.size(), 16u); // the same 8-op sequence repeats
+    EXPECT_EQ(spy->ops[8].kind, RecordedOp::Kind::Noise);
+    EXPECT_EQ(spy->ops[9].kind, RecordedOp::Kind::Noise);
+    EXPECT_EQ(spy->ops[10].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[10].axis, X_AXIS);
+    EXPECT_EQ(spy->ops[11].kind, RecordedOp::Kind::Noise);
+    EXPECT_EQ(spy->ops[12].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[12].axis, Y_AXIS);
+    EXPECT_EQ(spy->ops[13].kind, RecordedOp::Kind::Noise);
+    EXPECT_EQ(spy->ops[14].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[14].axis, X_AXIS);
+    EXPECT_EQ(spy->ops[15].kind, RecordedOp::Kind::Measure);
+}
+
+// Per-gate zero-angle skip: only the zero-angle sub-gate is skipped (both its
+// noise and its adapter call), the other two still get their own noise+gate.
+TEST_F(SimulatorManagerTest, SelectionWithOneZeroAngleSkipsOnlyThatSubGate)
+{
+    run(/*node=*/0, build_command(PreMeasureGateSelect(_0_PI_16, _3_PI_16, _4_PI_16, /*target=*/false)));
+
+    run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/false, X_AXIS)));
+
+    // measurement noise + 2x(per-gate noise + rotation) [angle2, angle3 only] + measure
+    ASSERT_EQ(spy->ops.size(), 6u);
+    EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Noise); // measurement's own idle noise
+    EXPECT_EQ(spy->ops[1].kind, RecordedOp::Kind::Noise); // per-gate noise, angle2
+    EXPECT_EQ(spy->ops[2].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[2].axis, Y_AXIS);
+    EXPECT_EQ(spy->ops[3].kind, RecordedOp::Kind::Noise); // per-gate noise, angle3
+    EXPECT_EQ(spy->ops[4].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[4].axis, X_AXIS);
+    EXPECT_EQ(spy->ops[5].kind, RecordedOp::Kind::Measure);
 }
 
 // The entanglement measure path: establish (identify Bell state) must come
@@ -324,17 +377,23 @@ TEST_F(SimulatorManagerTest, EntanglementMeasureEstablishesThenRotatesThenMeasur
     run(/*node=*/0, build_command(EntanMeasure(/*fidelity=*/0, wire_nghbr(1), /*qid=*/0,
                                                /*try_now=*/true, /*basis=*/false, /*repeat=*/0)));
 
-    ASSERT_EQ(spy->ops.size(), 5u);
+    ASSERT_EQ(spy->ops.size(), 8u);
     EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Establish);
     EXPECT_EQ(spy->ops[0].qubit, 0u);           // node 0 local qubit -> global 0
     EXPECT_TRUE(spy->ops[0].is_initiator);
     EXPECT_EQ(spy->ops[0].neighbour, 2u);       // node 1's global qubit offset
-    EXPECT_EQ(spy->ops[1].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[1].kind, RecordedOp::Kind::Noise);
     EXPECT_EQ(spy->ops[1].qubit, 0u);
+    EXPECT_EQ(spy->ops[2].kind, RecordedOp::Kind::SingleGate);
     EXPECT_EQ(spy->ops[2].qubit, 0u);
-    EXPECT_EQ(spy->ops[3].qubit, 0u);
-    EXPECT_EQ(spy->ops[4].kind, RecordedOp::Kind::Measure);
+    EXPECT_EQ(spy->ops[3].kind, RecordedOp::Kind::Noise);
+    EXPECT_EQ(spy->ops[4].kind, RecordedOp::Kind::SingleGate);
     EXPECT_EQ(spy->ops[4].qubit, 0u);
+    EXPECT_EQ(spy->ops[5].kind, RecordedOp::Kind::Noise);
+    EXPECT_EQ(spy->ops[6].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[6].qubit, 0u);
+    EXPECT_EQ(spy->ops[7].kind, RecordedOp::Kind::Measure);
+    EXPECT_EQ(spy->ops[7].qubit, 0u);
 }
 
 // Both nodes of a matched pair report the SAME 4-way Bell state: the initiator
@@ -388,11 +447,27 @@ TEST_F(SimulatorManagerTest, SingleQubitGateAppliesNoiseWhenEnabled)
     EXPECT_EQ(spy->ops[1].qubit, 1u);
 }
 
-// The angle==0 early-return path performs no gate and no noise.
-TEST_F(SimulatorManagerTest, SingleQubitGateWithZeroAngleAppliesNoNoise)
+// A zero angle (Angle_t::_0_PI_16) is a documented no-op sentinel. The manager
+// now owns this decision uniformly at every call site (single_qubit_gate_handler,
+// two_qubit_gate_handler, and each sub-gate of apply_pre_measure_gates): a
+// zero-angle single-qubit gate produces NO ops at all -- no noise, and no
+// delegation to the adapter. This subsumes the adapter-level no-op branches
+// previously in StimAdapterNVCenters, which are now dead code and removed.
+TEST_F(SimulatorManagerTest, SingleQubitGateWithZeroAngleProducesNoOps)
 {
-    run(/*node=*/0, build_command(SingleQGate(/*addr=*/1, _0_PI_16, X_AXIS)));
+    ResponseData response = run(/*node=*/0, build_command(SingleQGate(/*addr=*/1, _0_PI_16, X_AXIS)));
+
     EXPECT_TRUE(spy->ops.empty());
+    EXPECT_TRUE(response.outcome & static_cast<int>(Outcome_Status_t::SUCCESS));
+}
+
+// Same zero-angle-owned-by-manager behavior for two-qubit gates.
+TEST_F(SimulatorManagerTest, TwoQubitGateWithZeroAngleProducesNoOps)
+{
+    ResponseData response = run(/*node=*/0, build_command(TwoQGate(/*addr1=*/0, /*addr2=*/1, _0_PI_16, X_AXIS)));
+
+    EXPECT_TRUE(spy->ops.empty());
+    EXPECT_TRUE(response.outcome & static_cast<int>(Outcome_Status_t::SUCCESS));
 }
 
 // When qubit_noise_enabled is false, no noise is applied for single-qubit gates.
@@ -462,15 +537,18 @@ TEST_F(SimulatorManagerTest, EntanglementMeasureAppliesChannelNoiseBeforeRotatio
     run(/*node=*/0, build_command(EntanMeasure(/*fidelity=*/0, wire_nghbr(1), /*qid=*/0,
                                                /*try_now=*/true, /*basis=*/false, /*repeat=*/0)));
 
-    ASSERT_EQ(spy->ops.size(), 6u);
+    ASSERT_EQ(spy->ops.size(), 9u);
     EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Establish);
-    EXPECT_EQ(spy->ops[1].kind, RecordedOp::Kind::Noise);
+    EXPECT_EQ(spy->ops[1].kind, RecordedOp::Kind::Noise); // entanglement-channel noise
     EXPECT_EQ(spy->ops[1].qubit, 0u);
     EXPECT_FLOAT_EQ(spy->ops[1].q_x, 0.1f);
-    EXPECT_EQ(spy->ops[2].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[2].kind, RecordedOp::Kind::Noise); // per-gate noise, angle1
     EXPECT_EQ(spy->ops[3].kind, RecordedOp::Kind::SingleGate);
-    EXPECT_EQ(spy->ops[4].kind, RecordedOp::Kind::SingleGate);
-    EXPECT_EQ(spy->ops[5].kind, RecordedOp::Kind::Measure);
+    EXPECT_EQ(spy->ops[4].kind, RecordedOp::Kind::Noise); // per-gate noise, angle2
+    EXPECT_EQ(spy->ops[5].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[6].kind, RecordedOp::Kind::Noise); // per-gate noise, angle3
+    EXPECT_EQ(spy->ops[7].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[8].kind, RecordedOp::Kind::Measure);
 }
 
 } // namespace

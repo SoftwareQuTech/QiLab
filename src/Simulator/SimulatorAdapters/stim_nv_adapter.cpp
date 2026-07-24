@@ -81,12 +81,7 @@ bool StimAdapterNVCenters::single_qubit_gate(uint8_t qubit_address, Angle_t angl
 {
     // Update target qubit address
     single_target[0] = stim::GateTarget{qubit_address};
-    if(angle == Angle_t::_0_PI_16)
-    {
-        LOG_INFO("Single-qubit gate with zero angle, no operation performed. No noise as well");
-        return true;
-    }
-    else if (angle == Angle_t::_MINUS_PI) // closest to PI
+    if (angle == Angle_t::_MINUS_PI) // closest to PI
     {
         LOG_INFO("Applying single-qubit gate: qubit=" + std::to_string(qubit_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
         if (axis == Axis_t::X_AXIS)
@@ -203,12 +198,7 @@ bool StimAdapterNVCenters::two_qubit_gate(uint8_t qubit1_address, uint8_t qubit2
         return false;
     }
 
-    if (angle == Angle_t::_0_PI_16)
-    {
-        LOG_INFO("Two-qubit gate with zero angle, no operation performed. No noise as well");
-        return true;
-    }
-    else if (angle == Angle_t::_MINUS_PI) // closest to PI
+    if (angle == Angle_t::_MINUS_PI) // closest to PI
     {
         LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
         if (axis == Axis_t::X_AXIS)

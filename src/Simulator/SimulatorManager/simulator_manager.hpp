@@ -139,7 +139,10 @@ private:
     std::array<std::array<PreMeasureGates, 2>, MAX_NODES_AVAILABLE> pre_measure_gates{};
 
     /// Apply this node's pending pre-measurement rotation (if any) to @p global_qubit
-    /// via single_qubit_gate, then clear it (one-shot). @p target selects the slot.
+    /// via single_qubit_gate, applying per-gate noise for each non-zero-angle
+    /// sub-gate. The selection persists (is NOT cleared) and re-applies on every
+    /// subsequent matching measurement, until overwritten by a new
+    /// PRE_MEASUREMENT_GATES_SELECTION. @p target selects the slot.
     void apply_pre_measure_gates(uint8_t node_id, uint16_t global_qubit, bool target);
 
     /// Resolve the 4-way Bell state to report for one side of a matched pair:

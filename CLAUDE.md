@@ -77,11 +77,23 @@ what each does.
   entanglement-channel noise — don't reimplement it inline. Comments cite
   the external `QILab_Noise_Models.pdf` spec by section/equation (e.g. "Sec.
   4.3 Eq. 17"); keep that citation style when touching this code.
-- **Testing**: classic unit tests for now. The `SpyAdapter`-based tests in
-  `test/Simulator/SimulatorManager/test_simulator_manager.cpp` are closer to
-  functional tests than unit tests — a dedicated functional test suite is
-  planned for that later, so don't treat that pattern as the general unit
-  testing convention to replicate.
+- **Testing**: `test/` is split into `Unit/`, `Functional/`, and
+  `Integration/` (scaffold only, gated behind `QILAB_BUILD_INTEGRATION_TESTS`,
+  requires real hardware not yet available). Unit tests exercise a single
+  class/function with all collaborators mocked/stubbed (`test/Unit/`, built
+  into the `unit_tests` binary, plus the compile-flag-gated
+  `prof_tests_enabled/disabled` and `daq_tests_enabled/disabled` binaries).
+  Functional tests wire multiple real, collaborating components together
+  (e.g. `SimulatorManager` + real noise models), doubling only the
+  outermost hardware-adapter boundary via `SpyAdapter` — see
+  `test/Functional/Simulator/SimulatorManager/test_simulator_manager.cpp`
+  and `test/Functional/Entanglement/test_entanglement_manager.cpp` as the
+  reference pattern for new functional tests (built into the
+  `functional_tests` binary). Integration tests will cover real
+  transmission-processor hardware I/O (actual SPI-originated commands from
+  external devices) once hardware is available; until then, functional
+  tests use the spy/mocked adapter for building commands and protocols
+  instead.
 - Folders are named CamelCase.
 - `ISimulator` (`src/Simulator/sim_interface.hpp`) is the dispatch boundary
   to the actual backend (Stim). Only add a method to it when the operation

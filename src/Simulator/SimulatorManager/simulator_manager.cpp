@@ -94,12 +94,37 @@ void SimulatorManager::apply_pre_measure_gates(uint8_t node_id, uint16_t global_
     }
     LOG_INFO("Applying pre-measurement gates for node " + std::to_string(node_id) + " to Q" + std::to_string(global_qubit) +
              ": X(" + std::to_string(gates.angle1) + ") Y(" + std::to_string(gates.angle2) + ") X(" + std::to_string(gates.angle3) + ")");
-    // X-Y-X rotation sequence into the requested measurement basis. angles and axes are checked at registration
-    simulator_inst->single_qubit_gate(global_qubit, gates.angle1, Axis_t::X_AXIS);
-    simulator_inst->single_qubit_gate(global_qubit, gates.angle2, Axis_t::Y_AXIS);
-    simulator_inst->single_qubit_gate(global_qubit, gates.angle3, Axis_t::X_AXIS);
 
-    gates.enabled = false; // one-shot: consumed by this measurement
+    // Apply one X/Y/X sub-gate of the basis rotation. A zero angle is a no-op
+    // sentinel: skip both the noise and the gate call for that sub-gate only
+    // (per-gate granularity, not per-selection), matching the same skip now
+    // performed uniformly in single_qubit_gate_handler/two_qubit_gate_handler.
+    // Noise uses the same idle-dephasing + gate-depolarizing composition as
+    // single_qubit_gate_handler, gated by the same qubit_noise_enabled flag.
+    auto apply_rotation = [this, global_qubit](Angle_t angle, Axis_t axis)
+    {
+        if (angle == Angle_t::_0_PI_16)
+        {
+            return;
+        }
+        if (qubit_noise_enabled)
+        {
+            float z_idle_noise_prob = simulation_qubits[global_qubit]->get_qubit_decoherence_probability();
+            float depolar_gate_prob = 0.3f; // Replace with actual gate noise calculation
+            PauliChannelWeights composed_weights = compose_pauli_channels(0.0f, 0.0f, z_idle_noise_prob,
+                                                                           depolar_gate_prob / 3.0f, depolar_gate_prob / 3.0f, depolar_gate_prob / 3.0f);
+            simulator_inst->single_qubit_noise(global_qubit, composed_weights.q_x, composed_weights.q_y, composed_weights.q_z);
+        }
+        simulator_inst->single_qubit_gate(global_qubit, angle, axis);
+    };
+
+    apply_rotation(gates.angle1, Axis_t::X_AXIS);
+    apply_rotation(gates.angle2, Axis_t::Y_AXIS);
+    apply_rotation(gates.angle3, Axis_t::X_AXIS);
+
+    // Selection persists: NOT cleared here. It re-applies on every subsequent
+    // matching measurement for this node+target until overwritten by a new
+    // PRE_MEASUREMENT_GATES_SELECTION (see pre_measurement_gates_selection_handler).
 }
 
 SimulatorManager::CommandTimingInfo SimulatorManager::build_command_timing_info(uint16_t node_id, int16_t qubit_offset, const CommandBase &command) const
@@ -383,7 +408,18 @@ ResponseData SimulatorManager::single_qubit_gate_handler(std::unique_ptr<Command
         PROF_STOP(prof_event_single_qubit_gate);
         return response;
     }
-   
+
+    // A zero angle is a documented no-op sentinel (Angle_t::_0_PI_16): skip both
+    // the noise application and the adapter call entirely. Owning this check here
+    // (rather than in the adapter) means every call site gets uniform behavior.
+    if (cmd->angle == Angle_t::_0_PI_16)
+    {
+        response.outcome = Outcome_Status_t::SUCCESS;
+        response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
+        PROF_STOP(prof_event_single_qubit_gate);
+        return response;
+    }
+
     if (qubit_noise_enabled)
     {
         // Get the idling dephasing probability (between touches) for the qubit and apply it as noise before the gate operation
@@ -425,6 +461,17 @@ ResponseData SimulatorManager::two_qubit_gate_handler(std::unique_ptr<CommandBas
                   std::to_string(node_id) + ".");
         response.outcome = Outcome_Status_t::INVALID_QUBIT;
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
+        return response;
+    }
+
+    // A zero angle is a documented no-op sentinel (Angle_t::_0_PI_16): skip both
+    // the noise application and the adapter call entirely, same as
+    // single_qubit_gate_handler above.
+    if (cmd->angle == Angle_t::_0_PI_16)
+    {
+        response.outcome = Outcome_Status_t::SUCCESS;
+        response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
+        PROF_STOP(prof_event_two_qubit_gate);
         return response;
     }
 

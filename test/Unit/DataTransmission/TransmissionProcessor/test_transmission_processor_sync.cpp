@@ -9,6 +9,7 @@
 #include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
 #include "DataTypes/commands.hpp"
 #include "DataTypes/responses.hpp"
+#include "mocks/mock_transmission_handler.hpp"
 
 using ::testing::_;
 using ::testing::InSequence;
@@ -49,16 +50,6 @@ static std::vector<NodeTransmissionData> create_node_data(size_t num_nodes) {
     }
     return node_data;
 }
-
-// ----------------- Mock Transport -----------------
-class MockTransmissionHandler : public ITransmissionHandler {
-public:
-    MOCK_METHOD(int8_t,  send_data,    (const uint8_t* data, uint8_t len), (override));
-    MOCK_METHOD(int8_t,  receive_data, (uint8_t* data, uint8_t len),       (override));
-    MOCK_METHOD(int8_t,  transfer, (uint8_t const* tx, uint8_t const* rx, const uint8_t len),       (override));
-    MOCK_METHOD(void,  flush, (),       (override));
-    // If you have timeouts/APIs, add MOCK_METHODs accordingly.
-};
 
 // ----------------- Tests -----------------
 TEST(TransmissionProcessor_ValidateInputs, ResponseNumberMismatch) {

@@ -6,6 +6,7 @@
 #include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
 #include "DataTypes/commands.hpp"
 #include "DataTypes/responses.hpp"
+#include "mocks/mock_transmission_handler.hpp"
 
 using ::testing::_;
 using ::testing::Invoke;
@@ -35,16 +36,6 @@ static void build_command_frame(uint8_t opcode, uint8_t b1, uint8_t b2, uint8_t 
     out[2] = b2;
     out[3] = crc8_ccitt(out, 3);
 }
-
-// ----------------- Mock Transport -----------------
-class MockTransmissionHandler : public ITransmissionHandler {
-public:
-    MOCK_METHOD(int8_t,  send_data,    (const uint8_t* data, uint8_t len), (override));
-    MOCK_METHOD(int8_t,  receive_data, (uint8_t* data, uint8_t len),       (override));
-    MOCK_METHOD(int8_t,  transfer, (uint8_t const* tx, uint8_t const* rx, const uint8_t len),       (override));
-    MOCK_METHOD(void,  flush, (),       (override));
-    // If you have timeouts/APIs, add MOCK_METHODs accordingly.
-};
 
 // ==========================================================================
 // A) receive_command(...) tests
@@ -88,6 +79,32 @@ TEST(TransmissionProcessor_Receive, ReceivesQubitInit) {
     EXPECT_EQ(tp.receive_command(cmd, 100), 0);
     ASSERT_NE(cmd, nullptr);
     EXPECT_EQ(cmd->command_type, Command_t::QUBIT_INIT);
+}
+
+// Regression test: deserialize_command's fast bounds check used to compare
+// against Command_t::QUBIT_SWAP (0x09) instead of the actual highest
+// implemented opcode, Command_t::ENTANGLEMENT_SWAP (0x0A) -- so an
+// ENTANGLEMENT_SWAP frame was silently rejected as a decode failure before
+// ever reaching the dispatch switch, even though SimulatorManager fully
+// implements entanglement_swap_handler. Now fixed in
+// transmission_processor.cpp; this pins it down so it can't silently regress.
+TEST(TransmissionProcessor_Receive, ReceivesEntanglementSwap) {
+    auto handler = std::make_unique<MockTransmissionHandler>();
+    auto* h = handler.get();
+
+    uint8_t frame[4];
+    build_command_frame(static_cast<uint8_t>(Command_t::ENTANGLEMENT_SWAP), 0x12, 0x00, frame);
+
+    EXPECT_CALL(*h, receive_data(_, 4))
+        .WillOnce(Invoke([&](uint8_t* dst, uint8_t len) -> int8_t {
+            std::memcpy(dst, frame, 4); return 0;
+        }));
+
+    TransmissionProcessor tp(std::unique_ptr<ITransmissionHandler>(handler.release()));
+    std::unique_ptr<CommandBase> cmd;
+    EXPECT_EQ(tp.receive_command(cmd, 100), 0);
+    ASSERT_NE(cmd, nullptr);
+    EXPECT_EQ(cmd->command_type, Command_t::ENTANGLEMENT_SWAP);
 }
 
 TEST(TransmissionProcessor_Receive, UnknownOpcodeReturnsMinus3) {
