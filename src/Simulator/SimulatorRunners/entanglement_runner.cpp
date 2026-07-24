@@ -5,7 +5,8 @@
 #include "utils/thread_utils.hpp"
 #include "logger/logger_api.hpp"
 
-EntanglementRunner::EntanglementRunner(std::shared_ptr<MessageBroker> mb)
+EntanglementRunner::EntanglementRunner(std::shared_ptr<MessageBroker> mb,
+                                       std::unordered_map<uint16_t, std::unique_ptr<EntanglementAttemptNoiseInterface>> attempt_models)
     : message_broker(mb), entanglement_manager(std::make_unique<EntanglementManager>(
                               [this](int node_id, Outcome_Status_t status)
                               {
@@ -14,7 +15,10 @@ EntanglementRunner::EntanglementRunner(std::shared_ptr<MessageBroker> mb)
                               [this](int node_id, std::unique_ptr<CommandBase> cmd)
                               {
                                   send_command_async(node_id, std::move(cmd));
-                              })) {}
+                              }))
+{
+    entanglement_manager->configure_links(std::move(attempt_models));
+}
 
 int EntanglementRunner::on_run(int core_id)
 {

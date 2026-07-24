@@ -81,8 +81,36 @@ bool StimAdapterNVCenters::single_qubit_gate(uint8_t qubit_address, Angle_t angl
 {
     // Update target qubit address
     single_target[0] = stim::GateTarget{qubit_address};
-
-    if (angle == Angle_t::_8_PI_16)
+    if(angle == Angle_t::_0_PI_16)
+    {
+        LOG_INFO("Single-qubit gate with zero angle, no operation performed. No noise as well");
+        return true;
+    }
+    else if (angle == Angle_t::_MINUS_PI) // closest to PI
+    {
+        LOG_INFO("Applying single-qubit gate: qubit=" + std::to_string(qubit_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
+        if (axis == Axis_t::X_AXIS)
+        {
+            stim_instance.do_X(x_gate_inst);
+            return true;
+        }
+        else if (axis == Axis_t::Y_AXIS)
+        {
+            stim_instance.do_Y(y_gate_inst);
+            return true;
+        }
+        else if (axis == Axis_t::Z_AXIS)
+        {
+            stim_instance.do_Z(z_gate_inst);
+            return true;
+        }
+        else
+        {
+            LOG_WARNING("Invalid axis for single-qubit gate: " + std::to_string(axis));
+            return false;
+        }
+    }
+    else if (angle == Angle_t::_8_PI_16)
     {
         if (axis == Axis_t::X_AXIS)
         {
@@ -175,135 +203,135 @@ bool StimAdapterNVCenters::two_qubit_gate(uint8_t qubit1_address, uint8_t qubit2
         return false;
     }
 
-    if (axis == Axis_t::X_AXIS)
+    if (angle == Angle_t::_0_PI_16)
     {
-        if (angle == Angle_t::_8_PI_16)
+        LOG_INFO("Two-qubit gate with zero angle, no operation performed. No noise as well");
+        return true;
+    }
+    else if (angle == Angle_t::_MINUS_PI) // closest to PI
+    {
+        LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
+        if (axis == Axis_t::X_AXIS)
         {
+            single_target[0] = stim::GateTarget{qubit1_address};
+            stim_instance.do_Z(z_gate_inst);
+            single_target[0] = stim::GateTarget{qubit2_address};
+            stim_instance.do_X(x_gate_inst);
+            return true;
+        }
+        else if (axis == Axis_t::Y_AXIS)
+        {
+            single_target[0] = stim::GateTarget{qubit1_address};
+            stim_instance.do_Z(z_gate_inst);
+            single_target[0] = stim::GateTarget{qubit2_address};
+            stim_instance.do_Y(y_gate_inst);
+            return true;
+        }
+        else if (axis == Axis_t::Z_AXIS)
+        {
+            single_target[0] = stim::GateTarget{qubit1_address};
+            stim_instance.do_Z(z_gate_inst);
+            single_target[0] = stim::GateTarget{qubit2_address};
+            stim_instance.do_Z(z_gate_inst);
+            return true;
+        }
+        else
+        {
+            LOG_WARNING("Invalid axis for two-qubit gate: " + std::to_string(axis));
+            return false;
+        }
+    }
+    else if (angle == Angle_t::_8_PI_16)
+    {
+        if (axis == Axis_t::X_AXIS)
+        {
+            LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
             two_target[0] = stim::GateTarget{qubit1_address};
             two_target[1] = stim::GateTarget{qubit2_address};
-            stim_instance.do_ZCX(cx_inst); 
+            stim_instance.do_ZCX(cx_inst);
             single_target[0] = stim::GateTarget{qubit1_address};
             stim_instance.do_SQRT_Z(sqrt_z_gate_inst);
             single_target[0] = stim::GateTarget{qubit2_address};
             stim_instance.do_SQRT_X(sqrt_x_gate_inst);
-            LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
             return true;
         }
-        else if (angle == Angle_t::_MINUS_PI)
+        else if (axis == Axis_t::Y_AXIS)
         {
-            single_target[0] = stim::GateTarget{qubit1_address};
-            stim_instance.do_Z(z_gate_inst); 
-            single_target[0] = stim::GateTarget{qubit2_address};
-            stim_instance.do_X(x_gate_inst); 
             LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
-            return true;
-        }
-        else if (angle == Angle_t::_MINUS_8_PI_16)
-        {
             two_target[0] = stim::GateTarget{qubit1_address};
             two_target[1] = stim::GateTarget{qubit2_address};
-            stim_instance.do_ZCX(cx_inst); 
-            single_target[0] = stim::GateTarget{qubit1_address};
-            stim_instance.do_SQRT_Z_DAG(z_gate_dag_inst);
-            single_target[0] = stim::GateTarget{qubit2_address};
-            stim_instance.do_SQRT_X_DAG(x_gate_dag_inst);
-            LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
-            return true;
-        }
-        else 
-        {
-            LOG_WARNING("Unsupported angle for two-qubit gate: " + std::to_string(angle) + " on axis: " + std::to_string(axis));
-            return false;
-        }
-    }
-    else if (axis == Axis_t::Y_AXIS)
-    {
-        if (angle == Angle_t::_8_PI_16)
-        {
-            two_target[0] = stim::GateTarget{qubit1_address};
-            two_target[1] = stim::GateTarget{qubit2_address};
-            stim_instance.do_ZCY(cy_inst); 
+            stim_instance.do_ZCY(cy_inst);
             single_target[0] = stim::GateTarget{qubit1_address};
             stim_instance.do_SQRT_Z(sqrt_z_gate_inst);
             single_target[0] = stim::GateTarget{qubit2_address};
             stim_instance.do_SQRT_Y(sqrt_y_gate_inst);
-            LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
             return true;
         }
-        else if (angle == Angle_t::_MINUS_PI)
+        else if (axis == Axis_t::Z_AXIS)
         {
-            single_target[0] = stim::GateTarget{qubit1_address};
-            stim_instance.do_Z(z_gate_inst);
-            single_target[0] = stim::GateTarget{qubit2_address};
-            stim_instance.do_Y(y_gate_inst); 
             LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
+            two_target[0] = stim::GateTarget{qubit1_address};
+            two_target[1] = stim::GateTarget{qubit2_address};
+            stim_instance.do_ZCZ(cz_inst);
+            single_target[0] = stim::GateTarget{qubit1_address};
+            stim_instance.do_SQRT_Z(sqrt_z_gate_inst);
+            single_target[0] = stim::GateTarget{qubit2_address};
+            stim_instance.do_SQRT_Z(sqrt_z_gate_inst);
             return true;
         }
-        else if (angle == Angle_t::_MINUS_8_PI_16)
+        else
+        {
+            LOG_WARNING("Invalid axis for two-qubit gate: " + std::to_string(axis));
+            return false;
+        }
+    }
+    else if (angle == Angle_t::_MINUS_8_PI_16)
+    {
+        LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
+        if (axis == Axis_t::X_AXIS)
         {
             two_target[0] = stim::GateTarget{qubit1_address};
             two_target[1] = stim::GateTarget{qubit2_address};
-            stim_instance.do_ZCY(cy_inst); 
+            stim_instance.do_ZCX(cx_inst);
+            single_target[0] = stim::GateTarget{qubit1_address};
+            stim_instance.do_SQRT_Z_DAG(z_gate_dag_inst);
+            single_target[0] = stim::GateTarget{qubit2_address};
+            stim_instance.do_SQRT_X_DAG(x_gate_dag_inst);
+            return true;
+        }
+        else if (axis == Axis_t::Y_AXIS)
+        {
+            two_target[0] = stim::GateTarget{qubit1_address};
+            two_target[1] = stim::GateTarget{qubit2_address};
+            stim_instance.do_ZCY(cy_inst);
             single_target[0] = stim::GateTarget{qubit1_address};
             stim_instance.do_SQRT_Z_DAG(z_gate_dag_inst);
             single_target[0] = stim::GateTarget{qubit2_address};
             stim_instance.do_SQRT_Y_DAG(y_gate_dag_inst);
-            LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
             return true;
         }
-        else
-        {
-            LOG_WARNING("Unsupported angle for two-qubit gate: " + std::to_string(angle) + " on axis: " + std::to_string(axis));
-            return false;
-        }
-    }
-    else if (axis == Axis_t::Z_AXIS)
-    {
-        if (angle == Angle_t::_8_PI_16)
+        else if (axis == Axis_t::Z_AXIS)
         {
             two_target[0] = stim::GateTarget{qubit1_address};
             two_target[1] = stim::GateTarget{qubit2_address};
-            stim_instance.do_ZCZ(cz_inst); 
-            single_target[0] = stim::GateTarget{qubit1_address};
-            stim_instance.do_SQRT_Z(sqrt_z_gate_inst);
-            single_target[0] = stim::GateTarget{qubit2_address};
-            stim_instance.do_SQRT_Z(sqrt_z_gate_inst);
-            LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
-            return true;
-        }
-        else if (angle == Angle_t::_MINUS_PI)
-        {
-            single_target[0] = stim::GateTarget{qubit1_address};
-            stim_instance.do_Z(z_gate_inst);
-            single_target[0] = stim::GateTarget{qubit2_address};
-            stim_instance.do_Z(z_gate_inst); 
-            LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
-            return true;
-        }
-        else if (angle == Angle_t::_MINUS_8_PI_16)
-        {
-            two_target[0] = stim::GateTarget{qubit1_address};
-            two_target[1] = stim::GateTarget{qubit2_address};
-            stim_instance.do_ZCZ(cz_inst); 
+            stim_instance.do_ZCZ(cz_inst);
             single_target[0] = stim::GateTarget{qubit1_address};
             stim_instance.do_SQRT_Z_DAG(z_gate_dag_inst);
             single_target[0] = stim::GateTarget{qubit2_address};
             stim_instance.do_SQRT_Z_DAG(z_gate_dag_inst);
-            LOG_INFO("Applying two-qubit gate: qubits=" + std::to_string(qubit1_address) + "," + std::to_string(qubit2_address) + " angle=" + std::to_string(angle) + " axis=" + std::to_string(axis));
             return true;
         }
         else
         {
-            LOG_WARNING("Unsupported angle for two-qubit gate: " + std::to_string(angle) + " on axis: " + std::to_string(axis));
+            LOG_WARNING("Invalid axis for two-qubit gate: " + std::to_string(axis));
             return false;
         }
     }
     else
     {
-        LOG_WARNING("Invalid axis for two-qubit gate: " + std::to_string(axis));
+        LOG_WARNING("Unsupported angle for two-qubit gate: " + std::to_string(angle) + " on axis: " + std::to_string(axis));
         return false;
     }
-    return true;
 }
 uint8_t StimAdapterNVCenters::qubit_measure(uint8_t qubit_address, bool basis)
 {

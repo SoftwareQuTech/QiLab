@@ -5,10 +5,11 @@
 #include "logger/logger_api.hpp"
 #include "logger/profiler_api.hpp"
 #include "Simulator/pauli_channel_math.hpp"
+#include "Simulator/link_key.hpp"
 
 
-SimulatorManager::SimulatorManager(std::unique_ptr<ISimulator> simulator, bool qubit_noise_enabled)
-    : simulator_inst(std::move(simulator)), qubit_noise_enabled(qubit_noise_enabled)
+SimulatorManager::SimulatorManager(std::unique_ptr<ISimulator> simulator, bool qubit_noise_enabled, bool entanglement_noise_enabled)
+    : simulator_inst(std::move(simulator)), qubit_noise_enabled(qubit_noise_enabled), entanglement_noise_enabled(entanglement_noise_enabled)
 {
     // Initialize the simulation command table with simulator functions.
     // for each command type, assign the corresponding handler function
@@ -21,7 +22,6 @@ SimulatorManager::SimulatorManager(std::unique_ptr<ISimulator> simulator, bool q
     sim_command_table[static_cast<uint8_t>(Command_t::ENTANGLEMENT_ATTEMPT)] = &SimulatorManager::entanglement_attempt_handler;
     sim_command_table[static_cast<uint8_t>(Command_t::ENTANGLEMENT_MEASURE)] = &SimulatorManager::entanglement_measure_handler;
     sim_command_table[static_cast<uint8_t>(Command_t::ENTANGLEMENT_SWAP)] = &SimulatorManager::entanglement_swap_handler;
-    sim_command_table[static_cast<uint8_t>(Command_t::PRE_MEASURE_AND_ENTANGLE_MEASURE)] = &SimulatorManager::pre_measure_and_entangle_measure_handler;
     sim_command_table[static_cast<uint8_t>(Command_t::PRE_MEASUREMENT_GATES_SELECTION)] = &SimulatorManager::pre_measurement_gates_selection_handler;
     sim_command_table[static_cast<uint8_t>(Command_t::QUBIT_MOVE)] = &SimulatorManager::qubit_move_handler;
     sim_command_table[static_cast<uint8_t>(Command_t::QUBIT_SWAP)] = &SimulatorManager::qubit_swap_handler;
@@ -48,9 +48,15 @@ bool SimulatorManager::are_local_qubits_in_range(uint16_t node_id, uint16_t loca
 
 uint16_t SimulatorManager::encode_pair_key(uint8_t node_a, uint8_t node_b)
 {
-    const uint8_t lo = (node_a < node_b) ? node_a : node_b;
-    const uint8_t hi = (node_a < node_b) ? node_b : node_a;
-    return (static_cast<uint16_t>(lo) << 8) | static_cast<uint16_t>(hi);
+    return encode_link_key(node_a, node_b);
+}
+
+void SimulatorManager::configure_entanglement_links(std::unordered_map<uint16_t, std::unique_ptr<EntanglementChannelNoiseInterface>> models)
+{
+    for (auto &entry : models)
+    {
+        entanglement_channel_models[entry.first] = std::move(entry.second);
+    }
 }
 
 int8_t SimulatorManager::resolve_pair_bell_state(uint8_t node_id, uint8_t neighbour_id, bool is_initiator, int8_t local_bell)
@@ -86,10 +92,9 @@ void SimulatorManager::apply_pre_measure_gates(uint8_t node_id, uint16_t global_
     {
         return;
     }
-    //TODO: add zero angle nahdler
     LOG_INFO("Applying pre-measurement gates for node " + std::to_string(node_id) + " to Q" + std::to_string(global_qubit) +
              ": X(" + std::to_string(gates.angle1) + ") Y(" + std::to_string(gates.angle2) + ") X(" + std::to_string(gates.angle3) + ")");
-    // X-Y-X rotation sequence into the requested measurement basis.
+    // X-Y-X rotation sequence into the requested measurement basis. angles and axes are checked at registration
     simulator_inst->single_qubit_gate(global_qubit, gates.angle1, Axis_t::X_AXIS);
     simulator_inst->single_qubit_gate(global_qubit, gates.angle2, Axis_t::Y_AXIS);
     simulator_inst->single_qubit_gate(global_qubit, gates.angle3, Axis_t::X_AXIS);
@@ -378,15 +383,6 @@ ResponseData SimulatorManager::single_qubit_gate_handler(std::unique_ptr<Command
         PROF_STOP(prof_event_single_qubit_gate);
         return response;
     }
-
-    if (cmd->angle == Angle_t::_0_PI_16)
-    {
-        LOG_INFO("Single-qubit gate with zero angle, no operation performed. No noise as well");
-        response.outcome = Outcome_Status_t::SUCCESS;
-        response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
-        PROF_STOP(prof_event_single_qubit_gate);
-        return response;
-    }
    
     if (qubit_noise_enabled)
     {
@@ -400,7 +396,14 @@ ResponseData SimulatorManager::single_qubit_gate_handler(std::unique_ptr<Command
         simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, composed_weights.q_x, composed_weights.q_y, composed_weights.q_z);
     }
 
-    simulator_inst->single_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->angle, cmd->axis);
+    if(!simulator_inst->single_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->angle, cmd->axis))
+    {
+        LOG_ERROR("Single qubit gate failed");
+        response.outcome = Outcome_Status_t::UNSUPPORTED_REQUEST;
+        response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
+        PROF_STOP(prof_event_two_qubit_gate);
+        return response;
+    }
 
     response.outcome = Outcome_Status_t::SUCCESS;
     response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
@@ -425,15 +428,6 @@ ResponseData SimulatorManager::two_qubit_gate_handler(std::unique_ptr<CommandBas
         return response;
     }
 
-    if (cmd->angle == Angle_t::_0_PI_16)
-    {
-        LOG_INFO("Two-qubit gate with zero angle, no operation performed. No noise as well");
-        response.outcome = Outcome_Status_t::SUCCESS;
-        response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
-        PROF_STOP(prof_event_two_qubit_gate);
-        return response;
-    }
-
     if (qubit_noise_enabled)
     {
         // Get the dephasing probability for each qubit and apply it as noise before the gate operation
@@ -453,7 +447,7 @@ ResponseData SimulatorManager::two_qubit_gate_handler(std::unique_ptr<CommandBas
                   std::to_string(cmd->qubit1_address + qubit_offset) +
                   " and " +
                   std::to_string(cmd->qubit2_address + qubit_offset));
-        response.outcome = Outcome_Status_t::INVALID_QUBIT;
+        response.outcome = Outcome_Status_t::UNSUPPORTED_REQUEST;
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         PROF_STOP(prof_event_two_qubit_gate);
         return response;
@@ -517,6 +511,23 @@ ResponseData SimulatorManager::entanglement_attempt_handler(std::unique_ptr<Comm
         return response;
     }
 
+    // Entanglement-channel noise (single-qubit Pauli channel, Eq. 17) is applied
+    // once per successful entanglement, only on the initiator's own qubit.
+    if (entanglement_noise_enabled && is_initiator)
+    {
+        const uint16_t link_key = encode_pair_key(node_id, cmd->nghbr);
+        const auto model_it = entanglement_channel_models.find(link_key);
+        if (model_it != entanglement_channel_models.end())
+        {
+            const PauliChannelWeights weights = model_it->second->get_pauli_channel_weights();
+            simulator_inst->single_qubit_noise(qubit_offset, weights.q_x, weights.q_y, weights.q_z);
+        }
+        else
+        {
+            LOG_WARNING("No entanglement channel model configured for link (" + std::to_string(node_id) + ", " + std::to_string(cmd->nghbr) + "); skipping noise application.");
+        }
+    }
+
     // Both nodes of the pair must report the same 4-way Bell state. Only the
     // initiator can read it from the intact joint state; the responder gets it
     // from the manager's per-pair cache.
@@ -578,6 +589,24 @@ ResponseData SimulatorManager::entanglement_measure_handler(std::unique_ptr<Comm
     // pre-collapse reading; the responder reads it back from the manager cache.
     const int8_t bell_state = resolve_pair_bell_state(node_id, cmd->nghbr, is_initiator, est & 0x03);
 
+    // Entanglement-channel noise (single-qubit Pauli channel, Eq. 17) is applied
+    // once per successful entanglement, only on the initiator's own qubit, and
+    // must land before the basis rotation (step 2) and measurement (step 3) below.
+    if (entanglement_noise_enabled && is_initiator)
+    {
+        const uint16_t link_key = encode_pair_key(node_id, cmd->nghbr);
+        const auto model_it = entanglement_channel_models.find(link_key);
+        if (model_it != entanglement_channel_models.end())
+        {
+            const PauliChannelWeights weights = model_it->second->get_pauli_channel_weights();
+            simulator_inst->single_qubit_noise(local_qubit, weights.q_x, weights.q_y, weights.q_z);
+        }
+        else
+        {
+            LOG_WARNING("No entanglement channel model configured for link (" + std::to_string(node_id) + ", " + std::to_string(cmd->nghbr) + "); skipping noise application.");
+        }
+    }
+
     // Step 2: basis rotation on this node's own qubit (must land AFTER the peek in
     // step 1 and BEFORE the measurement in step 3 -- which is exactly this order).
     apply_pre_measure_gates(node_id, local_qubit, /*target=*/true);
@@ -616,7 +645,7 @@ ResponseData SimulatorManager::entanglement_swap_handler(std::unique_ptr<Command
                   std::to_string(cmd->qubit1_address + qubit_offset) +
                   " and " +
                   std::to_string(cmd->qubit2_address + qubit_offset));
-        response.outcome = Outcome_Status_t::INVALID_QUBIT;
+        response.outcome = Outcome_Status_t::UNKNOWN_FAILURE;
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         PROF_STOP(prof_event_entanglement_swap);
         return response;
@@ -625,17 +654,6 @@ ResponseData SimulatorManager::entanglement_swap_handler(std::unique_ptr<Command
     response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
     response.outcome = Outcome_Status_t::SUCCESS;
     PROF_STOP(prof_event_entanglement_swap);
-    return response;
-}
-
-ResponseData SimulatorManager::pre_measure_and_entangle_measure_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id)
-{
-    (void)command;
-    (void)qubit_offset;
-    (void)node_id;
-    ResponseData response;
-    response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
-    response.outcome = Outcome_Status_t::UNSUPPORTED_REQUEST;
     return response;
 }
 
@@ -684,6 +702,15 @@ ResponseData SimulatorManager::qubit_move_handler(std::unique_ptr<CommandBase> c
         return response;
     }
 
+    if (qubit_noise_enabled)
+    {
+        // Get the dephasing probability for each qubit and apply it as noise before the gate operation
+        float z_qubit1_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
+        simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0f, 0.0f, z_qubit1_noise);
+        float z_qubit2_noise = simulation_qubits[cmd->qubit2_address + qubit_offset]->get_qubit_decoherence_probability();
+        simulator_inst->single_qubit_noise(cmd->qubit2_address + qubit_offset, 0.0f, 0.0f, z_qubit2_noise);
+    }
+
     if (!simulator_inst->qubit_move(cmd->qubit1_address + qubit_offset,
                                     cmd->qubit2_address + qubit_offset))
     {
@@ -691,7 +718,7 @@ ResponseData SimulatorManager::qubit_move_handler(std::unique_ptr<CommandBase> c
                   std::to_string(cmd->qubit1_address + qubit_offset) +
                   " to " +
                   std::to_string(cmd->qubit2_address + qubit_offset));
-        response.outcome = Outcome_Status_t::INVALID_QUBIT;
+        response.outcome = Outcome_Status_t::UNKNOWN_FAILURE;
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         PROF_STOP(prof_event_qubit_move);
         return response;
@@ -721,6 +748,15 @@ ResponseData SimulatorManager::qubit_swap_handler(std::unique_ptr<CommandBase> c
         return response;
     }
 
+    if (qubit_noise_enabled)
+    {
+        // Get the dephasing probability for each qubit and apply it as noise before the gate operation
+        float z_qubit1_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
+        simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0f, 0.0f, z_qubit1_noise);
+        float z_qubit2_noise = simulation_qubits[cmd->qubit2_address + qubit_offset]->get_qubit_decoherence_probability();
+        simulator_inst->single_qubit_noise(cmd->qubit2_address + qubit_offset, 0.0f, 0.0f, z_qubit2_noise);
+    }
+
     if (!simulator_inst->qubit_swap(cmd->qubit1_address + qubit_offset,
                                     cmd->qubit2_address + qubit_offset))
     {
@@ -728,7 +764,7 @@ ResponseData SimulatorManager::qubit_swap_handler(std::unique_ptr<CommandBase> c
                   std::to_string(cmd->qubit1_address + qubit_offset) +
                   " and " +
                   std::to_string(cmd->qubit2_address + qubit_offset));
-        response.outcome = Outcome_Status_t::INVALID_QUBIT;
+        response.outcome = Outcome_Status_t::UNKNOWN_FAILURE;
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         PROF_STOP(prof_event_qubit_swap);
         return response;

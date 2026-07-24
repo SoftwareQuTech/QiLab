@@ -8,7 +8,30 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 ### Added
-- Placeholder for upcoming changes.
+- Link-based entanglement configuration: `entanglement_links` at the config's
+  top level, one entry per physical link (`node_a`/`node_b`, validated
+  against configured node names), each carrying an `attempt_model` and a
+  `channel_model`. `entanglement_noise_enabled` system flag, mirroring
+  `qubit_noise_enabled`.
+- `EntanglementAttemptNoiseInterface` (`attempt_batch()`), consumed by
+  `EntanglementManager` for batched success-probability/delay, replacing its
+  previous hardcoded fixed-delay placeholder.
+- `EntanglementChannelNoiseInterface` (`get_pauli_channel_weights()`),
+  consumed by `SimulatorManager` to apply a Pauli noise channel to the
+  initiator's qubit on successful entanglement.
+
+### Changed
+- Split the previous combined `EntanglementGenerationNoiseInterface` into the
+  two interfaces above, one per consuming component, each with its own
+  `BASIC` model and parser.
+- A failed entanglement attempt batch now fails fast (immediate
+  `ENTANGLEMENT_FAILURE` to both sides, no retry) instead of the manager's
+  old always-succeeds behavior.
+
+### Removed
+- The old, unused global `entanglement_noise_model` config path
+  (`EntanglementNoiseInterface`, `EntanglementNoiseBasicModel`) — it was
+  parsed but never consumed at runtime.
 
 ## [0.4.0] - 2026-07-21
 

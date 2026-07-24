@@ -71,14 +71,23 @@ target_link_libraries(gate_noise_models_test PRIVATE
 GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
 add_test(NAME gate_noise_models_test COMMAND gate_noise_models_test)
 
-add_executable(entanglement_generation_noise_test
-                ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/NoiseModels/test_entanglement_generation_noise.cpp
+add_executable(entanglement_attempt_noise_test
+                ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/NoiseModels/test_entanglement_attempt_noise.cpp
                 )
-target_compile_definitions(entanglement_generation_noise_test PRIVATE PROF_ENABLED=0 LOGGING_ENABLED=0)
-target_include_directories(entanglement_generation_noise_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(entanglement_generation_noise_test PRIVATE
+target_compile_definitions(entanglement_attempt_noise_test PRIVATE PROF_ENABLED=0 LOGGING_ENABLED=0)
+target_include_directories(entanglement_attempt_noise_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(entanglement_attempt_noise_test PRIVATE
 GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
-add_test(NAME entanglement_generation_noise_test COMMAND entanglement_generation_noise_test)
+add_test(NAME entanglement_attempt_noise_test COMMAND entanglement_attempt_noise_test)
+
+add_executable(entanglement_channel_noise_test
+                ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/NoiseModels/test_entanglement_channel_noise.cpp
+                )
+target_compile_definitions(entanglement_channel_noise_test PRIVATE PROF_ENABLED=0 LOGGING_ENABLED=0)
+target_include_directories(entanglement_channel_noise_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(entanglement_channel_noise_test PRIVATE
+GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
+add_test(NAME entanglement_channel_noise_test COMMAND entanglement_channel_noise_test)
 
 add_executable(operations_engine_test
                 ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/SimulatorManager/test_operations_engine.cpp
@@ -142,7 +151,8 @@ gtest_discover_tests(message_broker_test)
 gtest_discover_tests(config_loader_test)
 gtest_discover_tests(qubit_models_test)
 gtest_discover_tests(gate_noise_models_test)
-gtest_discover_tests(entanglement_generation_noise_test)
+gtest_discover_tests(entanglement_attempt_noise_test)
+gtest_discover_tests(entanglement_channel_noise_test)
 gtest_discover_tests(operations_engine_test)
 gtest_discover_tests(simulator_manager_test)
 

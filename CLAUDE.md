@@ -29,23 +29,38 @@ what each does.
   and minimal latency — avoid allocations, locks, exceptions, and
   unnecessary virtual dispatch there. Slower, less-optimized code is only
   acceptable at startup and configuration-loading time.
-- **Noise models have two kinds, each with its own config pattern (MUST
+- **Noise models have three kinds, each with its own config pattern (MUST
   follow)**: qubit-in-memory noise (`QubitNoiseInterface`,
   `src/Simulator/qubit_noise_interface.hpp` — `mark_touched()` /
   `get_qubit_decoherence_probability()`, e.g. `QubitModelBasic` in
-  `NoiseModels/qubit_noise_basic.hpp`) and entanglement-related noise
-  (`EntanglementGenerationNoiseInterface`). These are not yet in separate
-  folders in the current tree — that split (a `QubitInMemoryNoises`-style
-  folder vs. entanglement noise folder) is planned and new noise work should
-  anticipate it.
+  `NoiseModels/qubit_noise_basic.hpp`, configured per qubit array on a node);
+  entanglement-attempt noise (`EntanglementAttemptNoiseInterface`,
+  `src/Simulator/entanglement_attempt_noise_interface.hpp` —
+  `attempt_batch()`, e.g. `EntanglementAttemptModel` in
+  `NoiseModels/EntanglementGenerationNoise/entanglement_attempt_noise.hpp`,
+  consumed by `EntanglementManager` for batching/delay/success-probability);
+  and entanglement-channel noise (`EntanglementChannelNoiseInterface`,
+  `src/Simulator/entanglement_channel_noise_interface.hpp` —
+  `get_pauli_channel_weights()`, e.g. `EntanglementChannelModel` in
+  `NoiseModels/EntanglementGenerationNoise/entanglement_channel_noise.hpp`,
+  consumed by `SimulatorManager` to apply noise on successful entanglement).
+  The two entanglement kinds are configured together per **link** (a pair of
+  node names, `entanglement_links` at the config's top level — not per-node,
+  not global), each entry carrying its own `attempt_model` and
+  `channel_model` blocks; see `docs/config_guide.md`. Qubit-in-memory vs.
+  entanglement noise models are not yet in separate top-level folders in the
+  current tree (both entanglement kinds share
+  `NoiseModels/EntanglementGenerationNoise/`, alongside unrelated gate-noise
+  classes) — that split is planned and new noise work should anticipate it.
   - Config pattern (see `src/ConfigurationEngine/model_parsers/`): each
     model has its own `<Model>Config` struct, a `parse_<model>_model(fields,
     output, error) noexcept` function in `model_parsers/<model>_parser.hpp`
     using the `ensure_allowed_keys`/`require_key`/`parse_non_negative_float`
     helpers (`parse_scalar_helpers.hpp`), registered by uppercase type name
-    in the parser map in `parse_node_config.hpp` /
-    `parse_entanglement_config.hpp`. New noise models must follow this
-    pattern, not a bespoke one.
+    in the parser map in `parse_node_config.hpp` (qubit noise) /
+    `parse_entanglement_config.hpp` (entanglement attempt + channel noise,
+    two separate registries). New noise models must follow this pattern, not
+    a bespoke one.
 - **Config/schema stay in sync**: any config format change (new noise model,
   field, or node type) must update `docs/config.schema.json` in the same
   change — it's the source of truth for the separate `qilab_web_control`
@@ -59,7 +74,7 @@ what each does.
   invalid models fall back to the identity channel. Composition of Pauli
   channels goes through `compose_pauli_channels()`
   (`src/Simulator/pauli_channel_math.hpp`), shared by gate noise and
-  entanglement-generation noise — don't reimplement it inline. Comments cite
+  entanglement-channel noise — don't reimplement it inline. Comments cite
   the external `QILab_Noise_Models.pdf` spec by section/equation (e.g. "Sec.
   4.3 Eq. 17"); keep that citation style when touching this code.
 - **Testing**: classic unit tests for now. The `SpyAdapter`-based tests in

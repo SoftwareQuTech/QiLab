@@ -3,6 +3,7 @@
 #include <random>
 #include <string_view>
 #include <thread>
+#include <unordered_map>
 #include <signal.h>
 
 
@@ -18,6 +19,11 @@
 
 //Intermediaries
 #include "Simulator/SimulatorManager/simulator_manager.hpp"
+#include "Simulator/entanglement_attempt_noise_interface.hpp"
+#include "Simulator/entanglement_channel_noise_interface.hpp"
+#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_attempt_noise.hpp"
+#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_channel_noise.hpp"
+#include "Simulator/link_key.hpp"
 
 //Data transmission
 #include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
@@ -105,17 +111,46 @@ int main()
     LOG_INFO("Configuration loaded with " + std::to_string(config->nodes.size()) + " nodes");
     
     std::unique_ptr<StimAdapterNVCenters> stim_adapter =  std::make_unique<StimAdapterNVCenters>(seq, 0); //the seed is problematic
-    std::unique_ptr<SimulatorManager> sim_manager = std::make_unique<SimulatorManager>(std::move(stim_adapter), config->system.qubit_noise_enabled);
-    
-    
+    std::unique_ptr<SimulatorManager> sim_manager = std::make_unique<SimulatorManager>(
+        std::move(stim_adapter), config->system.qubit_noise_enabled, config->system.entanglement_noise_enabled);
+
+
     // Register nodes dynamically from configuration
     std::vector<int16_t> node_ids;
     for (size_t i = 0; i < config->nodes.size(); ++i) {
         int16_t node_id = sim_manager->register_node(config->nodes[i]);
         node_ids.push_back(node_id);
-        LOG_INFO("Registered node " + std::to_string(i) + " with ID " + 
+        LOG_INFO("Registered node " + std::to_string(i) + " with ID " +
                  std::to_string(node_id) + " (" + std::to_string(sim_manager->get_registered_qubits()) + " qubits)");
     }
+
+    // Resolve entanglement_links (config, keyed by node name) into per-link
+    // attempt models (for the entanglement manager) and channel models (for
+    // the simulator manager), keyed by encode_link_key(node_id_a, node_id_b),
+    // using the node-name -> node-id mapping established by the registration
+    // loop above.
+    std::unordered_map<std::string, uint16_t> name_to_node_id;
+    for (size_t i = 0; i < config->nodes.size(); ++i) {
+        name_to_node_id[config->nodes[i].name] = static_cast<uint16_t>(node_ids[i]);
+    }
+
+    std::unordered_map<uint16_t, std::unique_ptr<EntanglementAttemptNoiseInterface>> attempt_models;
+    std::unordered_map<uint16_t, std::unique_ptr<EntanglementChannelNoiseInterface>> channel_models;
+    for (const auto& link : config->entanglement_links) {
+        const uint16_t node_id_a = name_to_node_id.at(link.node_a);
+        const uint16_t node_id_b = name_to_node_id.at(link.node_b);
+        const uint16_t link_key = encode_link_key(static_cast<uint8_t>(node_id_a), static_cast<uint8_t>(node_id_b));
+
+        if (const auto* basic = std::get_if<EntanglementAttemptBasicConfig>(&link.attempt_model.config_data)) {
+            attempt_models[link_key] = std::make_unique<EntanglementAttemptModel>(
+                basic->attempt_duration_ns, basic->batch_size, basic->p_success, basic->rng_seed);
+        }
+        if (const auto* basic = std::get_if<EntanglementChannelBasicConfig>(&link.channel_model.config_data)) {
+            channel_models[link_key] = std::make_unique<EntanglementChannelModel>(basic->p_depolarizing, basic->p_dephasing);
+        }
+    }
+
+    sim_manager->configure_entanglement_links(std::move(channel_models));
 
     SimulatorRunner sim(std::move(sim_manager), broker);
 
@@ -131,7 +166,7 @@ int main()
     DataTransmissionRunner transmission_node(node_ids, std::move(command_handlerB), broker, config->system.transmission_cycle_time_us);
 #endif
 
-    EntanglementRunner ent_runner(broker);
+    EntanglementRunner ent_runner(broker, std::move(attempt_models));
 
     LOG_INFO("Starting simulation");
 

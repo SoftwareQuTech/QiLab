@@ -16,7 +16,8 @@
 
 #include "Simulator/NoiseModels/QubitDecoherenceNoise/qubit_noise_basic.hpp"
 #include "Simulator/NoiseModels/QubitDecoherenceNoise/phase_flip_noise.hpp"
-#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_noise_basic.hpp"
+#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_attempt_noise.hpp"
+#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_channel_noise.hpp"
 
 enum class QuantumNodeType : uint8_t
 {
@@ -24,7 +25,7 @@ enum class QuantumNodeType : uint8_t
     NV_CENTER = 1,
     ION_TRAP = 2,
     PROCESSOR = 3,
-}; 
+};
 
 enum class QubitNoiseModelType : uint8_t
 {
@@ -33,20 +34,18 @@ enum class QubitNoiseModelType : uint8_t
     PHASE_FLIP = 2,
 };
 
-enum class EntanglementNoiseModelType : uint8_t
-{
-    BASIC = 0,
-    ADVANCED = 1,
-};
-
 using QubitNoiseConfigData = std::variant<
     QubitNoiseBasicConfig,
     QubitNoiseAdvancedConfig,
     PhaseFlipNoiseConfig
 >;
 
-using EntanglementNoiseConfigData = std::variant<
-    EntanglementNoiseBasicConfig
+using EntanglementAttemptConfigData = std::variant<
+    EntanglementAttemptBasicConfig
+>;
+
+using EntanglementChannelConfigData = std::variant<
+    EntanglementChannelBasicConfig
 >;
 
 struct QubitNoiseModelConfig
@@ -54,9 +53,26 @@ struct QubitNoiseModelConfig
     QubitNoiseConfigData config_data;
 };
 
-struct EntanglementNoiseModelConfig
+struct EntanglementAttemptModelConfig
 {
-    EntanglementNoiseConfigData config_data;
+    EntanglementAttemptConfigData config_data;
+};
+
+struct EntanglementChannelModelConfig
+{
+    EntanglementChannelConfigData config_data;
+};
+
+// One physical link between two configured nodes (identified by name), each
+// carrying its own attempt model (entanglement manager) and channel model
+// (simulator manager). node_a/node_b must match names in AppConfig::nodes --
+// validated at config-load time.
+struct EntanglementLinkConfig
+{
+    std::string node_a;
+    std::string node_b;
+    EntanglementAttemptModelConfig attempt_model;
+    EntanglementChannelModelConfig channel_model;
 };
 
 struct QubitArrayConfig
@@ -88,6 +104,7 @@ struct NodeConfig
 /// "QiLab System Configuration" -- global runtime parameters (optional section, defaults apply)
 struct SystemConfig
 {
-    float transmission_cycle_time_us = 5.0f; // transmission runner cycle period, microseconds
-    bool  qubit_noise_enabled = true;        // gate qubit-in-memory noise application in the sim manager
+    float transmission_cycle_time_us = 5.0f;    // transmission runner cycle period, microseconds
+    bool  qubit_noise_enabled = true;           // gate qubit-in-memory noise application in the sim manager
+    bool  entanglement_noise_enabled = true;    // gate entanglement-channel noise application in the sim manager
 };

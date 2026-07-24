@@ -8,10 +8,11 @@
   "required": ["nodes"],
   "additionalProperties": false,
   "properties": {
-    "entanglement_noise_model": {
-      "title": "Entanglement noise model",
-      "description": "Optional. Defaults to BASIC with t2_value 1000 if omitted.",
-      "$ref": "#/$defs/entanglement_noise_model"
+    "entanglement_links": {
+      "title": "Entanglement links",
+      "description": "Optional. One entry per physical link between two configured nodes. node_a/node_b must match names under 'nodes'.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/entanglement_link" }
     },
     "system": {
       "title": "QiLab System Configuration",
@@ -137,20 +138,73 @@
           "description": "Enables applying qubit-in-memory noise during simulation. Defaults to true if omitted.",
           "type": "boolean",
           "default": true
+        },
+        "entanglement_noise_enabled": {
+          "title": "Entanglement noise enabled",
+          "description": "Enables applying entanglement-channel noise during simulation. Defaults to true if omitted.",
+          "type": "boolean",
+          "default": true
         }
       }
     },
-    "entanglement_noise_model": {
-      "title": "Entanglement noise model",
+    "entanglement_link": {
+      "title": "Entanglement link",
+      "type": "object",
+      "required": ["node_a", "node_b", "attempt_model", "channel_model"],
+      "additionalProperties": false,
+      "properties": {
+        "node_a": {
+          "title": "Node A",
+          "description": "Name of the first node of the link. Must match a configured node's name.",
+          "type": "string"
+        },
+        "node_b": {
+          "title": "Node B",
+          "description": "Name of the second node of the link. Must match a configured node's name.",
+          "type": "string"
+        },
+        "attempt_model": {
+          "title": "Entanglement attempt model",
+          "description": "Batching/delay/success-probability model consumed by the entanglement manager.",
+          "$ref": "#/$defs/entanglement_attempt_model"
+        },
+        "channel_model": {
+          "title": "Entanglement channel model",
+          "description": "Pauli-noise channel model applied by the simulator manager on successful entanglement.",
+          "$ref": "#/$defs/entanglement_channel_model"
+        }
+      }
+    },
+    "entanglement_attempt_model": {
+      "title": "Entanglement attempt model",
       "type": "object",
       "oneOf": [
         {
           "title": "BASIC",
           "additionalProperties": false,
-          "required": ["type", "t2_value"],
+          "required": ["type", "attempt_duration_ns", "batch_size", "p_success", "rng_seed"],
           "properties": {
             "type": { "const": "BASIC" },
-            "t2_value": { "type": "number", "minimum": 0, "unit": "ns" }
+            "attempt_duration_ns": { "type": "integer", "minimum": 1, "unit": "ns" },
+            "batch_size": { "type": "integer", "minimum": 1 },
+            "p_success": { "type": "number", "minimum": 0, "maximum": 1 },
+            "rng_seed": { "type": "integer", "minimum": 0 }
+          }
+        }
+      ]
+    },
+    "entanglement_channel_model": {
+      "title": "Entanglement channel model",
+      "type": "object",
+      "oneOf": [
+        {
+          "title": "BASIC",
+          "additionalProperties": false,
+          "required": ["type", "p_depolarizing", "p_dephasing"],
+          "properties": {
+            "type": { "const": "BASIC" },
+            "p_depolarizing": { "type": "number", "minimum": 0, "maximum": 1 },
+            "p_dephasing": { "type": "number", "minimum": 0, "maximum": 1 }
           }
         }
       ]

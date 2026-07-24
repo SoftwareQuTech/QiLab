@@ -32,15 +32,27 @@ directly), check for:
    adapter must hold no per-node pre-measurement state. Flag any change that
    adds measurement orchestration or pre-measurement state to an adapter.
 
-3. **Two noise-model kinds, each with its own interface and config path.**
+3. **Three noise-model kinds, each with its own interface and config path.**
    Qubit-in-memory noise implements `QubitNoiseInterface`
-   (`src/Simulator/qubit_noise_interface.hpp`); entanglement-related noise
-   implements `EntanglementGenerationNoiseInterface`. These are not yet
-   split into separate folders — a `QubitInMemoryNoises`-style folder vs.
-   an entanglement-noise folder is the intended direction, so new noise
-   files should anticipate that split. Flag new noise-model code that mixes
-   the two concerns in one type, or that doesn't implement the interface
-   matching its kind.
+   (`src/Simulator/qubit_noise_interface.hpp`), configured per qubit array on
+   a node. Entanglement noise is split by which component consumes it:
+   entanglement-attempt noise (batching/delay/success-probability) implements
+   `EntanglementAttemptNoiseInterface`
+   (`src/Simulator/entanglement_attempt_noise_interface.hpp`) and is consumed
+   by `EntanglementManager`; entanglement-channel noise (the Pauli channel
+   applied on successful entanglement) implements
+   `EntanglementChannelNoiseInterface`
+   (`src/Simulator/entanglement_channel_noise_interface.hpp`) and is consumed
+   by `SimulatorManager`. Both entanglement kinds are configured together per
+   **link** (`entanglement_links` at the config's top level, keyed by a pair
+   of node names — not per-node, not global). These are not yet split into
+   separate top-level folders — both entanglement kinds currently share
+   `NoiseModels/EntanglementGenerationNoise/`; a `QubitInMemoryNoises`-style
+   folder vs. an entanglement-noise folder is the intended direction, so new
+   noise files should anticipate that split. Flag new noise-model code that
+   mixes concerns across kinds in one type, that doesn't implement the
+   interface matching its kind, or that adds entanglement noise config
+   per-node instead of per-link.
 
 4. **Shared math stays shared.** Any single-qubit Pauli channel composition
    must reuse `compose_pauli_channels()`
@@ -53,10 +65,12 @@ directly), check for:
    `src/ConfigurationEngine/model_parsers/`, using the
    `ensure_allowed_keys`/`require_key`/`parse_non_negative_float` helpers
    (`parse_scalar_helpers.hpp`) and registered by uppercase type name in the
-   parser map in `parse_node_config.hpp` / `parse_entanglement_config.hpp`
-   (see `qubit_basic_parser.hpp`, `entanglement_depolarizing_parser.hpp` as
-   references). Flag any new model that parses its config ad hoc instead of
-   through this pattern.
+   parser map in `parse_node_config.hpp` (qubit models) or
+   `parse_entanglement_config.hpp` (entanglement attempt + channel models,
+   two separate registries) — see `qubit_basic_parser.hpp`,
+   `entanglement_attempt_basic_parser.hpp`, and
+   `entanglement_channel_basic_parser.hpp` as references. Flag any new model
+   that parses its config ad hoc instead of through this pattern.
 
 6. **Config/schema/doc move together.** A change to the config shape (new
    noise model, field, or node type) must update both

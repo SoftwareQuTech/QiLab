@@ -18,6 +18,7 @@
 #include "DataTypes/responses.hpp"
 #include "Simulator/sim_interface.hpp"
 #include "Simulator/qubit_noise_interface.hpp"
+#include "Simulator/entanglement_channel_noise_interface.hpp"
 #include "DataTypes/configuration_options.hpp"
 #include "logger/profiler_api.hpp"
 #include "Simulator/SimulatorManager/operations_engine.hpp"
@@ -29,8 +30,21 @@ class SimulatorManager
     using duration = typename clock_type::duration;
     
 public:
-    SimulatorManager(std::unique_ptr<ISimulator> simulator, bool qubit_noise_enabled = true);
+    SimulatorManager(std::unique_ptr<ISimulator> simulator, bool qubit_noise_enabled = true, bool entanglement_noise_enabled = true);
     ~SimulatorManager();
+
+    /**
+     * @brief Configures per-link entanglement-channel noise models.
+     *
+     * Merges the given models into the existing set (keyed by
+     * encode_pair_key(node_a, node_b)) rather than replacing it, so it may be
+     * called multiple times to layer in additional links. A link with no
+     * configured model has no noise applied on successful entanglement (a
+     * warning is logged).
+     *
+     * @param models Map of link key to channel model, moved in.
+     */
+    void configure_entanglement_links(std::unordered_map<uint16_t, std::unique_ptr<EntanglementChannelNoiseInterface>> models);
 
         /**
      * @brief Register a new quantum node with the specified number of qubits.
@@ -105,6 +119,9 @@ private:
     /// Build an order-independent key for a node pair: (min << 8) | max.
     static uint16_t encode_pair_key(uint8_t node_a, uint8_t node_b);
 
+    /// Per-link entanglement-channel noise models, keyed by encode_pair_key(node_a, node_b).
+    std::unordered_map<uint16_t, std::unique_ptr<EntanglementChannelNoiseInterface>> entanglement_channel_models;
+
     /// Pending basis-rotation (pre-measurement) gates for a node, set by a
     /// PRE_MEASUREMENT_GATES_SELECTION command and consumed by the next matching
     /// measurement. Kept per node (and per target) in the manager -- NOT in the
@@ -139,6 +156,9 @@ private:
     /// Gates qubit-in-memory noise application in single_qubit_gate_handler, from system.qubit_noise_enabled config
     bool qubit_noise_enabled = true;
 
+    /// Gates entanglement-channel noise application in entanglement_attempt_handler/entanglement_measure_handler, from system.entanglement_noise_enabled config
+    bool entanglement_noise_enabled = true;
+
     std::array<SimCommandFn, MAX_COMMANDS_AVAILABLE> sim_command_table = {};
 
     //operations engine functions
@@ -157,7 +177,6 @@ private:
     ResponseData entanglement_attempt_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id);
     ResponseData entanglement_measure_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id);
     ResponseData entanglement_swap_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id);
-    ResponseData pre_measure_and_entangle_measure_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id);
     ResponseData pre_measurement_gates_selection_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id);
     ResponseData qubit_move_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id);
     ResponseData qubit_swap_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id);

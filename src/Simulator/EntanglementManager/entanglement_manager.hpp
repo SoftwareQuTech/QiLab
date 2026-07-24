@@ -12,9 +12,11 @@
 #include <chrono>
 #include <memory>
 #include <functional>
+#include <unordered_map>
 
 #include "DataTypes/commands.hpp"
 #include "DataTypes/responses.hpp"
+#include "Simulator/entanglement_attempt_noise_interface.hpp"
 
 /**
  * @brief Represents a pending entanglement request from a single node.
@@ -43,7 +45,7 @@ struct EntanglementPair
     int node_id_1;                                       ///< ID of first node
     int node_id_2;                                       ///< ID of second node
     std::chrono::steady_clock::time_point match_time;   ///< Timestamp when pair was matched
-    int calculated_success_time_delay;                  ///< Based on a model, the time to wait before executing entanglement, or fail if invalid
+    uint64_t calculated_success_time_delay;             ///< From the link's attempt model (BatchOutcome.duration_ns): time to wait before executing entanglement
 };
 
 /**
@@ -65,14 +67,17 @@ struct EntanglementPair
  * ### Request Lifecycle
  * 1. Node A adds request to entangle with Node B
  * 2. Manager checks if Node B has a matching request for Node A
- * 3. If matched: Move to matched_pairs with execution timestamp
+ * 3. If matched: run the link's attempt model (attempt_batch()). On success,
+ *    move to matched_pairs with an execution timestamp delayed by
+ *    BatchOutcome.duration_ns. On failure (or no model configured for the
+ *    link), call response_callback with failure status immediately for both
+ *    nodes -- fail fast, no retry.
  * 4. If unmatched: Keep in pending_requests, set timeout
- * 5. On timeout: Call response_callback with failure status
+ * 5. On pre-match timeout: Call response_callback with failure status
  * 6. On execution time: Call command_callback for each node with its command
  *
  * @note All timestamps use steady_clock for consistent monotonic timing
- * @note Timeouts are enforced per request (500 microseconds)
- * @note Matched pairs execute with a configurable delay (default 1 microsecond)
+ * @note Pre-match timeouts are enforced per request (see ENTANGLEMENT_TIMEOUT)
  */
 class EntanglementManager
 {
@@ -121,6 +126,18 @@ public:
      */
     bool add_new_request(std::unique_ptr<CommandBase> command, uint16_t node_id, uint16_t neighbour_node);
 
+    /**
+     * @brief Configures per-link entanglement-attempt models.
+     *
+     * Merges the given models into the existing set (keyed by
+     * encode_link_key(node_a, node_b)) rather than replacing it, so it may be
+     * called multiple times to layer in additional links. A link with no
+     * configured model always fails fast on match (see add_new_request).
+     *
+     * @param models Map of link key to attempt model, moved in.
+     */
+    void configure_links(std::unordered_map<uint16_t, std::unique_ptr<EntanglementAttemptNoiseInterface>> models);
+
 protected:
     /**
      * @brief Checks if an entanglement request has exceeded the timeout period.
@@ -149,9 +166,6 @@ private:
     /// Timeout duration for unmatched entanglement requests (50000 microseconds)
     static constexpr std::chrono::microseconds ENTANGLEMENT_TIMEOUT{50000};
 
-    /// Default execution delay after matching (100ms)
-    static constexpr int DEFAULT_SUCCESS_DELAY_NS = 100000;
-
     /// Callback invoked when a request expires without finding a match
     std::function<void(int, Outcome_Status_t)> response_callback;
 
@@ -163,4 +177,7 @@ private:
 
     /// Collection of matched request pairs awaiting execution time.
     std::vector<EntanglementPair> matched_pairs;
+
+    /// Per-link entanglement-attempt models, keyed by encode_link_key(node_a, node_b).
+    std::unordered_map<uint16_t, std::unique_ptr<EntanglementAttemptNoiseInterface>> attempt_models;
 };

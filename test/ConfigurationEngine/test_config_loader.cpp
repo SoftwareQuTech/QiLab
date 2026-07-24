@@ -24,6 +24,42 @@ static std::string single_node_with_noise(const std::string& noise_model_block)
          + noise_model_block;
 }
 
+// Builds a minimal two-node ("alice", "bob") config preceded by the given
+// entanglement_links block, so link entries can reference real node names.
+static std::string two_nodes_with_links(const std::string& links_block)
+{
+    return links_block
+         + "nodes:\n"
+         + "  - name: alice\n"
+         + "    qubit_arrays:\n"
+         + "      - num_qubits: 1\n"
+         + "        noise_model:\n"
+         + "          type: BASIC\n"
+         + "          t2_value: 1000\n"
+         + "  - name: bob\n"
+         + "    qubit_arrays:\n"
+         + "      - num_qubits: 1\n"
+         + "        noise_model:\n"
+         + "          type: BASIC\n"
+         + "          t2_value: 1000\n";
+}
+
+// A valid entanglement_links block for the alice<->bob pair.
+static const std::string kValidAliceBobLink =
+    "entanglement_links:\n"
+    "  - node_a: alice\n"
+    "    node_b: bob\n"
+    "    attempt_model:\n"
+    "      type: BASIC\n"
+    "      attempt_duration_ns: 1000\n"
+    "      batch_size: 100\n"
+    "      p_success: 0.5\n"
+    "      rng_seed: 42\n"
+    "    channel_model:\n"
+    "      type: BASIC\n"
+    "      p_depolarizing: 0.01\n"
+    "      p_dephasing: 0.02\n";
+
 class EnvVarGuard {
 public:
     explicit EnvVarGuard(const char* var_name)
@@ -84,12 +120,9 @@ protected:
     std::filesystem::path temp_dir;
 };
 
-TEST_F(ConfigLoaderTest, LoadsModernQubitArraysAndEntanglementModel)
+TEST_F(ConfigLoaderTest, LoadsModernQubitArrays)
 {
     const std::string yaml =
-        "entanglement_noise_model:\n"
-        "  type: BASIC\n"
-        "  t2_value: 3500\n"
         "nodes:\n"
         "  - name: nodeA\n"
         "    node_type: PROCESSOR\n"
@@ -107,7 +140,6 @@ TEST_F(ConfigLoaderTest, LoadsModernQubitArraysAndEntanglementModel)
 
     const auto config = load_config(path.string());
     ASSERT_TRUE(config.has_value());
-    ASSERT_TRUE(std::holds_alternative<EntanglementNoiseBasicConfig>(config->entanglement_noise_model));
     ASSERT_EQ(config->nodes.size(), 1u);
 
     const auto& node = config->nodes.front();
@@ -230,9 +262,8 @@ TEST_F(ConfigLoaderTest, RejectsUnknownFieldInsideModelBlock)
 TEST_F(ConfigLoaderTest, RejectsMissingNodesSection)
 {
     const std::string yaml =
-        "entanglement_noise_model:\n"
-        "  type: BASIC\n"
-        "  t2_value: 1000\n";
+        "system:\n"
+        "  transmission_cycle_time_us: 5\n";
 
     const auto path = write_config("missing_nodes.yaml", yaml);
     const auto config = load_config(path.string());
@@ -273,7 +304,7 @@ TEST_F(ConfigLoaderTest, CreatesDefaultConfigFileInConfiguredDirectory)
     const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 
     EXPECT_NE(content.find("nodes:"), std::string::npos);
-    EXPECT_NE(content.find("entanglement_noise_model:"), std::string::npos);
+    EXPECT_EQ(content.find("entanglement_links:"), std::string::npos);
 }
 
 // ---------------------------------------------------------------------------
@@ -469,25 +500,44 @@ TEST_F(ConfigLoaderTest, QubitArrayFieldOrderDoesNotMatter)
 
 TEST_F(ConfigLoaderTest, TopLevelFieldOrderDoesNotMatter)
 {
-    // nodes before entanglement_noise_model
+    // nodes before entanglement_links -- validation happens after all
+    // top-level sections are parsed, so order must not matter.
     const std::string yaml =
         "nodes:\n"
-        "  - name: top_order\n"
+        "  - name: top_order_a\n"
         "    node_type: GENERIC\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
         "        noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n"
-        "entanglement_noise_model:\n"
-        "  type: BASIC\n"
-        "  t2_value: 500\n";
+        "  - name: top_order_b\n"
+        "    node_type: GENERIC\n"
+        "    qubit_arrays:\n"
+        "      - num_qubits: 1\n"
+        "        noise_model:\n"
+        "          type: BASIC\n"
+        "          t2_value: 1000\n"
+        "entanglement_links:\n"
+        "  - node_a: top_order_a\n"
+        "    node_b: top_order_b\n"
+        "    attempt_model:\n"
+        "      type: BASIC\n"
+        "      attempt_duration_ns: 1000\n"
+        "      batch_size: 100\n"
+        "      p_success: 0.5\n"
+        "      rng_seed: 42\n"
+        "    channel_model:\n"
+        "      type: BASIC\n"
+        "      p_depolarizing: 0.01\n"
+        "      p_dephasing: 0.02\n";
 
     const auto path = write_config("top_level_order.yaml", yaml);
     const auto config = load_config(path.string());
     ASSERT_TRUE(config.has_value());
-    ASSERT_TRUE(std::holds_alternative<EntanglementNoiseBasicConfig>(config->entanglement_noise_model));
-    EXPECT_FLOAT_EQ(std::get<EntanglementNoiseBasicConfig>(config->entanglement_noise_model).t2_value, 500.0f);
+    ASSERT_EQ(config->entanglement_links.size(), 1u);
+    EXPECT_EQ(config->entanglement_links.front().node_a, "top_order_a");
+    EXPECT_EQ(config->entanglement_links.front().node_b, "top_order_b");
 }
 
 TEST_F(ConfigLoaderTest, CommentsAndBlankLinesAreIgnored)
@@ -669,75 +719,244 @@ TEST_F(ConfigLoaderTest, AcceptsZeroFloatForNoiseParams)
 }
 
 // ---------------------------------------------------------------------------
-// Entanglement noise model
+// Entanglement links
 // ---------------------------------------------------------------------------
 
-TEST_F(ConfigLoaderTest, DefaultEntanglementModelIsBasicWhenAbsent)
+TEST_F(ConfigLoaderTest, EntanglementLinksDefaultsToEmptyWhenAbsent)
 {
     const std::string yaml = single_node_with_noise(
         "          type: BASIC\n"
         "          t2_value: 1000\n");
 
-    const auto path = write_config("no_entanglement_model.yaml", yaml);
+    const auto path = write_config("no_entanglement_links.yaml", yaml);
     const auto config = load_config(path.string());
     ASSERT_TRUE(config.has_value());
-    ASSERT_TRUE(std::holds_alternative<EntanglementNoiseBasicConfig>(config->entanglement_noise_model));
-    EXPECT_FLOAT_EQ(std::get<EntanglementNoiseBasicConfig>(config->entanglement_noise_model).t2_value, 1000.0f);
+    EXPECT_TRUE(config->entanglement_links.empty());
 }
 
-TEST_F(ConfigLoaderTest, EntanglementNoiseBasicLoadsCorrectValues)
+TEST_F(ConfigLoaderTest, AcceptsEmptyEntanglementLinksList)
 {
-    const std::string yaml =
-        "entanglement_noise_model:\n"
-        "  type: BASIC\n"
-        "  t2_value: 3500\n"
-        + std::string(single_node_with_noise(
-            "          type: BASIC\n"
-            "          t2_value: 1000\n"));
+    const std::string yaml = "entanglement_links:\n" + single_node_with_noise(
+        "          type: BASIC\n"
+        "          t2_value: 1000\n");
 
-    const auto path = write_config("entanglement_basic.yaml", yaml);
+    const auto path = write_config("empty_entanglement_links.yaml", yaml);
     const auto config = load_config(path.string());
     ASSERT_TRUE(config.has_value());
-    ASSERT_TRUE(std::holds_alternative<EntanglementNoiseBasicConfig>(config->entanglement_noise_model));
-    EXPECT_FLOAT_EQ(std::get<EntanglementNoiseBasicConfig>(config->entanglement_noise_model).t2_value, 3500.0f);
+    EXPECT_TRUE(config->entanglement_links.empty());
 }
 
-TEST_F(ConfigLoaderTest, RejectsUnsupportedEntanglementNoiseModelType)
+TEST_F(ConfigLoaderTest, EntanglementLinksLoadsCorrectValues)
 {
-    const std::string yaml =
-        "entanglement_noise_model:\n"
-        "  type: UNKNOWN_TYPE\n"
-        "  t2_value: 1000\n"
-        + std::string(single_node_with_noise(
-            "          type: BASIC\n"
-            "          t2_value: 1000\n"));
+    const auto path = write_config("entanglement_links.yaml", two_nodes_with_links(kValidAliceBobLink));
+    const auto config = load_config(path.string());
+    ASSERT_TRUE(config.has_value());
+    ASSERT_EQ(config->entanglement_links.size(), 1u);
 
-    const auto path = write_config("bad_entanglement_type.yaml", yaml);
+    const auto& link = config->entanglement_links.front();
+    EXPECT_EQ(link.node_a, "alice");
+    EXPECT_EQ(link.node_b, "bob");
+
+    ASSERT_TRUE(std::holds_alternative<EntanglementAttemptBasicConfig>(link.attempt_model.config_data));
+    const auto& attempt = std::get<EntanglementAttemptBasicConfig>(link.attempt_model.config_data);
+    EXPECT_EQ(attempt.attempt_duration_ns, 1000u);
+    EXPECT_EQ(attempt.batch_size, 100u);
+    EXPECT_FLOAT_EQ(attempt.p_success, 0.5f);
+    EXPECT_EQ(attempt.rng_seed, 42u);
+
+    ASSERT_TRUE(std::holds_alternative<EntanglementChannelBasicConfig>(link.channel_model.config_data));
+    const auto& channel = std::get<EntanglementChannelBasicConfig>(link.channel_model.config_data);
+    EXPECT_FLOAT_EQ(channel.p_depolarizing, 0.01f);
+    EXPECT_FLOAT_EQ(channel.p_dephasing, 0.02f);
+}
+
+TEST_F(ConfigLoaderTest, RejectsUnsupportedEntanglementAttemptModelType)
+{
+    const std::string links =
+        "entanglement_links:\n"
+        "  - node_a: alice\n"
+        "    node_b: bob\n"
+        "    attempt_model:\n"
+        "      type: UNKNOWN_TYPE\n"
+        "    channel_model:\n"
+        "      type: BASIC\n"
+        "      p_depolarizing: 0.01\n"
+        "      p_dephasing: 0.02\n";
+
+    const auto path = write_config("bad_attempt_model_type.yaml", two_nodes_with_links(links));
     EXPECT_FALSE(load_config(path.string()).has_value());
 }
 
-TEST_F(ConfigLoaderTest, RejectsMissingTypeInEntanglementModel)
+TEST_F(ConfigLoaderTest, RejectsUnsupportedEntanglementChannelModelType)
 {
-    const std::string yaml =
-        "entanglement_noise_model:\n"
-        "  t2_value: 1000\n"
-        + std::string(single_node_with_noise(
-            "          type: BASIC\n"
-            "          t2_value: 1000\n"));
+    const std::string links =
+        "entanglement_links:\n"
+        "  - node_a: alice\n"
+        "    node_b: bob\n"
+        "    attempt_model:\n"
+        "      type: BASIC\n"
+        "      attempt_duration_ns: 1000\n"
+        "      batch_size: 100\n"
+        "      p_success: 0.5\n"
+        "      rng_seed: 42\n"
+        "    channel_model:\n"
+        "      type: UNKNOWN_TYPE\n";
 
-    const auto path = write_config("entanglement_no_type.yaml", yaml);
+    const auto path = write_config("bad_channel_model_type.yaml", two_nodes_with_links(links));
     EXPECT_FALSE(load_config(path.string()).has_value());
 }
 
-TEST_F(ConfigLoaderTest, RejectsEntanglementNoiseModelWithInlineValue)
+TEST_F(ConfigLoaderTest, RejectsEntanglementLinksWithInlineValue)
 {
-    const std::string yaml =
-        "entanglement_noise_model: BASIC\n"
-        + std::string(single_node_with_noise(
-            "          type: BASIC\n"
-            "          t2_value: 1000\n"));
+    const std::string yaml = "entanglement_links: BASIC\n" + two_nodes_with_links("");
+    const auto path = write_config("entanglement_links_inline.yaml", yaml);
+    EXPECT_FALSE(load_config(path.string()).has_value());
+}
 
-    const auto path = write_config("entanglement_inline.yaml", yaml);
+TEST_F(ConfigLoaderTest, RejectsEntanglementLinkMissingNodeA)
+{
+    const std::string links =
+        "entanglement_links:\n"
+        "  - node_b: bob\n"
+        "    attempt_model:\n"
+        "      type: BASIC\n"
+        "      attempt_duration_ns: 1000\n"
+        "      batch_size: 100\n"
+        "      p_success: 0.5\n"
+        "      rng_seed: 42\n"
+        "    channel_model:\n"
+        "      type: BASIC\n"
+        "      p_depolarizing: 0.01\n"
+        "      p_dephasing: 0.02\n";
+
+    const auto path = write_config("link_missing_node_a.yaml", two_nodes_with_links(links));
+    EXPECT_FALSE(load_config(path.string()).has_value());
+}
+
+TEST_F(ConfigLoaderTest, RejectsEntanglementLinkMissingNodeB)
+{
+    const std::string links =
+        "entanglement_links:\n"
+        "  - node_a: alice\n"
+        "    attempt_model:\n"
+        "      type: BASIC\n"
+        "      attempt_duration_ns: 1000\n"
+        "      batch_size: 100\n"
+        "      p_success: 0.5\n"
+        "      rng_seed: 42\n"
+        "    channel_model:\n"
+        "      type: BASIC\n"
+        "      p_depolarizing: 0.01\n"
+        "      p_dephasing: 0.02\n";
+
+    const auto path = write_config("link_missing_node_b.yaml", two_nodes_with_links(links));
+    EXPECT_FALSE(load_config(path.string()).has_value());
+}
+
+TEST_F(ConfigLoaderTest, RejectsEntanglementLinkMissingAttemptModel)
+{
+    const std::string links =
+        "entanglement_links:\n"
+        "  - node_a: alice\n"
+        "    node_b: bob\n"
+        "    channel_model:\n"
+        "      type: BASIC\n"
+        "      p_depolarizing: 0.01\n"
+        "      p_dephasing: 0.02\n";
+
+    const auto path = write_config("link_missing_attempt_model.yaml", two_nodes_with_links(links));
+    EXPECT_FALSE(load_config(path.string()).has_value());
+}
+
+TEST_F(ConfigLoaderTest, RejectsEntanglementLinkMissingChannelModel)
+{
+    const std::string links =
+        "entanglement_links:\n"
+        "  - node_a: alice\n"
+        "    node_b: bob\n"
+        "    attempt_model:\n"
+        "      type: BASIC\n"
+        "      attempt_duration_ns: 1000\n"
+        "      batch_size: 100\n"
+        "      p_success: 0.5\n"
+        "      rng_seed: 42\n";
+
+    const auto path = write_config("link_missing_channel_model.yaml", two_nodes_with_links(links));
+    EXPECT_FALSE(load_config(path.string()).has_value());
+}
+
+TEST_F(ConfigLoaderTest, RejectsEntanglementLinkWithUnknownNodeName)
+{
+    const std::string links =
+        "entanglement_links:\n"
+        "  - node_a: alice\n"
+        "    node_b: carol\n"
+        "    attempt_model:\n"
+        "      type: BASIC\n"
+        "      attempt_duration_ns: 1000\n"
+        "      batch_size: 100\n"
+        "      p_success: 0.5\n"
+        "      rng_seed: 42\n"
+        "    channel_model:\n"
+        "      type: BASIC\n"
+        "      p_depolarizing: 0.01\n"
+        "      p_dephasing: 0.02\n";
+
+    const auto path = write_config("link_unknown_node.yaml", two_nodes_with_links(links));
+    EXPECT_FALSE(load_config(path.string()).has_value());
+}
+
+TEST_F(ConfigLoaderTest, RejectsEntanglementLinkWithSameNodeTwice)
+{
+    const std::string links =
+        "entanglement_links:\n"
+        "  - node_a: alice\n"
+        "    node_b: alice\n"
+        "    attempt_model:\n"
+        "      type: BASIC\n"
+        "      attempt_duration_ns: 1000\n"
+        "      batch_size: 100\n"
+        "      p_success: 0.5\n"
+        "      rng_seed: 42\n"
+        "    channel_model:\n"
+        "      type: BASIC\n"
+        "      p_depolarizing: 0.01\n"
+        "      p_dephasing: 0.02\n";
+
+    const auto path = write_config("link_same_node_twice.yaml", two_nodes_with_links(links));
+    EXPECT_FALSE(load_config(path.string()).has_value());
+}
+
+TEST_F(ConfigLoaderTest, RejectsDuplicateEntanglementLink)
+{
+    const std::string links =
+        "entanglement_links:\n"
+        "  - node_a: alice\n"
+        "    node_b: bob\n"
+        "    attempt_model:\n"
+        "      type: BASIC\n"
+        "      attempt_duration_ns: 1000\n"
+        "      batch_size: 100\n"
+        "      p_success: 0.5\n"
+        "      rng_seed: 42\n"
+        "    channel_model:\n"
+        "      type: BASIC\n"
+        "      p_depolarizing: 0.01\n"
+        "      p_dephasing: 0.02\n"
+        "  - node_a: bob\n" // reverse order -- still the same physical link
+        "    node_b: alice\n"
+        "    attempt_model:\n"
+        "      type: BASIC\n"
+        "      attempt_duration_ns: 1000\n"
+        "      batch_size: 100\n"
+        "      p_success: 0.5\n"
+        "      rng_seed: 42\n"
+        "    channel_model:\n"
+        "      type: BASIC\n"
+        "      p_depolarizing: 0.01\n"
+        "      p_dephasing: 0.02\n";
+
+    const auto path = write_config("link_duplicate.yaml", two_nodes_with_links(links));
     EXPECT_FALSE(load_config(path.string()).has_value());
 }
 

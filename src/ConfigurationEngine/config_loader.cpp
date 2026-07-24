@@ -4,6 +4,7 @@
 #include <fstream>
 #include <cstdlib>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "ConfigurationEngine/parse_entanglement_config.hpp"
@@ -30,10 +31,15 @@ constexpr const char* kEntanglementKey = "entanglement";
 constexpr const char* kQubitMoveKey = "qubit_move";
 constexpr const char* kQubitSwapKey = "qubit_swap";
 constexpr const char* kQubitInitKey = "qubit_init";
-constexpr const char* kEntanglementNoiseModelKey = "entanglement_noise_model";
+constexpr const char* kEntanglementLinksKey = "entanglement_links";
+constexpr const char* kNodeAKey = "node_a";
+constexpr const char* kNodeBKey = "node_b";
+constexpr const char* kAttemptModelKey = "attempt_model";
+constexpr const char* kChannelModelKey = "channel_model";
 constexpr const char* kSystemKey = "system";
 constexpr const char* kTransmissionCycleTimeKey = "transmission_cycle_time_us";
 constexpr const char* kQubitNoiseEnabledKey = "qubit_noise_enabled";
+constexpr const char* kEntanglementNoiseEnabledKey = "entanglement_noise_enabled";
 
 struct ParsedLine
 {
@@ -460,6 +466,18 @@ bool parse_system_section(const std::vector<ParsedLine>& lines,
 
             system.qubit_noise_enabled = parsed_value;
         }
+        else if (key_value->first == kEntanglementNoiseEnabledKey)
+        {
+            bool parsed_value = false;
+            if (!config_parse::parse_bool(key_value->second, parsed_value))
+            {
+                return set_parse_error(error,
+                                       "system",
+                                       "Invalid value for '" + key_value->first + "': '" + key_value->second + "'");
+            }
+
+            system.entanglement_noise_enabled = parsed_value;
+        }
         else
         {
             return set_parse_error(error, "system", "Unknown key '" + key_value->first + "'");
@@ -669,6 +687,223 @@ bool parse_nodes(const std::vector<ParsedLine>& lines,
     return true;
 }
 
+bool parse_entanglement_link_field(const std::vector<ParsedLine>& lines,
+                                   std::size_t& index,
+                                   int item_indent,
+                                   EntanglementLinkConfig& link_config,
+                                   bool& has_node_a,
+                                   bool& has_node_b,
+                                   bool& has_attempt_model,
+                                   bool& has_channel_model,
+                                   std::string& error) noexcept
+{
+    const auto key_value = config_parse::split_key_value(lines[index].content);
+    if (!key_value.has_value())
+    {
+        return set_parse_error_near(error, "entanglement_link", "Invalid key/value", lines[index].content);
+    }
+
+    if (key_value->first == kNodeAKey)
+    {
+        if (key_value->second.empty())
+        {
+            return set_parse_error(error, "entanglement_link", "node_a must not be empty");
+        }
+
+        link_config.node_a = key_value->second;
+        has_node_a = true;
+        ++index;
+        return true;
+    }
+
+    if (key_value->first == kNodeBKey)
+    {
+        if (key_value->second.empty())
+        {
+            return set_parse_error(error, "entanglement_link", "node_b must not be empty");
+        }
+
+        link_config.node_b = key_value->second;
+        has_node_b = true;
+        ++index;
+        return true;
+    }
+
+    if (key_value->first == kAttemptModelKey)
+    {
+        if (!key_value->second.empty())
+        {
+            return set_parse_error(error, "entanglement_link", "attempt_model must be a nested map");
+        }
+
+        ++index;
+        if (!parse_model_block(lines,
+                               index,
+                               item_indent + kIndentStep,
+                               config_parse::entanglement_attempt_model_parsers(),
+                               link_config.attempt_model.config_data,
+                               error))
+        {
+            return false;
+        }
+
+        has_attempt_model = true;
+        return true;
+    }
+
+    if (key_value->first == kChannelModelKey)
+    {
+        if (!key_value->second.empty())
+        {
+            return set_parse_error(error, "entanglement_link", "channel_model must be a nested map");
+        }
+
+        ++index;
+        if (!parse_model_block(lines,
+                               index,
+                               item_indent + kIndentStep,
+                               config_parse::entanglement_channel_model_parsers(),
+                               link_config.channel_model.config_data,
+                               error))
+        {
+            return false;
+        }
+
+        has_channel_model = true;
+        return true;
+    }
+
+    return set_parse_error(error, "entanglement_link", "Unknown key '" + key_value->first + "'");
+}
+
+bool parse_single_entanglement_link_item(const std::vector<ParsedLine>& lines,
+                                         std::size_t& index,
+                                         int parent_indent,
+                                         EntanglementLinkConfig& link_config,
+                                         std::string& error) noexcept
+{
+    if (lines[index].indent != parent_indent + kIndentStep)
+    {
+        return set_parse_error_near(error, "entanglement_links", "Invalid indentation", lines[index].content);
+    }
+
+    if (lines[index].content.empty() || lines[index].content[0] != '-')
+    {
+        return set_parse_error(error, "entanglement_links", "Expected list entry under entanglement_links");
+    }
+
+    const int item_indent = lines[index].indent;
+    const std::string inline_content = config_parse::trim(lines[index].content.substr(1));
+    ++index;
+
+    bool has_node_a = false;
+    bool has_node_b = false;
+    bool has_attempt_model = false;
+    bool has_channel_model = false;
+
+    if (!inline_content.empty())
+    {
+        const auto inline_kv = config_parse::split_key_value(inline_content);
+        if (!inline_kv.has_value())
+        {
+            return set_parse_error(error, "entanglement_link", "Invalid inline key/value '" + inline_content + "'");
+        }
+
+        if (inline_kv->first == kNodeAKey)
+        {
+            if (inline_kv->second.empty())
+            {
+                return set_parse_error(error, "entanglement_link", "node_a must not be empty");
+            }
+
+            link_config.node_a = inline_kv->second;
+            has_node_a = true;
+        }
+        else if (inline_kv->first == kNodeBKey)
+        {
+            if (inline_kv->second.empty())
+            {
+                return set_parse_error(error, "entanglement_link", "node_b must not be empty");
+            }
+
+            link_config.node_b = inline_kv->second;
+            has_node_b = true;
+        }
+        else
+        {
+            return set_parse_error(error,
+                                   "entanglement_link",
+                                   "Unsupported inline item '" + inline_content + "' (expected 'node_a' or 'node_b')");
+        }
+    }
+
+    while (index < lines.size() && lines[index].indent > item_indent)
+    {
+        if (lines[index].indent != item_indent + kIndentStep)
+        {
+            return set_parse_error_near(error, "entanglement_link", "Invalid indentation", lines[index].content);
+        }
+
+        if (!parse_entanglement_link_field(lines,
+                                           index,
+                                           item_indent,
+                                           link_config,
+                                           has_node_a,
+                                           has_node_b,
+                                           has_attempt_model,
+                                           has_channel_model,
+                                           error))
+        {
+            return false;
+        }
+    }
+
+    if (!has_node_a)
+    {
+        return set_parse_error(error, "entanglement_link", "Missing required key 'node_a'");
+    }
+
+    if (!has_node_b)
+    {
+        return set_parse_error(error, "entanglement_link", "Missing required key 'node_b'");
+    }
+
+    if (!has_attempt_model)
+    {
+        return set_parse_error(error, "entanglement_link", "Missing required key 'attempt_model'");
+    }
+
+    if (!has_channel_model)
+    {
+        return set_parse_error(error, "entanglement_link", "Missing required key 'channel_model'");
+    }
+
+    return true;
+}
+
+bool parse_entanglement_links(const std::vector<ParsedLine>& lines,
+                              std::size_t& index,
+                              int parent_indent,
+                              std::vector<EntanglementLinkConfig>& entanglement_links,
+                              std::string& error) noexcept
+{
+    while (index < lines.size() && lines[index].indent > parent_indent)
+    {
+        EntanglementLinkConfig link_config{};
+
+        if (!parse_single_entanglement_link_item(lines, index, parent_indent, link_config, error))
+        {
+            return false;
+        }
+
+        entanglement_links.push_back(link_config);
+    }
+
+    // Unlike qubit_arrays/nodes, an empty or entirely absent list is valid --
+    // not every deployment needs entanglement noise configured on every link.
+    return true;
+}
+
 } // namespace
 
 std::string get_default_config_path() noexcept {
@@ -735,14 +970,11 @@ bool create_default_config() noexcept {
     config_file << "# QILab Node Configuration\n";
     config_file << "# This file defines the quantum network nodes for simulation\n";
     config_file << "\n";
-    config_file << "entanglement_noise_model:\n";
-    config_file << "  type: BASIC\n";
-    config_file << "  t2_value: 1000\n";
-    config_file << "\n";
     config_file << "# QiLab System Configuration\n";
     config_file << "system:\n";
     config_file << "  transmission_cycle_time_us: 5\n";
     config_file << "  qubit_noise_enabled: true\n";
+    config_file << "  entanglement_noise_enabled: true\n";
     config_file << "\n";
     config_file << "nodes:\n";
     config_file << "  - name: node0\n";
@@ -791,8 +1023,6 @@ std::optional<AppConfig> load_config(const std::string& config_path) noexcept {
     const std::vector<ParsedLine> lines = read_config_lines(config_file);
 
     AppConfig app_config;
-    //default entanglement noise model to ensure it's always present, even if not specified in the config
-    app_config.entanglement_noise_model = EntanglementNoiseBasicConfig{.t2_value = kDefaultT2ValueNs};
 
     bool found_nodes = false;
 
@@ -832,24 +1062,19 @@ std::optional<AppConfig> load_config(const std::string& config_path) noexcept {
             continue;
         }
 
-        if (key_value->first == kEntanglementNoiseModelKey)
+        if (key_value->first == kEntanglementLinksKey)
         {
             if (!key_value->second.empty())
             {
-                LOG_ERROR("'entanglement_noise_model' must be a map block");
+                LOG_ERROR("'entanglement_links' must be a list block");
                 return std::nullopt;
             }
 
             ++index;
             std::string parse_error;
-            if (!parse_model_block(lines,
-                                   index,
-                                   0,
-                                   config_parse::entanglement_model_parsers(),
-                                   app_config.entanglement_noise_model,
-                                   parse_error))
+            if (!parse_entanglement_links(lines, index, 0, app_config.entanglement_links, parse_error))
             {
-                LOG_ERROR("entanglement_noise_model parsing error: " + parse_error);
+                LOG_ERROR("entanglement_links parsing error: " + parse_error);
                 return std::nullopt;
             }
 
@@ -883,6 +1108,43 @@ std::optional<AppConfig> load_config(const std::string& config_path) noexcept {
     {
         LOG_ERROR("Config must contain a non-empty 'nodes' section");
         return std::nullopt;
+    }
+
+    std::unordered_set<std::string> node_names;
+    for (const auto& node : app_config.nodes)
+    {
+        node_names.insert(node.name);
+    }
+
+    std::unordered_set<std::string> seen_links;
+    for (const auto& link : app_config.entanglement_links)
+    {
+        if (link.node_a == link.node_b)
+        {
+            LOG_ERROR("entanglement_links entry has identical node_a and node_b: '" + link.node_a + "'");
+            return std::nullopt;
+        }
+
+        if (node_names.find(link.node_a) == node_names.end())
+        {
+            LOG_ERROR("entanglement_links entry references unknown node_a '" + link.node_a + "'");
+            return std::nullopt;
+        }
+
+        if (node_names.find(link.node_b) == node_names.end())
+        {
+            LOG_ERROR("entanglement_links entry references unknown node_b '" + link.node_b + "'");
+            return std::nullopt;
+        }
+
+        const std::string canonical_key = (link.node_a < link.node_b)
+            ? link.node_a + "|" + link.node_b
+            : link.node_b + "|" + link.node_a;
+        if (!seen_links.insert(canonical_key).second)
+        {
+            LOG_ERROR("Duplicate entanglement_links entry for link (" + link.node_a + ", " + link.node_b + ")");
+            return std::nullopt;
+        }
     }
 
     LOG_INFO("Loaded configuration with " + std::to_string(app_config.nodes.size()) + " nodes from: " + path);

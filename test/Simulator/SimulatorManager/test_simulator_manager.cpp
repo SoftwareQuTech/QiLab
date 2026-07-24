@@ -20,6 +20,8 @@
 #include "Simulator/sim_interface.hpp"
 #include "Simulator/SimulatorManager/simulator_manager.hpp"
 #include "Simulator/NoiseModels/QubitDecoherenceNoise/qubit_noise_basic.hpp"
+#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_channel_noise.hpp"
+#include "Simulator/link_key.hpp"
 #include "mocks/command_mock.hpp"
 
 namespace
@@ -198,9 +200,43 @@ protected:
     std::unique_ptr<SimulatorManager> mgr;
 };
 
+// Same setup as SimulatorManagerTest, but entanglement-channel noise is disabled at construction.
+class SimulatorManagerEntanglementNoiseDisabledTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        auto spy_owned = std::make_unique<SpyAdapter>();
+        spy = spy_owned.get();
+        mgr = std::make_unique<SimulatorManager>(std::move(spy_owned), /*qubit_noise_enabled=*/true, /*entanglement_noise_enabled=*/false);
+        ASSERT_EQ(mgr->register_node(make_node_config(2)), 0);
+        ASSERT_EQ(mgr->register_node(make_node_config(2)), 1);
+    }
+
+    ResponseData run(uint16_t node_id, std::unique_ptr<CommandBase> cmd)
+    {
+        ResponseData response;
+        EXPECT_EQ(mgr->add_new_command_to_process(node_id, std::move(cmd), response), 0);
+        return response;
+    }
+
+    SpyAdapter *spy = nullptr; // owned by mgr
+    std::unique_ptr<SimulatorManager> mgr;
+};
+
 // The neighbour field is encoded 1-based on the wire and decoded to 0-based, so
 // selecting neighbour node `id` requires passing `id + 1` to the builder.
 constexpr uint8_t wire_nghbr(uint8_t node_id) { return static_cast<uint8_t>(node_id + 1); }
+
+// A single-link channel model map: pure depolarizing (p_dephasing=0) gives
+// q_x = q_y = q_z = p_depolarizing / 3 exactly, easy to assert on.
+std::unordered_map<uint16_t, std::unique_ptr<EntanglementChannelNoiseInterface>>
+make_channel_model_for_link(uint8_t node_a, uint8_t node_b, float p_depolarizing)
+{
+    std::unordered_map<uint16_t, std::unique_ptr<EntanglementChannelNoiseInterface>> models;
+    models[encode_link_key(node_a, node_b)] = std::make_unique<EntanglementChannelModel>(p_depolarizing, /*p_dephasing=*/0.0f);
+    return models;
+}
 
 // ---- Tests -----------------------------------------------------------------
 
@@ -367,6 +403,74 @@ TEST_F(SimulatorManagerNoiseDisabledTest, SingleQubitGateAppliesNoNoiseWhenDisab
     ASSERT_EQ(spy->ops.size(), 1u);
     EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::SingleGate);
     EXPECT_EQ(spy->ops[0].qubit, 1u);
+}
+
+// ---- Entanglement-channel noise ---------------------------------------------
+
+// A successful entanglement attempt applies the link's Pauli channel to the
+// initiator's own qubit only -- the responder's attempt on the same link
+// gets no noise, even though the same model is configured for the link.
+TEST_F(SimulatorManagerTest, EntanglementAttemptAppliesChannelNoiseOnInitiatorOnly)
+{
+    mgr->configure_entanglement_links(make_channel_model_for_link(0, 1, /*p_depolarizing=*/0.3f));
+
+    // Node 0 (initiator, 0 < 1) attempts with node 1.
+    run(/*node=*/0, build_command(Entangle(/*fidelity=*/0, wire_nghbr(1), /*qid=*/0)));
+    ASSERT_EQ(spy->ops.size(), 2u);
+    EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Establish);
+    EXPECT_EQ(spy->ops[1].kind, RecordedOp::Kind::Noise);
+    EXPECT_EQ(spy->ops[1].qubit, 0u); // node 0's own global qubit offset
+    EXPECT_FLOAT_EQ(spy->ops[1].q_x, 0.1f);
+    EXPECT_FLOAT_EQ(spy->ops[1].q_y, 0.1f);
+    EXPECT_FLOAT_EQ(spy->ops[1].q_z, 0.1f);
+
+    // Node 1 (responder, since 1 < 0 is false) attempts with node 0: no noise.
+    run(/*node=*/1, build_command(Entangle(/*fidelity=*/0, wire_nghbr(0), /*qid=*/0)));
+    ASSERT_EQ(spy->ops.size(), 3u);
+    EXPECT_EQ(spy->ops[2].kind, RecordedOp::Kind::Establish);
+}
+
+// A missing link model logs a warning but does not fail the attempt.
+TEST_F(SimulatorManagerTest, EntanglementAttemptWithMissingChannelModelStillSucceeds)
+{
+    ResponseData response = run(/*node=*/0, build_command(Entangle(/*fidelity=*/0, wire_nghbr(1), /*qid=*/0)));
+
+    ASSERT_EQ(spy->ops.size(), 1u); // Establish only, no Noise
+    EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Establish);
+    EXPECT_TRUE(response.outcome & static_cast<int>(Outcome_Status_t::SUCCESS));
+}
+
+// entanglement_noise_enabled=false suppresses channel noise even when a link
+// model is configured.
+TEST_F(SimulatorManagerEntanglementNoiseDisabledTest, EntanglementAttemptAppliesNoNoiseWhenDisabled)
+{
+    mgr->configure_entanglement_links(make_channel_model_for_link(0, 1, /*p_depolarizing=*/0.3f));
+
+    run(/*node=*/0, build_command(Entangle(/*fidelity=*/0, wire_nghbr(1), /*qid=*/0)));
+
+    ASSERT_EQ(spy->ops.size(), 1u); // Establish only, no Noise
+    EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Establish);
+}
+
+// The entanglement-measure path applies channel noise right after establish,
+// before the basis rotation and the measurement.
+TEST_F(SimulatorManagerTest, EntanglementMeasureAppliesChannelNoiseBeforeRotationAndMeasurement)
+{
+    mgr->configure_entanglement_links(make_channel_model_for_link(0, 1, /*p_depolarizing=*/0.3f));
+
+    run(/*node=*/0, build_command(PreMeasureGateSelect(_2_PI_16, _3_PI_16, _4_PI_16, /*target=*/true)));
+    run(/*node=*/0, build_command(EntanMeasure(/*fidelity=*/0, wire_nghbr(1), /*qid=*/0,
+                                               /*try_now=*/true, /*basis=*/false, /*repeat=*/0)));
+
+    ASSERT_EQ(spy->ops.size(), 6u);
+    EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Establish);
+    EXPECT_EQ(spy->ops[1].kind, RecordedOp::Kind::Noise);
+    EXPECT_EQ(spy->ops[1].qubit, 0u);
+    EXPECT_FLOAT_EQ(spy->ops[1].q_x, 0.1f);
+    EXPECT_EQ(spy->ops[2].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[3].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[4].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[5].kind, RecordedOp::Kind::Measure);
 }
 
 } // namespace
