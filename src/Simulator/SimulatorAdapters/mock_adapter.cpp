@@ -27,6 +27,13 @@ bool MockAdapter::single_qubit_noise(uint8_t qubit_address, float x_noise_probab
 
     return true;
 }
+bool MockAdapter::two_qubit_depolarizing_noise(uint8_t qubit1_address, uint8_t qubit2_address, float depolarizing_probability)
+{
+    std::cout << "MOCK SIM: Apply two qubit depolarizing noise on addresses: " << qubit1_address << ", " << qubit2_address << std::endl;
+    std::cout << "MOCK SIM: Apply two qubit depolarizing noise probability: " << depolarizing_probability << std::endl;
+
+    return true;
+}
 bool MockAdapter::two_qubit_gate(uint8_t qubit1_address, uint8_t qubit2_address, Angle_t angle, Axis_t axis)
 {
     std::cout << "MOCK SIM: Single qubit 1 gate address: " << qubit1_address << std::endl;

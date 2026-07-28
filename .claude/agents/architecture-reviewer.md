@@ -39,10 +39,10 @@ directly), check for:
    entanglement-attempt noise (batching/delay/success-probability) implements
    `EntanglementAttemptNoiseInterface`
    (`src/Simulator/entanglement_attempt_noise_interface.hpp`) and is consumed
-   by `EntanglementManager`; entanglement-channel noise (the Pauli channel
+   by `EntanglementManager`; entanglement-link noise (the Pauli channel
    applied on successful entanglement) implements
-   `EntanglementChannelNoiseInterface`
-   (`src/Simulator/entanglement_channel_noise_interface.hpp`) and is consumed
+   `EntanglementLinkNoiseInterface`
+   (`src/Simulator/entanglement_link_noise_interface.hpp`) and is consumed
    by `SimulatorManager`. Both entanglement kinds are configured together per
    **link** (`entanglement_links` at the config's top level, keyed by a pair
    of node names — not per-node, not global). These are not yet split into
@@ -69,7 +69,7 @@ directly), check for:
    `parse_entanglement_config.hpp` (entanglement attempt + channel models,
    two separate registries) — see `qubit_basic_parser.hpp`,
    `entanglement_attempt_basic_parser.hpp`, and
-   `entanglement_channel_basic_parser.hpp` as references. Flag any new model
+   `entanglement_link_noise_basic_parser.hpp` as references. Flag any new model
    that parses its config ad hoc instead of through this pattern.
 
 6. **Config/schema/doc move together.** A change to the config shape (new

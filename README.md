@@ -72,8 +72,37 @@ Runtime notes:
 - Thread pinning is controlled via the `SIMULATOR_CORE`, `ENTANGLEMENT_CORE`, and `TRANSMISSION_CORE` constants in `application.cpp`.
 - `QILAB_LOG_LEVEL` (env var) sets the log level (`DEBUG`/`ERROR`/`OFF`); defaults to `DEBUG` if unset.
 - `QILAB_DAQ=1` (env var) enables the data-acquisition sink (see below); anything else or unset leaves it disabled.
-- Profiling data is dumped to CSV (`test_trace_events.csv`, `test_trace_durations.csv`) when profiling is enabled.
 - Graceful shutdown: send SIGINT or SIGTERM; each runner's `on_abort()` is called before the threads are joined.
+
+### Telemetry output paths
+Both instrument sinks write to fixed filenames under a directory that can be
+relocated by env var. This is the interface `qilab_web_control` reads to offer
+the files for download — the same static-file hand-off already used for
+`config.schema.json`.
+
+| Artifact | Default path | Override (first match wins) |
+|----------|--------------|------------------------------|
+| DAQ records (JSONL) | `~/.qilab/logs/data_acquisition.jsonl` | `QILAB_DAQ_PATH` (full path), then `QILAB_DAQ_DIR` |
+| Profiler durations (CSV) | `~/.qilab/logs/profile_durations.csv` | `QILAB_PROFILER_PATH` (full base), then `QILAB_PROFILER_DIR` |
+| Profiler events (CSV) | `~/.qilab/logs/profile_events.csv` | same as above |
+
+CSV columns:
+- `profile_durations.csv` — `Event,Max[ns],Min[ns],Count,Avg[ns]`. `Avg[ns]` is
+  the exact mean (`total_runtime / count`), so it always falls within
+  `[Min, Max]`; a count of 0 reports 0.
+- `profile_events.csv` — `Message,TimestampNs` (free-form `PROF_EVENT` markers).
+
+The deployed systemd unit sets `QILAB_DAQ_DIR` and `QILAB_PROFILER_DIR` under
+`/var/log/qilab`, because it runs with `ProtectHome=true` and cannot write `$HOME`.
+Files are overwritten per run.
+
+Flush behaviour:
+- **DAQ** is flushed once per second from the main (non-real-time) thread and
+  again after all threads join, so the JSONL is readable *while a run is in
+  progress* and complete after shutdown.
+- **Profiling** is inherently shutdown-only: each runner merges its thread-local
+  counters into the global container as it exits, so the CSVs are written once,
+  after every thread has joined. There is no partial-run profiling snapshot.
 
 ## Configuration
 QiLab loads node/link configuration from `~/.qilab/config/nodes.yaml` by default. A minimal default file is created automatically if none exists. Override the path with either env var (checked in this order):
@@ -86,17 +115,28 @@ QiLab loads node/link configuration from `~/.qilab/config/nodes.yaml` by default
 nodes:
   - name: alice
     node_type: NV_CENTER
+    two_qubit_gate_noise_model:
+      type: DEPOLARIZING
+      depolarizing_probability: 0.02
     qubit_arrays:
       - num_qubits: 2
-        noise_model:
+        single_gate_delay_ns: 200
+        qubit_decoherence_noise_model:
           type: BASIC
           t2_value: 1000
+        gate_noise_model:
+          type: DEPOLARIZING
+          depolarizing_probability: 0.001
   - name: bob
     qubit_arrays:
       - num_qubits: 2
-        noise_model:
+        single_gate_delay_ns: 200
+        qubit_decoherence_noise_model:
           type: BASIC
           t2_value: 1000
+        gate_noise_model:
+          type: DEPOLARIZING
+          depolarizing_probability: 0.001
 
 entanglement_links:
   - node_a: alice
@@ -107,7 +147,7 @@ entanglement_links:
       batch_size: 100
       p_success: 0.5
       rng_seed: 42
-    channel_model:
+    link_noise_model:
       type: BASIC
       p_depolarizing: 0.01
       p_dephasing: 0.02
@@ -117,10 +157,6 @@ system:
   qubit_noise_enabled: true
   entanglement_noise_enabled: true
 ```
-
-> `docs/config_example.yaml` predates the current schema (it still references
-> removed config keys) — use `docs/config_guide.md`'s worked example instead
-> until that file is refreshed.
 
 ## Data Acquisition
 Structured, low-overhead JSONL recording for research/experiment data — separate from the human-readable log. Compiles away entirely when `ENABLE_DATA_ACQUISITION=OFF`; gated at runtime by `QILAB_DAQ=1` (see [Run](#run) above).
@@ -135,10 +171,10 @@ if (DAQ_ACTIVE()) {
     DAQ_RECORD("state").set("dump", expensive_to_string());
 }
 
-DAQ_FLUSH(); // call periodically from a non-real-time thread, or at shutdown
+DAQ_FLUSH(); // application.cpp already does this each second and at shutdown
 ```
 
-Each record auto-prefixes a `ts_us` (epoch microseconds) timestamp and channel name, producing one JSON object per line at `~/.qilab/logs/data_acquisition.jsonl`:
+Each record auto-prefixes a `ts_us` (epoch microseconds) timestamp and channel name, producing one JSON object per line at the DAQ output path (see [Telemetry output paths](#telemetry-output-paths)):
 ```json
 {"ts_us":1751371200123456,"channel":"entanglement","attempt":42,"success":true,"fidelity":0.910000}
 ```

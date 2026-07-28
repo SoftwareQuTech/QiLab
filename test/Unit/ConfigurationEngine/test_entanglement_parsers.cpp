@@ -3,16 +3,16 @@
 //
 // These parsers are one layer below test_config_loader.cpp's YAML-fixture
 // tests: they cover field-level validation of a single `attempt_model` /
-// `channel_model` block, plus the type-name registry lookup that
+// `link_noise_model` block, plus the type-name registry lookup that
 // config_loader.cpp's parse_model_block() uses to select a parser.
 //
 // Parsers under test:
 //   - config_parse::parse_entanglement_attempt_basic_model
 //     (ConfigurationEngine/model_parsers/entanglement_attempt_basic_parser.hpp)
-//   - config_parse::parse_entanglement_channel_basic_model
-//     (ConfigurationEngine/model_parsers/entanglement_channel_basic_parser.hpp)
+//   - config_parse::parse_entanglement_link_noise_basic_model
+//     (ConfigurationEngine/model_parsers/entanglement_link_noise_basic_parser.hpp)
 //   - config_parse::entanglement_attempt_model_parsers() /
-//     config_parse::entanglement_channel_model_parsers()
+//     config_parse::entanglement_link_noise_model_parsers()
 //     (ConfigurationEngine/parse_entanglement_config.hpp)
 
 #include <gtest/gtest.h>
@@ -21,7 +21,7 @@
 #include <variant>
 
 #include "ConfigurationEngine/model_parsers/entanglement_attempt_basic_parser.hpp"
-#include "ConfigurationEngine/model_parsers/entanglement_channel_basic_parser.hpp"
+#include "ConfigurationEngine/model_parsers/entanglement_link_noise_basic_parser.hpp"
 #include "ConfigurationEngine/parse_entanglement_config.hpp"
 #include "DataTypes/configuration_options.hpp"
 
@@ -278,25 +278,25 @@ TEST(EntanglementAttemptBasicParserTest, RejectsNonNumericRngSeed)
 }
 
 // ---------------------------------------------------------------------------
-// Channel model: BASIC -- success path
+// Link noise model: BASIC -- success path
 // ---------------------------------------------------------------------------
 
-TEST(EntanglementChannelBasicParserTest, ParsesValidFieldsSuccessfully)
+TEST(EntanglementLinkNoiseBasicParserTest, ParsesValidFieldsSuccessfully)
 {
     const FieldMap fields = valid_channel_fields();
-    EntanglementChannelConfigData output;
+    EntanglementLinkNoiseConfigData output;
     std::string error;
 
-    ASSERT_TRUE(config_parse::parse_entanglement_channel_basic_model(fields, output, error));
+    ASSERT_TRUE(config_parse::parse_entanglement_link_noise_basic_model(fields, output, error));
     EXPECT_TRUE(error.empty());
 
-    ASSERT_TRUE(std::holds_alternative<EntanglementChannelBasicConfig>(output));
-    const auto& parsed = std::get<EntanglementChannelBasicConfig>(output);
+    ASSERT_TRUE(std::holds_alternative<EntanglementLinkNoiseBasicConfig>(output));
+    const auto& parsed = std::get<EntanglementLinkNoiseBasicConfig>(output);
     EXPECT_FLOAT_EQ(parsed.p_depolarizing, 0.01f);
     EXPECT_FLOAT_EQ(parsed.p_dephasing, 0.02f);
 }
 
-TEST(EntanglementChannelBasicParserTest, AcceptsBoundaryProbabilityValues)
+TEST(EntanglementLinkNoiseBasicParserTest, AcceptsBoundaryProbabilityValues)
 {
     for (const std::string& value_text : {std::string("0"), std::string("1"), std::string("1.0")})
     {
@@ -304,123 +304,123 @@ TEST(EntanglementChannelBasicParserTest, AcceptsBoundaryProbabilityValues)
         fields["p_depolarizing"] = value_text;
         fields["p_dephasing"] = value_text;
 
-        EntanglementChannelConfigData output;
+        EntanglementLinkNoiseConfigData output;
         std::string error;
-        ASSERT_TRUE(config_parse::parse_entanglement_channel_basic_model(fields, output, error))
+        ASSERT_TRUE(config_parse::parse_entanglement_link_noise_basic_model(fields, output, error))
             << "value=" << value_text;
     }
 }
 
 // ---------------------------------------------------------------------------
-// Channel model: BASIC -- missing required keys
+// Link noise model: BASIC -- missing required keys
 // ---------------------------------------------------------------------------
 
-TEST(EntanglementChannelBasicParserTest, RejectsMissingPDepolarizing)
+TEST(EntanglementLinkNoiseBasicParserTest, RejectsMissingPDepolarizing)
 {
     FieldMap fields = valid_channel_fields();
     fields.erase("p_depolarizing");
 
-    EntanglementChannelConfigData output;
+    EntanglementLinkNoiseConfigData output;
     std::string error;
-    EXPECT_FALSE(config_parse::parse_entanglement_channel_basic_model(fields, output, error));
+    EXPECT_FALSE(config_parse::parse_entanglement_link_noise_basic_model(fields, output, error));
     EXPECT_FALSE(error.empty());
 }
 
-TEST(EntanglementChannelBasicParserTest, RejectsMissingPDephasing)
+TEST(EntanglementLinkNoiseBasicParserTest, RejectsMissingPDephasing)
 {
     FieldMap fields = valid_channel_fields();
     fields.erase("p_dephasing");
 
-    EntanglementChannelConfigData output;
+    EntanglementLinkNoiseConfigData output;
     std::string error;
-    EXPECT_FALSE(config_parse::parse_entanglement_channel_basic_model(fields, output, error));
+    EXPECT_FALSE(config_parse::parse_entanglement_link_noise_basic_model(fields, output, error));
     EXPECT_FALSE(error.empty());
 }
 
 // ---------------------------------------------------------------------------
-// Channel model: BASIC -- unknown key
+// Link noise model: BASIC -- unknown key
 // ---------------------------------------------------------------------------
 
-TEST(EntanglementChannelBasicParserTest, RejectsUnknownKey)
+TEST(EntanglementLinkNoiseBasicParserTest, RejectsUnknownKey)
 {
     FieldMap fields = valid_channel_fields();
     fields["extra_field"] = "1";
 
-    EntanglementChannelConfigData output;
+    EntanglementLinkNoiseConfigData output;
     std::string error;
-    EXPECT_FALSE(config_parse::parse_entanglement_channel_basic_model(fields, output, error));
+    EXPECT_FALSE(config_parse::parse_entanglement_link_noise_basic_model(fields, output, error));
     EXPECT_FALSE(error.empty());
 }
 
 // ---------------------------------------------------------------------------
-// Channel model: BASIC -- out-of-range / malformed numeric fields
+// Link noise model: BASIC -- out-of-range / malformed numeric fields
 // ---------------------------------------------------------------------------
 
-TEST(EntanglementChannelBasicParserTest, RejectsNegativePDepolarizing)
+TEST(EntanglementLinkNoiseBasicParserTest, RejectsNegativePDepolarizing)
 {
     FieldMap fields = valid_channel_fields();
     fields["p_depolarizing"] = "-0.1";
 
-    EntanglementChannelConfigData output;
+    EntanglementLinkNoiseConfigData output;
     std::string error;
-    EXPECT_FALSE(config_parse::parse_entanglement_channel_basic_model(fields, output, error));
+    EXPECT_FALSE(config_parse::parse_entanglement_link_noise_basic_model(fields, output, error));
 }
 
-TEST(EntanglementChannelBasicParserTest, RejectsPDepolarizingAboveOne)
+TEST(EntanglementLinkNoiseBasicParserTest, RejectsPDepolarizingAboveOne)
 {
     FieldMap fields = valid_channel_fields();
     fields["p_depolarizing"] = "1.5";
 
-    EntanglementChannelConfigData output;
+    EntanglementLinkNoiseConfigData output;
     std::string error;
-    EXPECT_FALSE(config_parse::parse_entanglement_channel_basic_model(fields, output, error));
+    EXPECT_FALSE(config_parse::parse_entanglement_link_noise_basic_model(fields, output, error));
     EXPECT_NE(error.find("p_depolarizing"), std::string::npos);
 }
 
-TEST(EntanglementChannelBasicParserTest, RejectsNonNumericPDepolarizing)
+TEST(EntanglementLinkNoiseBasicParserTest, RejectsNonNumericPDepolarizing)
 {
     FieldMap fields = valid_channel_fields();
     fields["p_depolarizing"] = "not_a_number";
 
-    EntanglementChannelConfigData output;
+    EntanglementLinkNoiseConfigData output;
     std::string error;
-    EXPECT_FALSE(config_parse::parse_entanglement_channel_basic_model(fields, output, error));
+    EXPECT_FALSE(config_parse::parse_entanglement_link_noise_basic_model(fields, output, error));
 }
 
-TEST(EntanglementChannelBasicParserTest, RejectsNegativePDephasing)
+TEST(EntanglementLinkNoiseBasicParserTest, RejectsNegativePDephasing)
 {
     FieldMap fields = valid_channel_fields();
     fields["p_dephasing"] = "-0.1";
 
-    EntanglementChannelConfigData output;
+    EntanglementLinkNoiseConfigData output;
     std::string error;
-    EXPECT_FALSE(config_parse::parse_entanglement_channel_basic_model(fields, output, error));
+    EXPECT_FALSE(config_parse::parse_entanglement_link_noise_basic_model(fields, output, error));
 }
 
-TEST(EntanglementChannelBasicParserTest, RejectsPDephasingAboveOne)
+TEST(EntanglementLinkNoiseBasicParserTest, RejectsPDephasingAboveOne)
 {
     FieldMap fields = valid_channel_fields();
     fields["p_dephasing"] = "1.5";
 
-    EntanglementChannelConfigData output;
+    EntanglementLinkNoiseConfigData output;
     std::string error;
-    EXPECT_FALSE(config_parse::parse_entanglement_channel_basic_model(fields, output, error));
+    EXPECT_FALSE(config_parse::parse_entanglement_link_noise_basic_model(fields, output, error));
     EXPECT_NE(error.find("p_dephasing"), std::string::npos);
 }
 
-TEST(EntanglementChannelBasicParserTest, RejectsNonNumericPDephasing)
+TEST(EntanglementLinkNoiseBasicParserTest, RejectsNonNumericPDephasing)
 {
     FieldMap fields = valid_channel_fields();
     fields["p_dephasing"] = "not_a_number";
 
-    EntanglementChannelConfigData output;
+    EntanglementLinkNoiseConfigData output;
     std::string error;
-    EXPECT_FALSE(config_parse::parse_entanglement_channel_basic_model(fields, output, error));
+    EXPECT_FALSE(config_parse::parse_entanglement_link_noise_basic_model(fields, output, error));
 }
 
 // ---------------------------------------------------------------------------
 // Type-name registry lookup (config_parse::entanglement_attempt_model_parsers()
-// / entanglement_channel_model_parsers()).
+// / entanglement_link_noise_model_parsers()).
 //
 // The actual dispatch call site is config_loader.cpp's parse_model_block(),
 // a private template in that .cpp (not exposed via a header), so it can't be
@@ -449,21 +449,21 @@ TEST(EntanglementModelRegistryTest, AttemptRegistryRejectsUnknownType)
     EXPECT_EQ(parsers.find("UNKNOWN_TYPE"), parsers.end());
 }
 
-TEST(EntanglementModelRegistryTest, ChannelRegistryContainsWorkingBasicParser)
+TEST(EntanglementModelRegistryTest, LinkNoiseRegistryContainsWorkingBasicParser)
 {
-    const auto& parsers = config_parse::entanglement_channel_model_parsers();
+    const auto& parsers = config_parse::entanglement_link_noise_model_parsers();
     const auto parser_it = parsers.find("BASIC");
     ASSERT_NE(parser_it, parsers.end());
 
     const FieldMap fields = valid_channel_fields();
-    EntanglementChannelConfigData output;
+    EntanglementLinkNoiseConfigData output;
     std::string error;
     EXPECT_TRUE(parser_it->second(fields, output, error));
 }
 
-TEST(EntanglementModelRegistryTest, ChannelRegistryRejectsUnknownType)
+TEST(EntanglementModelRegistryTest, LinkNoiseRegistryRejectsUnknownType)
 {
-    const auto& parsers = config_parse::entanglement_channel_model_parsers();
+    const auto& parsers = config_parse::entanglement_link_noise_model_parsers();
     EXPECT_EQ(parsers.find("UNKNOWN_TYPE"), parsers.end());
 }
 

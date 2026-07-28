@@ -9,7 +9,7 @@ namespace {
 // channel 2 (x2, y2, z2) -- into the equivalent combined channel. See
 // src/Simulator/pauli_channel_math.hpp; this is the shared formula used by
 // both gate noise (idle dephasing + gate depolarizing) and
-// entanglement-channel noise (Sec. 4.3 Eq. 17: link dephasing + link
+// entanglement-link noise (Sec. 4.3 Eq. 17: link dephasing + link
 // depolarizing).
 
 // ---- Normal composition path ----

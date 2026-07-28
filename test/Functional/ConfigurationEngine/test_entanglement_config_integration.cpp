@@ -32,9 +32,9 @@
 #include "Simulator/SimulatorManager/simulator_manager.hpp"
 #include "Simulator/EntanglementManager/entanglement_manager.hpp"
 #include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_attempt_noise.hpp"
-#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_channel_noise.hpp"
+#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_link_noise.hpp"
 #include "Simulator/entanglement_attempt_noise_interface.hpp"
-#include "Simulator/entanglement_channel_noise_interface.hpp"
+#include "Simulator/entanglement_link_noise_interface.hpp"
 #include "Simulator/link_key.hpp"
 #include "mocks/command_mock.hpp"
 
@@ -53,6 +53,7 @@ public:
         noise_calls.push_back({qubit, x, y, z});
         return true;
     }
+    bool two_qubit_depolarizing_noise(uint8_t, uint8_t, float) override { return true; }
     bool two_qubit_gate(uint8_t, uint8_t, Angle_t, Axis_t) override { return true; }
     uint8_t qubit_measure(uint8_t, bool) override { return 0; }
     int8_t attempt_entanglement(uint16_t, uint8_t, uint8_t, bool, uint8_t) override { return 0; } // STATE_PHI_PLUS
@@ -122,7 +123,7 @@ protected:
             sys.name_to_node_id[node.name] = static_cast<uint16_t>(id);
         }
 
-        std::unordered_map<uint16_t, std::unique_ptr<EntanglementChannelNoiseInterface>> channel_models;
+        std::unordered_map<uint16_t, std::unique_ptr<EntanglementLinkNoiseInterface>> link_noise_models;
         for (const auto &link : config.entanglement_links) {
             const uint16_t id_a = sys.name_to_node_id.at(link.node_a);
             const uint16_t id_b = sys.name_to_node_id.at(link.node_b);
@@ -132,11 +133,11 @@ protected:
                 sys.attempt_models[key] = std::make_unique<EntanglementAttemptModel>(
                     basic->attempt_duration_ns, basic->batch_size, basic->p_success, basic->rng_seed);
             }
-            if (const auto *basic = std::get_if<EntanglementChannelBasicConfig>(&link.channel_model.config_data)) {
-                channel_models[key] = std::make_unique<EntanglementChannelModel>(basic->p_depolarizing, basic->p_dephasing);
+            if (const auto *basic = std::get_if<EntanglementLinkNoiseBasicConfig>(&link.link_noise_model.config_data)) {
+                link_noise_models[key] = std::make_unique<EntanglementLinkNoiseModel>(basic->p_depolarizing, basic->p_dephasing);
             }
         }
-        sys.sim_manager->configure_entanglement_links(std::move(channel_models));
+        sys.sim_manager->configure_entanglement_links(std::move(link_noise_models));
         return sys;
     }
 
@@ -147,7 +148,7 @@ protected:
 // model, real channel model) drives a real matched attempt end to end: both
 // sides succeed, and the CONFIGURED channel noise (not some default) is what
 // actually gets applied to the initiator's qubit.
-TEST_F(EntanglementConfigIntegrationTest, ValidLinkConfigProducesSuccessAndAppliesConfiguredChannelNoise) {
+TEST_F(EntanglementConfigIntegrationTest, ValidLinkConfigProducesSuccessAndAppliesConfiguredLinkNoise) {
     const std::string yaml =
         "entanglement_links:\n"
         "  - node_a: alice\n"
@@ -158,7 +159,7 @@ TEST_F(EntanglementConfigIntegrationTest, ValidLinkConfigProducesSuccessAndAppli
         "      batch_size: 1\n"
         "      p_success: 1.0\n"
         "      rng_seed: 1\n"
-        "    channel_model:\n"
+        "    link_noise_model:\n"
         "      type: BASIC\n"
         "      p_depolarizing: 0.3\n"
         "      p_dephasing: 0.0\n"
@@ -166,13 +167,21 @@ TEST_F(EntanglementConfigIntegrationTest, ValidLinkConfigProducesSuccessAndAppli
         "  - name: alice\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n"
         "  - name: bob\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n";
 
@@ -229,7 +238,7 @@ TEST_F(EntanglementConfigIntegrationTest, DeterministicFailureConfigFailsReliabl
         "      batch_size: 1\n"
         "      p_success: 0.0\n"
         "      rng_seed: 1\n"
-        "    channel_model:\n"
+        "    link_noise_model:\n"
         "      type: BASIC\n"
         "      p_depolarizing: 0.0\n"
         "      p_dephasing: 0.0\n"
@@ -237,13 +246,21 @@ TEST_F(EntanglementConfigIntegrationTest, DeterministicFailureConfigFailsReliabl
         "  - name: alice\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n"
         "  - name: bob\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n";
 
@@ -282,7 +299,7 @@ TEST_F(EntanglementConfigIntegrationTest, TwoLinksInOneConfigUseTheirOwnDistinct
         "      batch_size: 1\n"
         "      p_success: 1.0\n"
         "      rng_seed: 1\n"
-        "    channel_model:\n"
+        "    link_noise_model:\n"
         "      type: BASIC\n"
         "      p_depolarizing: 0.0\n"
         "      p_dephasing: 0.0\n"
@@ -294,7 +311,7 @@ TEST_F(EntanglementConfigIntegrationTest, TwoLinksInOneConfigUseTheirOwnDistinct
         "      batch_size: 1\n"
         "      p_success: 0.0\n"
         "      rng_seed: 1\n"
-        "    channel_model:\n"
+        "    link_noise_model:\n"
         "      type: BASIC\n"
         "      p_depolarizing: 0.0\n"
         "      p_dephasing: 0.0\n"
@@ -302,25 +319,41 @@ TEST_F(EntanglementConfigIntegrationTest, TwoLinksInOneConfigUseTheirOwnDistinct
         "  - name: alice\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n"
         "  - name: bob\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n"
         "  - name: carol\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n"
         "  - name: dave\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n";
 
@@ -371,13 +404,21 @@ TEST_F(EntanglementConfigIntegrationTest, NodePairWithNoConfiguredLinkFailsFast)
         "  - name: alice\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n"
         "  - name: bob\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n";
     // No entanglement_links section at all.

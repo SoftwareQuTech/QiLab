@@ -37,6 +37,7 @@ public:
     bool qubit_initialize(uint8_t) override { return true; }
     bool single_qubit_gate(uint8_t, Angle_t, Axis_t) override { return true; }
     bool single_qubit_noise(uint8_t, float, float, float) override { return true; }
+    bool two_qubit_depolarizing_noise(uint8_t, uint8_t, float) override { return true; }
     bool two_qubit_gate(uint8_t, uint8_t, Angle_t, Axis_t) override { return true; }
     uint8_t qubit_measure(uint8_t, bool) override { return 0; }
     int8_t attempt_entanglement(uint16_t, uint8_t, uint8_t, bool, uint8_t) override { return 0; }
@@ -53,7 +54,9 @@ NodeConfig make_node_config(int num_qubits) {
     cfg.qubit_operations_delays = QuantumOperationsDelaysNs{}; // all-zero delays
     QubitArrayConfig array;
     array.num_qubits = num_qubits;
-    array.noise_model.config_data = QubitNoiseBasicConfig{1000.0f};
+    array.qubit_decoherence_noise_model.config_data = QubitNoiseBasicConfig{1000.0f};
+    array.single_gate_delay_ns = 0;
+    array.gate_noise_model.config_data = GateNoiseDepolarizingConfig{0.0f};
     cfg.qubit_arrays.push_back(array);
     return cfg;
 }

@@ -80,6 +80,28 @@ struct ISimulator
                                    float y_noise_probability,
                                    float z_noise_probability) = 0;
 
+    /**
+     * @brief Apply a two-qubit depolarizing channel to a qubit pair.
+     *
+     * Applies E(rho) = (1-p) rho + p/15 * sum over the 15 non-identity two-qubit
+     * Pauli pairs (QILab_Noise_Models.pdf Sec. 2 Eq. 4). This is a CORRELATED
+     * channel: it is deliberately not expressible as two single_qubit_noise
+     * calls, nor through compose_pauli_channels() (a single-qubit composer),
+     * which is why it needs its own adapter entry point.
+     *
+     * Unlike single_qubit_noise this takes one scalar p rather than per-Pauli
+     * weights: no configured model produces a general 15-weight two-qubit Pauli
+     * channel, so the interface stays at the depolarizing special case.
+     *
+     * @param qubit1_address First qubit address.
+     * @param qubit2_address Second qubit address; must differ from the first.
+     * @param depolarizing_probability p in [0, 0.9375]; p == 0 is a no-op.
+     * @return true on success; false on invalid parameters or addresses.
+     */
+    virtual bool two_qubit_depolarizing_noise(uint8_t qubit1_address,
+                                              uint8_t qubit2_address,
+                                              float depolarizing_probability) = 0;
+
 
     /**
      * @brief Apply a two-qubit gate between a control/target pair.

@@ -16,8 +16,9 @@
 
 #include "Simulator/NoiseModels/QubitDecoherenceNoise/qubit_noise_basic.hpp"
 #include "Simulator/NoiseModels/QubitDecoherenceNoise/phase_flip_noise.hpp"
+#include "Simulator/NoiseModels/QubitDecoherenceNoise/depolarizing_gate_noise.hpp"
 #include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_attempt_noise.hpp"
-#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_channel_noise.hpp"
+#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_link_noise.hpp"
 
 enum class QuantumNodeType : uint8_t
 {
@@ -44,8 +45,12 @@ using EntanglementAttemptConfigData = std::variant<
     EntanglementAttemptBasicConfig
 >;
 
-using EntanglementChannelConfigData = std::variant<
-    EntanglementChannelBasicConfig
+using EntanglementLinkNoiseConfigData = std::variant<
+    EntanglementLinkNoiseBasicConfig
+>;
+
+using GateNoiseConfigData = std::variant<
+    GateNoiseDepolarizingConfig
 >;
 
 struct QubitNoiseModelConfig
@@ -58,9 +63,14 @@ struct EntanglementAttemptModelConfig
     EntanglementAttemptConfigData config_data;
 };
 
-struct EntanglementChannelModelConfig
+struct EntanglementLinkNoiseModelConfig
 {
-    EntanglementChannelConfigData config_data;
+    EntanglementLinkNoiseConfigData config_data;
+};
+
+struct GateNoiseModelConfig
+{
+    GateNoiseConfigData config_data;
 };
 
 // One physical link between two configured nodes (identified by name), each
@@ -72,18 +82,23 @@ struct EntanglementLinkConfig
     std::string node_a;
     std::string node_b;
     EntanglementAttemptModelConfig attempt_model;
-    EntanglementChannelModelConfig channel_model;
+    EntanglementLinkNoiseModelConfig link_noise_model;
 };
 
+// Per qubit array: everything that differs between the arrays of one node.
+// Single-qubit gate duration and single-qubit gate depolarizing noise are array
+// properties (QILab_Noise_Models.pdf Sec. 2.1), not node properties -- e.g.
+// communication and memory qubits on the same node differ in both.
 struct QubitArrayConfig
 {
     int num_qubits;                  // number of qubits in this array
-    QubitNoiseModelConfig noise_model;
+    QubitNoiseModelConfig qubit_decoherence_noise_model;
+    uint64_t single_gate_delay_ns = 0;
+    GateNoiseModelConfig gate_noise_model;
 };
 
 struct QuantumOperationsDelaysNs
 {
-    uint64_t single_gate_delay;
     uint64_t two_gate_delay;
     uint64_t measurement_delay;
     uint64_t entanglement_delay;
@@ -99,12 +114,15 @@ struct NodeConfig
     QuantumNodeType node_type = QuantumNodeType::GENERIC;
     QuantumOperationsDelaysNs qubit_operations_delays;
     std::vector<QubitArrayConfig> qubit_arrays;
+    // Two-qubit gate noise is one model per node (Sec. 2.1), unlike the
+    // single-qubit case which is per qubit array.
+    GateNoiseModelConfig two_qubit_gate_noise_model;
 };
 
 /// "QiLab System Configuration" -- global runtime parameters (optional section, defaults apply)
 struct SystemConfig
 {
     float transmission_cycle_time_us = 5.0f;    // transmission runner cycle period, microseconds
-    bool  qubit_noise_enabled = true;           // gate qubit-in-memory noise application in the sim manager
-    bool  entanglement_noise_enabled = true;    // gate entanglement-channel noise application in the sim manager
+    bool  qubit_noise_enabled = true;           // gates ALL per-qubit noise: in-memory decoherence AND gate depolarizing
+    bool  entanglement_noise_enabled = true;    // gate entanglement-link noise application in the sim manager
 };

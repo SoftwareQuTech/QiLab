@@ -7,8 +7,8 @@
 
 namespace config_parse {
 
-inline bool parse_entanglement_channel_basic_model(const FieldMap& fields,
-                                                    EntanglementChannelConfigData& output,
+inline bool parse_entanglement_link_noise_basic_model(const FieldMap& fields,
+                                                    EntanglementLinkNoiseConfigData& output,
                                                     std::string& error) noexcept
 {
     if (!ensure_allowed_keys(fields, {"type", "p_depolarizing", "p_dephasing"}, error))
@@ -42,7 +42,7 @@ inline bool parse_entanglement_channel_basic_model(const FieldMap& fields,
         return false;
     }
 
-    output = EntanglementChannelBasicConfig{.p_depolarizing = p_depolarizing, .p_dephasing = p_dephasing};
+    output = EntanglementLinkNoiseBasicConfig{.p_depolarizing = p_depolarizing, .p_dephasing = p_dephasing};
     return true;
 }
 

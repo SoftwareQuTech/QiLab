@@ -33,7 +33,10 @@ StimAdapter::StimAdapter(std::seed_seq &seed_seq, const uint8_t &num_qubits)
     sqrt_xx_dag_inst(stim::GateType::SQRT_XX_DAG, {}, two_span, ""),
     pauli_channel_probs{0.0f, 0.0f, 0.0f},
     pauli_probs_span(pauli_channel_probs.data(), pauli_channel_probs.data() + 3),
-    pauli_channel_1_inst(stim::GateType::PAULI_CHANNEL_1, pauli_probs_span, single_span, "")
+    pauli_channel_1_inst(stim::GateType::PAULI_CHANNEL_1, pauli_probs_span, single_span, ""),
+    depolarize_2_prob{0.0},
+    depolarize_2_prob_span(depolarize_2_prob.data(), depolarize_2_prob.data() + 1),
+    depolarize_2_inst(stim::GateType::DEPOLARIZE2, depolarize_2_prob_span, two_span, "")
 {
     // Pre-allocate enough space for all qubits
     stim_instance.ensure_large_enough_for_qubits(num_qubits);
@@ -62,6 +65,25 @@ bool StimAdapter::single_qubit_noise(uint8_t qubit_address, float x_noise_probab
     pauli_channel_probs[2] = static_cast<double>(z_noise_probability);
     stim_instance.do_PAULI_CHANNEL_1(pauli_channel_1_inst);
     LOG_INFO("Applied single-qubit noise: qubit=" + std::to_string(qubit_address) + " x_noise=" + std::to_string(x_noise_probability) + " y_noise=" + std::to_string(y_noise_probability) + " z_noise=" + std::to_string(z_noise_probability));
+    return true;
+}
+
+bool StimAdapter::two_qubit_depolarizing_noise(uint8_t qubit1_address, uint8_t qubit2_address, float depolarizing_probability)
+{
+    if (qubit1_address == qubit2_address)
+    {
+        LOG_ERROR("Cannot apply two-qubit depolarizing noise to the same qubit " + std::to_string(qubit1_address));
+        return false;
+    }
+
+    // Re-stamp the shared two-qubit target array immediately before use, as
+    // every other two-qubit instruction in this adapter does.
+    two_target[0] = stim::GateTarget{qubit1_address};
+    two_target[1] = stim::GateTarget{qubit2_address};
+    depolarize_2_prob[0] = static_cast<double>(depolarizing_probability);
+    stim_instance.do_DEPOLARIZE2(depolarize_2_inst);
+    LOG_INFO("Applied two-qubit depolarizing noise: q1=" + std::to_string(qubit1_address) +
+             " q2=" + std::to_string(qubit2_address) + " p=" + std::to_string(depolarizing_probability));
     return true;
 }
 

@@ -1,8 +1,11 @@
 #include <gtest/gtest.h>
 
+#include <initializer_list>
 #include <string>
+#include <utility>
 #include <variant>
 
+#include "ConfigurationEngine/model_parsers/gate_noise_depolarizing_parser.hpp"
 #include "ConfigurationEngine/model_parsers/qubit_advanced_parser.hpp"
 #include "ConfigurationEngine/model_parsers/qubit_basic_parser.hpp"
 #include "ConfigurationEngine/model_parsers/qubit_phase_flip_parser.hpp"
@@ -10,7 +13,8 @@
 #include "DataTypes/configuration_options.hpp"
 
 // Direct, isolated unit tests for the individual qubit noise model parsers
-// (BASIC, ADVANCED, PHASE_FLIP). These call parse_<model>_model() directly
+// (BASIC, ADVANCED, PHASE_FLIP) and the per-qubit-array gate noise parser
+// (DEPOLARIZING). These call parse_<model>_model() directly
 // with in-memory FieldMap instances, rather than going through a full YAML
 // fixture round-trip (see test_config_loader.cpp for that level of test).
 
@@ -280,6 +284,128 @@ TEST(QubitPhaseFlipParserTest, RejectsNonNumericT2Value)
 
     EXPECT_FALSE(config_parse::parse_qubit_phase_flip_model(fields, output, error));
     EXPECT_FALSE(error.empty());
+}
+
+// ---------------------------------------------------------------------------
+// Gate noise: DEPOLARIZING (per qubit array, Sec. 2 Eq. 1)
+// ---------------------------------------------------------------------------
+
+TEST(GateNoiseDepolarizingParserTest, ParsesValidFields)
+{
+    const FieldMap fields = {{"type", "DEPOLARIZING"}, {"depolarizing_probability", "0.01"}};
+    GateNoiseConfigData output;
+    std::string error;
+
+    ASSERT_TRUE(config_parse::parse_single_qubit_gate_noise_depolarizing_model(fields, output, error)) << error;
+    ASSERT_TRUE(std::holds_alternative<GateNoiseDepolarizingConfig>(output));
+    EXPECT_FLOAT_EQ(std::get<GateNoiseDepolarizingConfig>(output).depolarizing_probability, 0.01f);
+}
+
+TEST(GateNoiseDepolarizingParserTest, AcceptsBoundaryProbabilities)
+{
+    for (const char* text : {"0", "0.75"})
+    {
+        const FieldMap fields = {{"type", "DEPOLARIZING"}, {"depolarizing_probability", text}};
+        GateNoiseConfigData output;
+        std::string error;
+
+        EXPECT_TRUE(config_parse::parse_single_qubit_gate_noise_depolarizing_model(fields, output, error))
+            << text << ": " << error;
+    }
+}
+
+TEST(GateNoiseDepolarizingParserTest, RejectsMissingProbability)
+{
+    const FieldMap fields = {{"type", "DEPOLARIZING"}};
+    GateNoiseConfigData output;
+    std::string error;
+
+    EXPECT_FALSE(config_parse::parse_single_qubit_gate_noise_depolarizing_model(fields, output, error));
+    EXPECT_FALSE(error.empty());
+}
+
+TEST(GateNoiseDepolarizingParserTest, RejectsUnknownKey)
+{
+    const FieldMap fields = {
+        {"type", "DEPOLARIZING"}, {"depolarizing_probability", "0.01"}, {"bogus", "x"}};
+    GateNoiseConfigData output;
+    std::string error;
+
+    EXPECT_FALSE(config_parse::parse_single_qubit_gate_noise_depolarizing_model(fields, output, error));
+    EXPECT_FALSE(error.empty());
+}
+
+// The bound is the channel's maximal mixing point, taken from the model class,
+// so an unusable probability is refused at load time rather than accepted and
+// then silently downgraded to noiseless at registration.
+TEST(GateNoiseDepolarizingParserTest, RejectsProbabilityAboveSingleQubitMaximalMixing)
+{
+    for (const char* text : {"-0.1", "0.76", "0.9", "1.5"})
+    {
+        const FieldMap fields = {{"type", "DEPOLARIZING"}, {"depolarizing_probability", text}};
+        GateNoiseConfigData output;
+        std::string error;
+
+        EXPECT_FALSE(config_parse::parse_single_qubit_gate_noise_depolarizing_model(fields, output, error)) << text;
+        EXPECT_FALSE(error.empty());
+    }
+}
+
+TEST(GateNoiseDepolarizingParserTest, RejectsNonNumericProbability)
+{
+    const FieldMap fields = {{"type", "DEPOLARIZING"}, {"depolarizing_probability", "low"}};
+    GateNoiseConfigData output;
+    std::string error;
+
+    EXPECT_FALSE(config_parse::parse_single_qubit_gate_noise_depolarizing_model(fields, output, error));
+    EXPECT_FALSE(error.empty());
+}
+
+// The two-qubit channel mixes maximally at a higher p, so its parser accepts a
+// range the single-qubit one refuses. Each parser's bound comes from its own
+// model class, so the two cannot drift apart.
+TEST(GateNoiseDepolarizingParserTest, TwoQubitParserAcceptsItsOwnWiderRange)
+{
+    const FieldMap fields = {{"type", "DEPOLARIZING"}, {"depolarizing_probability", "0.9"}};
+    std::string error;
+
+    GateNoiseConfigData two_qubit_output;
+    ASSERT_TRUE(config_parse::parse_two_qubit_gate_noise_depolarizing_model(fields, two_qubit_output, error))
+        << error;
+    EXPECT_FLOAT_EQ(std::get<GateNoiseDepolarizingConfig>(two_qubit_output).depolarizing_probability, 0.9f);
+
+    GateNoiseConfigData single_qubit_output;
+    EXPECT_FALSE(
+        config_parse::parse_single_qubit_gate_noise_depolarizing_model(fields, single_qubit_output, error));
+}
+
+TEST(GateNoiseDepolarizingParserTest, RejectsProbabilityAboveTwoQubitMaximalMixing)
+{
+    const FieldMap fields = {{"type", "DEPOLARIZING"}, {"depolarizing_probability", "0.95"}};
+    GateNoiseConfigData output;
+    std::string error;
+
+    EXPECT_FALSE(config_parse::parse_two_qubit_gate_noise_depolarizing_model(fields, output, error));
+    EXPECT_FALSE(error.empty());
+}
+
+// Every probability the parsers accept must produce a valid model, i.e. the
+// parser bound and the model bound agree exactly.
+TEST(GateNoiseDepolarizingParserTest, ParserBoundsMatchTheModelBounds)
+{
+    EXPECT_TRUE(SingleQubitGateNoiseModel(SingleQubitGateNoiseModel::MAX_DEPOLARIZING_PROBABILITY).is_valid());
+    EXPECT_TRUE(TwoQubitGateNoiseModel(TwoQubitGateNoiseModel::MAX_DEPOLARIZING_PROBABILITY).is_valid());
+
+    for (const auto& [text, expect_ok] : std::initializer_list<std::pair<const char*, bool>>{
+             {"0.75", true}, {"0.7501", false}})
+    {
+        const FieldMap fields = {{"type", "DEPOLARIZING"}, {"depolarizing_probability", text}};
+        GateNoiseConfigData output;
+        std::string error;
+        EXPECT_EQ(config_parse::parse_single_qubit_gate_noise_depolarizing_model(fields, output, error),
+                  expect_ok)
+            << text;
+    }
 }
 
 } // namespace

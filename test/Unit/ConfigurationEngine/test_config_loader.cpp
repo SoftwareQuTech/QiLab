@@ -12,7 +12,7 @@
 namespace {
 
 // Builds a minimal valid single-node config around a given qubit noise model block.
-// Caller provides the indented noise_model lines (6-space indent).
+// Caller provides the indented qubit_decoherence_noise_model lines (6-space indent).
 static std::string single_node_with_noise(const std::string& noise_model_block)
 {
     return std::string("nodes:\n")
@@ -20,7 +20,11 @@ static std::string single_node_with_noise(const std::string& noise_model_block)
          + "    node_type: GENERIC\n"
          + "    qubit_arrays:\n"
          + "      - num_qubits: 1\n"
-         + "        noise_model:\n"
+         + "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
          + noise_model_block;
 }
 
@@ -33,13 +37,21 @@ static std::string two_nodes_with_links(const std::string& links_block)
          + "  - name: alice\n"
          + "    qubit_arrays:\n"
          + "      - num_qubits: 1\n"
-         + "        noise_model:\n"
+         + "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
          + "          type: BASIC\n"
          + "          t2_value: 1000\n"
          + "  - name: bob\n"
          + "    qubit_arrays:\n"
          + "      - num_qubits: 1\n"
-         + "        noise_model:\n"
+         + "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
          + "          type: BASIC\n"
          + "          t2_value: 1000\n";
 }
@@ -55,7 +67,7 @@ static const std::string kValidAliceBobLink =
     "      batch_size: 100\n"
     "      p_success: 0.5\n"
     "      rng_seed: 42\n"
-    "    channel_model:\n"
+    "    link_noise_model:\n"
     "      type: BASIC\n"
     "      p_depolarizing: 0.01\n"
     "      p_dephasing: 0.02\n";
@@ -128,11 +140,19 @@ TEST_F(ConfigLoaderTest, LoadsModernQubitArrays)
         "    node_type: PROCESSOR\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1200\n"
         "      - num_qubits: 2\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: PHASE_FLIP\n"
         "          t2_value: 100\n";
 
@@ -151,7 +171,7 @@ TEST_F(ConfigLoaderTest, LoadsModernQubitArrays)
     EXPECT_EQ(node.qubit_arrays[1].num_qubits, 2);
 
     // EXPECT_TRUE(std::holds_alternative<QubitNoiseBasicConfig>(node.qubit_noise_model.config_data));
-    EXPECT_TRUE(std::holds_alternative<PhaseFlipNoiseConfig>(node.qubit_arrays[1].noise_model.config_data));
+    EXPECT_TRUE(std::holds_alternative<PhaseFlipNoiseConfig>(node.qubit_arrays[1].qubit_decoherence_noise_model.config_data));
 }
 
 TEST_F(ConfigLoaderTest, ParsesQuantumOperationDelays)
@@ -160,7 +180,6 @@ TEST_F(ConfigLoaderTest, ParsesQuantumOperationDelays)
         "nodes:\n"
         "  - name: node_with_delays\n"
         "    quantum_operations_delay_ns:\n"
-        "      single_gate_rotation: 11\n"
         "      two_qubit_gate_rotation: 22\n"
         "      measurement: 33\n"
         "      entanglement: 44\n"
@@ -170,7 +189,11 @@ TEST_F(ConfigLoaderTest, ParsesQuantumOperationDelays)
         "    node_type: GENERIC\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 11\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n";
 
@@ -181,7 +204,8 @@ TEST_F(ConfigLoaderTest, ParsesQuantumOperationDelays)
     ASSERT_EQ(config->nodes.size(), 1u);
 
     const auto& delays = config->nodes.front().qubit_operations_delays;
-    EXPECT_EQ(delays.single_gate_delay, 11);
+    // single_gate_delay is per qubit ARRAY now, not part of the node delay block.
+    EXPECT_EQ(config->nodes.front().qubit_arrays.front().single_gate_delay_ns, 11u);
     EXPECT_EQ(delays.two_gate_delay, 22);
     EXPECT_EQ(delays.measurement_delay, 33);
     EXPECT_EQ(delays.entanglement_delay, 44);
@@ -200,7 +224,11 @@ TEST_F(ConfigLoaderTest, RejectsUnknownTopLevelKey)
         "    node_type: GENERIC\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n";
 
@@ -216,7 +244,11 @@ TEST_F(ConfigLoaderTest, RejectsUnknownNodeKey)
         "  - unexpected: 5\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n";
 
@@ -233,7 +265,11 @@ TEST_F(ConfigLoaderTest, RejectsUnsupportedQubitNoiseModelType)
         "    node_type: GENERIC\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 2\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: NOT_A_MODEL\n";
 
     const auto path = write_config("unsupported_model.yaml", yaml);
@@ -249,7 +285,11 @@ TEST_F(ConfigLoaderTest, RejectsUnknownFieldInsideModelBlock)
         "    node_type: GENERIC\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 2\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n"
         "          extra_field: 1\n";
@@ -304,7 +344,60 @@ TEST_F(ConfigLoaderTest, CreatesDefaultConfigFileInConfiguredDirectory)
     const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 
     EXPECT_NE(content.find("nodes:"), std::string::npos);
-    EXPECT_EQ(content.find("entanglement_links:"), std::string::npos);
+
+    // The generated default carries a commented-out node1 and entanglement_links
+    // block as in-file documentation of the link format, so the strings appear
+    // but only ever behind a '#'.
+    EXPECT_NE(content.find("#entanglement_links:"), std::string::npos);
+    EXPECT_NE(content.find("#  - name: node1"), std::string::npos);
+    EXPECT_EQ(content.find("\nentanglement_links:"), std::string::npos);
+
+    // As generated it must load, and as a single-node network.
+    const auto config = load_config(expected.string());
+    ASSERT_TRUE(config.has_value());
+    ASSERT_EQ(config->nodes.size(), 1u);
+    EXPECT_TRUE(config->entanglement_links.empty());
+}
+
+// Uncommenting the node1 and entanglement_links blocks the default config ships
+// must yield a valid two-node, one-link config -- a commented example that does
+// not load when uncommented is worse than none.
+TEST_F(ConfigLoaderTest, DefaultConfigCommentedLinkBlocksLoadOnceUncommented)
+{
+    EnvVarGuard path_guard("QILAB_CONFIG_PATH");
+    EnvVarGuard dir_guard("QILAB_CONFIG_DIR");
+
+    unsetenv("QILAB_CONFIG_PATH");
+    setenv("QILAB_CONFIG_DIR", temp_dir.string().c_str(), 1);
+
+    ASSERT_TRUE(create_default_config());
+
+    std::ifstream in(temp_dir / "nodes.yaml");
+    ASSERT_TRUE(in.is_open());
+    std::string line;
+    std::string uncommented;
+    while (std::getline(in, line))
+    {
+        // Commented-out CONFIG lines carry a single '#' immediately before their
+        // own YAML indentation; purely explanatory prose uses '##'. So
+        // uncommenting is exactly "delete the first '#'" on single-'#' lines,
+        // which is also what a user does by hand.
+        if (line.rfind("#", 0) == 0 && line.rfind("##", 0) != 0)
+        {
+            line.erase(0, 1);
+        }
+        uncommented += line + "\n";
+    }
+
+    const auto path = write_config("uncommented.yaml", uncommented);
+    const auto config = load_config(path.string());
+    ASSERT_TRUE(config.has_value()) << uncommented;
+    ASSERT_EQ(config->nodes.size(), 2u);
+    EXPECT_EQ(config->nodes[0].name, "node0");
+    EXPECT_EQ(config->nodes[1].name, "node1");
+    ASSERT_EQ(config->entanglement_links.size(), 1u);
+    EXPECT_EQ(config->entanglement_links.front().node_a, "node0");
+    EXPECT_EQ(config->entanglement_links.front().node_b, "node1");
 }
 
 // ---------------------------------------------------------------------------
@@ -319,21 +412,33 @@ TEST_F(ConfigLoaderTest, LoadsMultipleNodes)
         "    node_type: NV_CENTER\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 3\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 500\n"
         "  - name: bob\n"
         "    node_type: ION_TRAP\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 5\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 800\n"
         "  - name: relay\n"
         "    node_type: GENERIC\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 2\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 200\n";
 
@@ -362,15 +467,27 @@ TEST_F(ConfigLoaderTest, NumQubitsIsSumOfAllArrays)
         "    node_type: NV_CENTER\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 2\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n"
         "      - num_qubits: 3\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n"
         "      - num_qubits: 5\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n";
 
@@ -389,11 +506,19 @@ TEST_F(ConfigLoaderTest, NodeLevelNoiseModelFollowsFirstArray)
         "    node_type: GENERIC\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: PHASE_FLIP\n"
         "          t2_value: 100\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n";
 
@@ -425,7 +550,11 @@ TEST_F(ConfigLoaderTest, AllNodeTypesAreAccepted)
             "    node_type: " + type_str + "\n"
             "    qubit_arrays:\n"
             "      - num_qubits: 1\n"
-            "        noise_model:\n"
+            "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
             "          type: BASIC\n"
             "          t2_value: 1000\n";
 
@@ -443,7 +572,11 @@ TEST_F(ConfigLoaderTest, RejectsInvalidNodeType)
         "  - node_type: QUANTUM_COMPUTER\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n";
 
@@ -462,7 +595,11 @@ TEST_F(ConfigLoaderTest, NodeFieldOrderDoesNotMatter)
         "nodes:\n"
         "  - qubit_arrays:\n"
         "      - num_qubits: 4\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n"
         "    node_type: PROCESSOR\n"
@@ -478,22 +615,26 @@ TEST_F(ConfigLoaderTest, NodeFieldOrderDoesNotMatter)
 
 TEST_F(ConfigLoaderTest, QubitArrayFieldOrderDoesNotMatter)
 {
-    // noise_model before num_qubits
+    // qubit_decoherence_noise_model before num_qubits
     const std::string yaml =
         "nodes:\n"
         "  - name: array_order\n"
         "    node_type: GENERIC\n"
         "    qubit_arrays:\n"
-        "      - noise_model:\n"
+        "      - qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 750\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        single_gate_delay_ns: 0\n"
         "        num_qubits: 3\n";
 
     const auto path = write_config("array_field_order.yaml", yaml);
     const auto config = load_config(path.string());
     ASSERT_TRUE(config.has_value());
     EXPECT_EQ(config->nodes.front().qubit_arrays.front().num_qubits, 3);
-    const auto& model = config->nodes.front().qubit_arrays.front().noise_model.config_data;
+    const auto& model = config->nodes.front().qubit_arrays.front().qubit_decoherence_noise_model.config_data;
     ASSERT_TRUE(std::holds_alternative<QubitNoiseBasicConfig>(model));
     EXPECT_FLOAT_EQ(std::get<QubitNoiseBasicConfig>(model).t2_value, 750.0f);
 }
@@ -508,14 +649,22 @@ TEST_F(ConfigLoaderTest, TopLevelFieldOrderDoesNotMatter)
         "    node_type: GENERIC\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n"
         "  - name: top_order_b\n"
         "    node_type: GENERIC\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n"
         "entanglement_links:\n"
@@ -527,7 +676,7 @@ TEST_F(ConfigLoaderTest, TopLevelFieldOrderDoesNotMatter)
         "      batch_size: 100\n"
         "      p_success: 0.5\n"
         "      rng_seed: 42\n"
-        "    channel_model:\n"
+        "    link_noise_model:\n"
         "      type: BASIC\n"
         "      p_depolarizing: 0.01\n"
         "      p_dephasing: 0.02\n";
@@ -553,7 +702,11 @@ TEST_F(ConfigLoaderTest, CommentsAndBlankLinesAreIgnored)
         "    qubit_arrays:\n"
         "      # Array comment\n"
         "      - num_qubits: 2\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n";
 
@@ -577,7 +730,7 @@ TEST_F(ConfigLoaderTest, QubitNoiseBasicLoadsCorrectValues)
     const auto path = write_config("qubit_basic.yaml", yaml);
     const auto config = load_config(path.string());
     ASSERT_TRUE(config.has_value());
-    const auto& model = config->nodes.front().qubit_arrays.front().noise_model.config_data;
+    const auto& model = config->nodes.front().qubit_arrays.front().qubit_decoherence_noise_model.config_data;
     ASSERT_TRUE(std::holds_alternative<QubitNoiseBasicConfig>(model));
     EXPECT_FLOAT_EQ(std::get<QubitNoiseBasicConfig>(model).t2_value, 2500.0f);
 }
@@ -622,7 +775,7 @@ TEST_F(ConfigLoaderTest, QubitNoiseAdvancedLoadsCorrectValues)
     const auto path = write_config("qubit_advanced.yaml", yaml);
     const auto config = load_config(path.string());
     ASSERT_TRUE(config.has_value());
-    const auto& model = config->nodes.front().qubit_arrays.front().noise_model.config_data;
+    const auto& model = config->nodes.front().qubit_arrays.front().qubit_decoherence_noise_model.config_data;
     ASSERT_TRUE(std::holds_alternative<QubitNoiseAdvancedConfig>(model));
     const auto& adv = std::get<QubitNoiseAdvancedConfig>(model);
     EXPECT_FLOAT_EQ(adv.t1_value, 6000.0f);
@@ -673,7 +826,7 @@ TEST_F(ConfigLoaderTest, QubitNoisePhaseFlipLoadsCorrectValues)
     const auto path = write_config("qubit_phase_flip.yaml", yaml);
     const auto config = load_config(path.string());
     ASSERT_TRUE(config.has_value());
-    const auto& model = config->nodes.front().qubit_arrays.front().noise_model.config_data;
+    const auto& model = config->nodes.front().qubit_arrays.front().qubit_decoherence_noise_model.config_data;
     ASSERT_TRUE(std::holds_alternative<PhaseFlipNoiseConfig>(model));
     EXPECT_FLOAT_EQ(std::get<PhaseFlipNoiseConfig>(model).t2_value, 100);
 }
@@ -714,7 +867,7 @@ TEST_F(ConfigLoaderTest, AcceptsZeroFloatForNoiseParams)
     const auto path = write_config("zero_t2.yaml", yaml);
     const auto config = load_config(path.string());
     ASSERT_TRUE(config.has_value());
-    const auto& model = config->nodes.front().qubit_arrays.front().noise_model.config_data;
+    const auto& model = config->nodes.front().qubit_arrays.front().qubit_decoherence_noise_model.config_data;
     EXPECT_FLOAT_EQ(std::get<QubitNoiseBasicConfig>(model).t2_value, 0.0f);
 }
 
@@ -764,8 +917,8 @@ TEST_F(ConfigLoaderTest, EntanglementLinksLoadsCorrectValues)
     EXPECT_FLOAT_EQ(attempt.p_success, 0.5f);
     EXPECT_EQ(attempt.rng_seed, 42u);
 
-    ASSERT_TRUE(std::holds_alternative<EntanglementChannelBasicConfig>(link.channel_model.config_data));
-    const auto& channel = std::get<EntanglementChannelBasicConfig>(link.channel_model.config_data);
+    ASSERT_TRUE(std::holds_alternative<EntanglementLinkNoiseBasicConfig>(link.link_noise_model.config_data));
+    const auto& channel = std::get<EntanglementLinkNoiseBasicConfig>(link.link_noise_model.config_data);
     EXPECT_FLOAT_EQ(channel.p_depolarizing, 0.01f);
     EXPECT_FLOAT_EQ(channel.p_dephasing, 0.02f);
 }
@@ -778,7 +931,7 @@ TEST_F(ConfigLoaderTest, RejectsUnsupportedEntanglementAttemptModelType)
         "    node_b: bob\n"
         "    attempt_model:\n"
         "      type: UNKNOWN_TYPE\n"
-        "    channel_model:\n"
+        "    link_noise_model:\n"
         "      type: BASIC\n"
         "      p_depolarizing: 0.01\n"
         "      p_dephasing: 0.02\n";
@@ -787,7 +940,7 @@ TEST_F(ConfigLoaderTest, RejectsUnsupportedEntanglementAttemptModelType)
     EXPECT_FALSE(load_config(path.string()).has_value());
 }
 
-TEST_F(ConfigLoaderTest, RejectsUnsupportedEntanglementChannelModelType)
+TEST_F(ConfigLoaderTest, RejectsUnsupportedEntanglementLinkNoiseModelType)
 {
     const std::string links =
         "entanglement_links:\n"
@@ -799,10 +952,10 @@ TEST_F(ConfigLoaderTest, RejectsUnsupportedEntanglementChannelModelType)
         "      batch_size: 100\n"
         "      p_success: 0.5\n"
         "      rng_seed: 42\n"
-        "    channel_model:\n"
+        "    link_noise_model:\n"
         "      type: UNKNOWN_TYPE\n";
 
-    const auto path = write_config("bad_channel_model_type.yaml", two_nodes_with_links(links));
+    const auto path = write_config("bad_link_noise_model_type.yaml", two_nodes_with_links(links));
     EXPECT_FALSE(load_config(path.string()).has_value());
 }
 
@@ -824,7 +977,7 @@ TEST_F(ConfigLoaderTest, RejectsEntanglementLinkMissingNodeA)
         "      batch_size: 100\n"
         "      p_success: 0.5\n"
         "      rng_seed: 42\n"
-        "    channel_model:\n"
+        "    link_noise_model:\n"
         "      type: BASIC\n"
         "      p_depolarizing: 0.01\n"
         "      p_dephasing: 0.02\n";
@@ -844,7 +997,7 @@ TEST_F(ConfigLoaderTest, RejectsEntanglementLinkMissingNodeB)
         "      batch_size: 100\n"
         "      p_success: 0.5\n"
         "      rng_seed: 42\n"
-        "    channel_model:\n"
+        "    link_noise_model:\n"
         "      type: BASIC\n"
         "      p_depolarizing: 0.01\n"
         "      p_dephasing: 0.02\n";
@@ -859,7 +1012,7 @@ TEST_F(ConfigLoaderTest, RejectsEntanglementLinkMissingAttemptModel)
         "entanglement_links:\n"
         "  - node_a: alice\n"
         "    node_b: bob\n"
-        "    channel_model:\n"
+        "    link_noise_model:\n"
         "      type: BASIC\n"
         "      p_depolarizing: 0.01\n"
         "      p_dephasing: 0.02\n";
@@ -868,7 +1021,7 @@ TEST_F(ConfigLoaderTest, RejectsEntanglementLinkMissingAttemptModel)
     EXPECT_FALSE(load_config(path.string()).has_value());
 }
 
-TEST_F(ConfigLoaderTest, RejectsEntanglementLinkMissingChannelModel)
+TEST_F(ConfigLoaderTest, RejectsEntanglementLinkMissingLinkNoiseModel)
 {
     const std::string links =
         "entanglement_links:\n"
@@ -881,7 +1034,7 @@ TEST_F(ConfigLoaderTest, RejectsEntanglementLinkMissingChannelModel)
         "      p_success: 0.5\n"
         "      rng_seed: 42\n";
 
-    const auto path = write_config("link_missing_channel_model.yaml", two_nodes_with_links(links));
+    const auto path = write_config("link_missing_link_noise_model.yaml", two_nodes_with_links(links));
     EXPECT_FALSE(load_config(path.string()).has_value());
 }
 
@@ -897,7 +1050,7 @@ TEST_F(ConfigLoaderTest, RejectsEntanglementLinkWithUnknownNodeName)
         "      batch_size: 100\n"
         "      p_success: 0.5\n"
         "      rng_seed: 42\n"
-        "    channel_model:\n"
+        "    link_noise_model:\n"
         "      type: BASIC\n"
         "      p_depolarizing: 0.01\n"
         "      p_dephasing: 0.02\n";
@@ -918,7 +1071,7 @@ TEST_F(ConfigLoaderTest, RejectsEntanglementLinkWithSameNodeTwice)
         "      batch_size: 100\n"
         "      p_success: 0.5\n"
         "      rng_seed: 42\n"
-        "    channel_model:\n"
+        "    link_noise_model:\n"
         "      type: BASIC\n"
         "      p_depolarizing: 0.01\n"
         "      p_dephasing: 0.02\n";
@@ -939,7 +1092,7 @@ TEST_F(ConfigLoaderTest, RejectsDuplicateEntanglementLink)
         "      batch_size: 100\n"
         "      p_success: 0.5\n"
         "      rng_seed: 42\n"
-        "    channel_model:\n"
+        "    link_noise_model:\n"
         "      type: BASIC\n"
         "      p_depolarizing: 0.01\n"
         "      p_dephasing: 0.02\n"
@@ -951,7 +1104,7 @@ TEST_F(ConfigLoaderTest, RejectsDuplicateEntanglementLink)
         "      batch_size: 100\n"
         "      p_success: 0.5\n"
         "      rng_seed: 42\n"
-        "    channel_model:\n"
+        "    link_noise_model:\n"
         "      type: BASIC\n"
         "      p_depolarizing: 0.01\n"
         "      p_dephasing: 0.02\n";
@@ -994,7 +1147,7 @@ TEST_F(ConfigLoaderTest, RejectsMissingNumQubitsInArray)
         "  - name: no_num\n"
         "    node_type: GENERIC\n"
         "    qubit_arrays:\n"
-        "      - noise_model:\n"
+        "      - qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n";
 
@@ -1023,7 +1176,11 @@ TEST_F(ConfigLoaderTest, RejectsZeroNumQubitsInArray)
         "    node_type: GENERIC\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 0\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n";
 
@@ -1039,7 +1196,11 @@ TEST_F(ConfigLoaderTest, RejectsNegativeNumQubitsInArray)
         "    node_type: GENERIC\n"
         "    qubit_arrays:\n"
         "      - num_qubits: -4\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n";
 
@@ -1055,7 +1216,11 @@ TEST_F(ConfigLoaderTest, RejectsNonIntegerNumQubitsInArray)
         "    node_type: GENERIC\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 2.5\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n";
 
@@ -1071,7 +1236,11 @@ TEST_F(ConfigLoaderTest, RejectsUnknownFieldInQubitArray)
         "    node_type: GENERIC\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 2\n"
-        "        noise_model:\n"
+        "        single_gate_delay_ns: 0\n"
+        "        gate_noise_model:\n"
+        "          type: DEPOLARIZING\n"
+        "          depolarizing_probability: 0.0\n"
+        "        qubit_decoherence_noise_model:\n"
         "          type: BASIC\n"
         "          t2_value: 1000\n"
         "        extra: bad\n";
@@ -1088,7 +1257,7 @@ TEST_F(ConfigLoaderTest, RejectsNoiseModelWithInlineValue)
         "    node_type: GENERIC\n"
         "    qubit_arrays:\n"
         "      - num_qubits: 1\n"
-        "        noise_model: BASIC\n";
+        "        qubit_decoherence_noise_model: BASIC\n";
 
     const auto path = write_config("inline_noise_model.yaml", yaml);
     EXPECT_FALSE(load_config(path.string()).has_value());

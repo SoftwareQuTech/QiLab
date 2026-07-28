@@ -427,3 +427,127 @@ TEST(DataAcquisition, IdempotentReconfigureIsSafe) {
   GTEST_SKIP() << "Data acquisition disabled";
 #endif
 }
+
+// QILAB_DAQ_DIR relocates relative output off $HOME. Without this the deployed
+// service cannot write DAQ data at all: its systemd unit sets ProtectHome=true
+// and only grants write access to /var/log/qilab.
+TEST(DataAcquisition, DaqDirEnvVarRelocatesRelativePath) {
+#if DAQ_ENABLED
+  struct EnvGuard {
+    const char* name;
+    bool had_value;
+    std::string original;
+    explicit EnvGuard(const char* n) : name(n) {
+      const char* p = std::getenv(n);
+      had_value = (p != nullptr);
+      original = had_value ? p : "";
+    }
+    ~EnvGuard() {
+      if (had_value) { setenv(name, original.c_str(), 1); } else { unsetenv(name); }
+    }
+  } dir_guard("QILAB_DAQ_DIR"), path_guard("QILAB_DAQ_PATH");
+
+  const fs::path daq_dir =
+      fs::temp_directory_path() /
+      (std::string("daq_ut_dir_") +
+       std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  fs::create_directories(daq_dir);
+  unsetenv("QILAB_DAQ_PATH");
+  setenv("QILAB_DAQ_DIR", daq_dir.string().c_str(), 1);
+
+  const std::string relative_name = "env_dir_test.jsonl";
+  DAQ_CONFIGURE(true, relative_name);
+  ASSERT_TRUE(DAQ_ACTIVE());
+  DAQ_RECORD("env_dir").set("ok", true);
+  DAQ_CONFIGURE(false, "");
+
+  const fs::path expected = daq_dir / relative_name;
+  ASSERT_TRUE(fs::exists(expected));
+  const auto lines = read_lines(expected);
+  ASSERT_EQ(lines.size(), 1u);
+  EXPECT_NE(lines[0].find("\"channel\":\"env_dir\""), std::string::npos);
+
+  fs::remove_all(daq_dir);
+#else
+  GTEST_SKIP() << "Data acquisition disabled";
+#endif
+}
+
+// QILAB_DAQ_PATH is a full-path override and wins over QILAB_DAQ_DIR, matching
+// the QILAB_PROFILER_PATH / QILAB_PROFILER_DIR precedence in profiler.cpp.
+TEST(DataAcquisition, DaqPathEnvVarOverridesDaqDir) {
+#if DAQ_ENABLED
+  struct EnvGuard {
+    const char* name;
+    bool had_value;
+    std::string original;
+    explicit EnvGuard(const char* n) : name(n) {
+      const char* p = std::getenv(n);
+      had_value = (p != nullptr);
+      original = had_value ? p : "";
+    }
+    ~EnvGuard() {
+      if (had_value) { setenv(name, original.c_str(), 1); } else { unsetenv(name); }
+    }
+  } dir_guard("QILAB_DAQ_DIR"), path_guard("QILAB_DAQ_PATH");
+
+  const std::string stamp =
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+  const fs::path ignored_dir = fs::temp_directory_path() / ("daq_ut_ignored_" + stamp);
+  fs::create_directories(ignored_dir);
+  const fs::path explicit_path = fs::temp_directory_path() / ("daq_ut_explicit_" + stamp + ".jsonl");
+
+  setenv("QILAB_DAQ_DIR", ignored_dir.string().c_str(), 1);
+  setenv("QILAB_DAQ_PATH", explicit_path.string().c_str(), 1);
+
+  DAQ_CONFIGURE(true, "some_relative_name.jsonl");
+  ASSERT_TRUE(DAQ_ACTIVE());
+  DAQ_RECORD("env_path").set("ok", true);
+  DAQ_CONFIGURE(false, "");
+
+  EXPECT_TRUE(fs::exists(explicit_path));
+  EXPECT_FALSE(fs::exists(ignored_dir / "some_relative_name.jsonl"));
+
+  fs::remove(explicit_path);
+  fs::remove_all(ignored_dir);
+#else
+  GTEST_SKIP() << "Data acquisition disabled";
+#endif
+}
+
+// An absolute base path still wins over both env vars, so tests and callers that
+// pass a concrete file keep working regardless of the environment.
+TEST(DataAcquisition, AbsolutePathIgnoresEnvVars) {
+#if DAQ_ENABLED
+  struct EnvGuard {
+    const char* name;
+    bool had_value;
+    std::string original;
+    explicit EnvGuard(const char* n) : name(n) {
+      const char* p = std::getenv(n);
+      had_value = (p != nullptr);
+      original = had_value ? p : "";
+    }
+    ~EnvGuard() {
+      if (had_value) { setenv(name, original.c_str(), 1); } else { unsetenv(name); }
+    }
+  } dir_guard("QILAB_DAQ_DIR"), path_guard("QILAB_DAQ_PATH");
+
+  const fs::path path = temp_file("absolute_wins");
+  setenv("QILAB_DAQ_DIR", "/nonexistent-daq-dir", 1);
+  setenv("QILAB_DAQ_PATH", "/nonexistent-daq-path.jsonl", 1);
+
+  DAQ_CONFIGURE(true, path.string());
+  ASSERT_TRUE(DAQ_ACTIVE());
+  DAQ_RECORD("absolute").set("ok", true);
+  DAQ_CONFIGURE(false, "");
+
+  ASSERT_TRUE(fs::exists(path));
+  const auto lines = read_lines(path);
+  ASSERT_EQ(lines.size(), 1u);
+
+  fs::remove(path);
+#else
+  GTEST_SKIP() << "Data acquisition disabled";
+#endif
+}

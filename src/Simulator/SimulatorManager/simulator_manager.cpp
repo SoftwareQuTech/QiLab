@@ -6,6 +6,7 @@
 #include "logger/profiler_api.hpp"
 #include "Simulator/pauli_channel_math.hpp"
 #include "Simulator/link_key.hpp"
+#include "Simulator/NoiseModels/QubitDecoherenceNoise/depolarizing_gate_noise.hpp"
 
 
 SimulatorManager::SimulatorManager(std::unique_ptr<ISimulator> simulator, bool qubit_noise_enabled, bool entanglement_noise_enabled)
@@ -51,11 +52,11 @@ uint16_t SimulatorManager::encode_pair_key(uint8_t node_a, uint8_t node_b)
     return encode_link_key(node_a, node_b);
 }
 
-void SimulatorManager::configure_entanglement_links(std::unordered_map<uint16_t, std::unique_ptr<EntanglementChannelNoiseInterface>> models)
+void SimulatorManager::configure_entanglement_links(std::unordered_map<uint16_t, std::unique_ptr<EntanglementLinkNoiseInterface>> models)
 {
     for (auto &entry : models)
     {
-        entanglement_channel_models[entry.first] = std::move(entry.second);
+        entanglement_link_noise_models[entry.first] = std::move(entry.second);
     }
 }
 
@@ -109,8 +110,10 @@ void SimulatorManager::apply_pre_measure_gates(uint8_t node_id, uint16_t global_
         }
         if (qubit_noise_enabled)
         {
-            float z_idle_noise_prob = simulation_qubits[global_qubit]->get_qubit_decoherence_probability();
-            float depolar_gate_prob = 0.3f; // Replace with actual gate noise calculation
+            const float z_idle_noise_prob = simulation_qubits[global_qubit]->get_qubit_decoherence_probability();
+            // Basis rotations are single-qubit gates, so they carry the same
+            // per-qubit-array gate depolarizing probability (Sec. 2 Eq. 1).
+            const float depolar_gate_prob = qubit_array_properties[global_qubit].gate_depolarizing_p;
             PauliChannelWeights composed_weights = compose_pauli_channels(0.0f, 0.0f, z_idle_noise_prob,
                                                                            depolar_gate_prob / 3.0f, depolar_gate_prob / 3.0f, depolar_gate_prob / 3.0f);
             simulator_inst->single_qubit_noise(global_qubit, composed_weights.q_x, composed_weights.q_y, composed_weights.q_z);
@@ -148,8 +151,19 @@ SimulatorManager::CommandTimingInfo SimulatorManager::build_command_timing_info(
         auto *cmd = static_cast<const SingleQubitGate *>(&command);
         if (cmd->angle != Angle_t::_0_PI_16)
         {
-            info.target_delay_ns = node_operation_delays[node_id].single_gate_delay;
+            // The single-qubit gate duration is a property of the qubit ARRAY,
+            // so it is keyed by global qubit index -- resolve that first.
             info.global_qubit_1 = qubit_offset + cmd->qubit1_address;
+
+            // This runs before the handler's own range check, and local qubit
+            // addresses are 4 bits, so an out-of-range address must not index
+            // qubit_array_properties. Leaving the delay at 0 is correct: the
+            // handler rejects the command and no delay is applied.
+            if (is_local_qubit_in_range(node_id, cmd->qubit1_address))
+            {
+                info.target_delay_ns =
+                    qubit_array_properties[static_cast<std::size_t>(info.global_qubit_1)].single_gate_delay_ns;
+            }
         }
         break;
     }
@@ -252,50 +266,124 @@ int16_t SimulatorManager::register_node(const NodeConfig &node_config)
         return -1;
     }
 
+    // Validation pass. Nothing below this point mutates manager state, so a
+    // rejected node never leaves the manager half-registered.
+    if (node_config.qubit_arrays.empty())
+    {
+        LOG_ERROR("Node '" + node_config.name + "' declares no qubit arrays.");
+        return -1;
+    }
+
+    uint32_t array_qubit_sum = 0;
     for (const auto &array_config : node_config.qubit_arrays)
     {
-        if (std::get_if<QubitNoiseBasicConfig>(&array_config.noise_model.config_data))
+        if (array_config.num_qubits <= 0)
         {
-            LOG_INFO("Registering node with BASIC qubit noise model.");
-            for (uint16_t i = 0; i < requested_qubits; i++)
-            {
-                simulation_qubits[registered_qubits + i] = std::make_unique<QubitModelBasic>(std::get<QubitNoiseBasicConfig>(array_config.noise_model.config_data));
-            }
+            LOG_ERROR("Node '" + node_config.name + "' has a qubit array with invalid size " +
+                      std::to_string(array_config.num_qubits) + ". Must be > 0.");
+            return -1;
         }
-        else if (std::get_if<QubitNoiseAdvancedConfig>(&array_config.noise_model.config_data))
+        array_qubit_sum += static_cast<uint32_t>(array_config.num_qubits);
+
+        if (std::get_if<QubitNoiseAdvancedConfig>(&array_config.qubit_decoherence_noise_model.config_data))
         {
-            // Placeholder for advanced model registration
-            LOG_INFO("Registering node with ADVANCED qubit noise model. NOT IMPLEMENTED");
-            // simulator_manager.add_qubit_noise_model(node_id, std::make_unique<QubitModelAdvanced>(*qm_advanced));
+            LOG_ERROR("ADVANCED qubit noise model is not implemented; node '" + node_config.name +
+                      "' not registered.");
             return -2;
-        }
-        else if (std::get_if<PhaseFlipNoiseConfig>(&array_config.noise_model.config_data))
-        {
-            // Placeholder for phase flip model registration
-            LOG_INFO("Registering node with PHASE_FLIP qubit noise model.");
-            for (uint16_t i = 0; i < requested_qubits; i++)
-            {
-                simulation_qubits[registered_qubits + i] = std::make_unique<PhaseFlipQubitModel>(std::get<PhaseFlipNoiseConfig>(array_config.noise_model.config_data));
-        }
-        }
-        else
-        {
-            LOG_WARNING("Node registered with no valid qubit noise model configuration. Defaulting to BASIC model with T2=1000ns.");
-            for (uint16_t i = 0; i < requested_qubits; i++)
-            {
-                simulation_qubits[registered_qubits + i] = std::make_unique<QubitModelBasic>(QubitNoiseBasicConfig{1000.0f});
-            }
         }
     }
 
-    // Assign the noises to the node noise array
-    node_operation_delays[registered_nodes].single_gate_delay = node_config.qubit_operations_delays.single_gate_delay;
-    node_operation_delays[registered_nodes].two_gate_delay = node_config.qubit_operations_delays.two_gate_delay;
-    node_operation_delays[registered_nodes].entanglement_delay = node_config.qubit_operations_delays.entanglement_delay;
-    node_operation_delays[registered_nodes].measurement_delay = node_config.qubit_operations_delays.measurement_delay;
-    node_operation_delays[registered_nodes].qubit_swap_delay = node_config.qubit_operations_delays.qubit_swap_delay;
-    node_operation_delays[registered_nodes].qubit_move_delay = node_config.qubit_operations_delays.qubit_move_delay;
-    node_operation_delays[registered_nodes].qubit_init_delay = node_config.qubit_operations_delays.qubit_init_delay;
+    // The config loader derives NodeConfig::num_qubits as this sum, but
+    // register_node is public API and is also driven from hand-built configs.
+    if (array_qubit_sum != requested_qubits)
+    {
+        LOG_ERROR("Node '" + node_config.name + "' qubit arrays sum to " + std::to_string(array_qubit_sum) +
+                  " qubits but the node declares " + std::to_string(requested_qubits) + ".");
+        return -1;
+    }
+
+    // Commit pass. Walk the arrays with a running per-array offset so each
+    // array's models and properties cover only that array's qubit range.
+    uint16_t array_offset = 0;
+    for (const auto &array_config : node_config.qubit_arrays)
+    {
+        const uint16_t array_qubits = static_cast<uint16_t>(array_config.num_qubits);
+        const uint16_t array_base = static_cast<uint16_t>(registered_qubits + array_offset);
+        const std::string array_range = "[" + std::to_string(array_base) + ", " +
+                                        std::to_string(array_base + array_qubits - 1) + "]";
+
+        // One single-qubit gate noise model per qubit array (Sec. 2.1). Built
+        // here only to validate and log; the hot path keeps just the resulting
+        // probability. Invalid parameters are rejected, not repaired: the model
+        // reports p = 0 and the array runs noiseless.
+        const auto &gate_noise_config = std::get<GateNoiseDepolarizingConfig>(array_config.gate_noise_model.config_data);
+        const SingleQubitGateNoiseModel gate_noise_model(gate_noise_config.depolarizing_probability);
+        if (!gate_noise_model.is_valid())
+        {
+            LOG_WARNING("Qubit array " + array_range + " of node '" + node_config.name +
+                        "' has an invalid single-qubit gate depolarizing probability; "
+                        "the array runs with no gate depolarizing noise.");
+        }
+        const float array_depolarizing_p = gate_noise_model.get_depolarizing_probability();
+
+        // Resolve the decoherence model kind once per array rather than per qubit.
+        const auto *basic_config =
+            std::get_if<QubitNoiseBasicConfig>(&array_config.qubit_decoherence_noise_model.config_data);
+        const auto *phase_flip_config =
+            std::get_if<PhaseFlipNoiseConfig>(&array_config.qubit_decoherence_noise_model.config_data);
+        if (basic_config)
+        {
+            LOG_INFO("Qubit array " + array_range + " uses the BASIC qubit decoherence noise model.");
+        }
+        else if (phase_flip_config)
+        {
+            LOG_INFO("Qubit array " + array_range + " uses the PHASE_FLIP qubit decoherence noise model.");
+        }
+        else
+        {
+            LOG_WARNING("Qubit array " + array_range +
+                        " has no valid qubit decoherence noise model configuration. "
+                        "Defaulting to BASIC model with T2=1000ns.");
+        }
+
+        for (uint16_t i = 0; i < array_qubits; i++)
+        {
+            const uint16_t global_qubit = static_cast<uint16_t>(array_base + i);
+
+            if (basic_config)
+            {
+                simulation_qubits[global_qubit] = std::make_unique<QubitModelBasic>(*basic_config);
+            }
+            else if (phase_flip_config)
+            {
+                simulation_qubits[global_qubit] = std::make_unique<PhaseFlipQubitModel>(*phase_flip_config);
+            }
+            else
+            {
+                simulation_qubits[global_qubit] = std::make_unique<QubitModelBasic>(QubitNoiseBasicConfig{1000.0f});
+            }
+
+            qubit_array_properties[global_qubit].single_gate_delay_ns = array_config.single_gate_delay_ns;
+            qubit_array_properties[global_qubit].gate_depolarizing_p = array_depolarizing_p;
+        }
+
+        array_offset = static_cast<uint16_t>(array_offset + array_qubits);
+    }
+
+    // One two-qubit gate noise model per node (Sec. 2.1). Built here only to
+    // validate and log; the hot path keeps just the resulting probability.
+    const auto &two_qubit_noise_config =
+        std::get<GateNoiseDepolarizingConfig>(node_config.two_qubit_gate_noise_model.config_data);
+    const TwoQubitGateNoiseModel two_qubit_noise_model(two_qubit_noise_config.depolarizing_probability);
+    if (!two_qubit_noise_model.is_valid())
+    {
+        LOG_WARNING("Node '" + node_config.name +
+                    "' has an invalid two-qubit gate depolarizing probability; "
+                    "the node runs with no two-qubit gate depolarizing noise.");
+    }
+    node_two_qubit_depolarizing_p[registered_nodes] = two_qubit_noise_model.get_depolarizing_probability();
+
+    node_operation_delays[registered_nodes] = node_config.qubit_operations_delays;
 
 
     // Assign the node ID and update the registry
@@ -420,24 +508,26 @@ ResponseData SimulatorManager::single_qubit_gate_handler(std::unique_ptr<Command
         return response;
     }
 
+    const uint16_t global_qubit = static_cast<uint16_t>(cmd->qubit1_address + qubit_offset);
+
     if (qubit_noise_enabled)
     {
         // Get the idling dephasing probability (between touches) for the qubit and apply it as noise before the gate operation
-        float z_idle_noise_prob = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
-        // Get gate operation noise
+        const float z_idle_noise_prob = simulation_qubits[global_qubit]->get_qubit_decoherence_probability();
+        // Gate depolarizing probability of the qubit's ARRAY (Sec. 2 Eq. 1).
         // Fidelity to depolar F=1-2p/3
-        float depolar_gate_prob = 0.3f; // Replace with actual gate noise calculation
+        const float depolar_gate_prob = qubit_array_properties[global_qubit].gate_depolarizing_p;
         // combine noise and normalize noise -> returns normalized PX, PY, PZ for composed noise channel
         PauliChannelWeights composed_weights = compose_pauli_channels(0.0f, 0.0f, z_idle_noise_prob, depolar_gate_prob/3.0f, depolar_gate_prob/3.0f, depolar_gate_prob/3.0f);
-        simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, composed_weights.q_x, composed_weights.q_y, composed_weights.q_z);
+        simulator_inst->single_qubit_noise(global_qubit, composed_weights.q_x, composed_weights.q_y, composed_weights.q_z);
     }
 
-    if(!simulator_inst->single_qubit_gate(cmd->qubit1_address + qubit_offset, cmd->angle, cmd->axis))
+    if(!simulator_inst->single_qubit_gate(global_qubit, cmd->angle, cmd->axis))
     {
         LOG_ERROR("Single qubit gate failed");
         response.outcome = Outcome_Status_t::UNSUPPORTED_REQUEST;
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
-        PROF_STOP(prof_event_two_qubit_gate);
+        PROF_STOP(prof_event_single_qubit_gate);
         return response;
     }
 
@@ -475,25 +565,39 @@ ResponseData SimulatorManager::two_qubit_gate_handler(std::unique_ptr<CommandBas
         return response;
     }
 
+    const uint16_t global_qubit_1 = static_cast<uint16_t>(cmd->qubit1_address + qubit_offset);
+    const uint16_t global_qubit_2 = static_cast<uint16_t>(cmd->qubit2_address + qubit_offset);
+
     if (qubit_noise_enabled)
     {
         // Get the dephasing probability for each qubit and apply it as noise before the gate operation
-        float z_qubit1_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
-        simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0f, 0.0f, z_qubit1_noise);
-        float z_qubit2_noise = simulation_qubits[cmd->qubit2_address + qubit_offset]->get_qubit_decoherence_probability();
-        simulator_inst->single_qubit_noise(cmd->qubit2_address + qubit_offset, 0.0f, 0.0f, z_qubit2_noise);
+        const float z_qubit1_noise = simulation_qubits[global_qubit_1]->get_qubit_decoherence_probability();
+        simulator_inst->single_qubit_noise(global_qubit_1, 0.0f, 0.0f, z_qubit1_noise);
+        const float z_qubit2_noise = simulation_qubits[global_qubit_2]->get_qubit_decoherence_probability();
+        simulator_inst->single_qubit_noise(global_qubit_2, 0.0f, 0.0f, z_qubit2_noise);
+
+        // Two-qubit gate depolarizing (Sec. 2 Eq. 4), one model per NODE. The
+        // channel is correlated across the pair, so it cannot be folded into
+        // the two single-qubit channels above via compose_pauli_channels; it
+        // goes to the backend's DEPOLARIZE2. Skipped at p == 0 to avoid a
+        // pointless virtual dispatch on the hot path.
+        const float depolar_gate_prob = node_two_qubit_depolarizing_p[node_id];
+        if (depolar_gate_prob > 0.0f)
+        {
+            simulator_inst->two_qubit_depolarizing_noise(global_qubit_1, global_qubit_2, depolar_gate_prob);
+        }
     }
 
 
-    if (!simulator_inst->two_qubit_gate(cmd->qubit1_address + qubit_offset,
-                                        cmd->qubit2_address + qubit_offset,
+    if (!simulator_inst->two_qubit_gate(global_qubit_1,
+                                        global_qubit_2,
                                         cmd->angle,
                                         cmd->axis))
     {
         LOG_ERROR("Two-qubit gate failed between qubits " +
-                  std::to_string(cmd->qubit1_address + qubit_offset) +
+                  std::to_string(global_qubit_1) +
                   " and " +
-                  std::to_string(cmd->qubit2_address + qubit_offset));
+                  std::to_string(global_qubit_2));
         response.outcome = Outcome_Status_t::UNSUPPORTED_REQUEST;
         response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;
         PROF_STOP(prof_event_two_qubit_gate);
@@ -563,8 +667,8 @@ ResponseData SimulatorManager::entanglement_attempt_handler(std::unique_ptr<Comm
     if (entanglement_noise_enabled && is_initiator)
     {
         const uint16_t link_key = encode_pair_key(node_id, cmd->nghbr);
-        const auto model_it = entanglement_channel_models.find(link_key);
-        if (model_it != entanglement_channel_models.end())
+        const auto model_it = entanglement_link_noise_models.find(link_key);
+        if (model_it != entanglement_link_noise_models.end())
         {
             const PauliChannelWeights weights = model_it->second->get_pauli_channel_weights();
             simulator_inst->single_qubit_noise(qubit_offset, weights.q_x, weights.q_y, weights.q_z);
@@ -642,8 +746,8 @@ ResponseData SimulatorManager::entanglement_measure_handler(std::unique_ptr<Comm
     if (entanglement_noise_enabled && is_initiator)
     {
         const uint16_t link_key = encode_pair_key(node_id, cmd->nghbr);
-        const auto model_it = entanglement_channel_models.find(link_key);
-        if (model_it != entanglement_channel_models.end())
+        const auto model_it = entanglement_link_noise_models.find(link_key);
+        if (model_it != entanglement_link_noise_models.end())
         {
             const PauliChannelWeights weights = model_it->second->get_pauli_channel_weights();
             simulator_inst->single_qubit_noise(local_qubit, weights.q_x, weights.q_y, weights.q_z);
@@ -751,7 +855,9 @@ ResponseData SimulatorManager::qubit_move_handler(std::unique_ptr<CommandBase> c
 
     if (qubit_noise_enabled)
     {
-        // Get the dephasing probability for each qubit and apply it as noise before the gate operation
+        // Idle dephasing only. MOVE/SWAP deliberately carry no gate depolarizing
+        // noise -- the spec scopes gate depolarizing to single- and two-qubit
+        // gates (Sec. 2.1), so this is intentional, not an oversight.
         float z_qubit1_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
         simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0f, 0.0f, z_qubit1_noise);
         float z_qubit2_noise = simulation_qubits[cmd->qubit2_address + qubit_offset]->get_qubit_decoherence_probability();
@@ -797,7 +903,9 @@ ResponseData SimulatorManager::qubit_swap_handler(std::unique_ptr<CommandBase> c
 
     if (qubit_noise_enabled)
     {
-        // Get the dephasing probability for each qubit and apply it as noise before the gate operation
+        // Idle dephasing only. MOVE/SWAP deliberately carry no gate depolarizing
+        // noise -- the spec scopes gate depolarizing to single- and two-qubit
+        // gates (Sec. 2.1), so this is intentional, not an oversight.
         float z_qubit1_noise = simulation_qubits[cmd->qubit1_address + qubit_offset]->get_qubit_decoherence_probability();
         simulator_inst->single_qubit_noise(cmd->qubit1_address + qubit_offset, 0.0f, 0.0f, z_qubit1_noise);
         float z_qubit2_noise = simulation_qubits[cmd->qubit2_address + qubit_offset]->get_qubit_decoherence_probability();

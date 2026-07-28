@@ -1,6 +1,6 @@
 ---
 name: noise-model
-description: Implement or review quantum noise models in qilab's simulator — gate depolarizing, idle dephasing, entanglement-attempt and entanglement-channel noise, and single-qubit Pauli channel composition. Use for any change under src/Simulator/NoiseModels/, pauli_channel_math.hpp, or entanglement_attempt_noise*/entanglement_channel_noise*.
+description: Implement or review quantum noise models in qilab's simulator — gate depolarizing, idle dephasing, entanglement-attempt and entanglement-link noise, and single-qubit Pauli channel composition. Use for any change under src/Simulator/NoiseModels/, pauli_channel_math.hpp, or entanglement_attempt_noise*/entanglement_link_noise*.
 tools: Read, Edit, Write, Bash, Grep, Glob
 ---
 
@@ -24,10 +24,10 @@ in the existing code — don't deviate from them without being asked to:
   `attempt_batch()`; see `EntanglementAttemptModel` in
   `NoiseModels/EntanglementGenerationNoise/entanglement_attempt_noise.hpp`),
   consumed by `EntanglementManager` for batching/delay/success-probability;
-  entanglement-channel noise implements `EntanglementChannelNoiseInterface`
-  (`src/Simulator/entanglement_channel_noise_interface.hpp` —
-  `get_pauli_channel_weights()`; see `EntanglementChannelModel` in
-  `NoiseModels/EntanglementGenerationNoise/entanglement_channel_noise.hpp`),
+  entanglement-link noise implements `EntanglementLinkNoiseInterface`
+  (`src/Simulator/entanglement_link_noise_interface.hpp` —
+  `get_pauli_channel_weights()`; see `EntanglementLinkNoiseModel` in
+  `NoiseModels/EntanglementGenerationNoise/entanglement_link_noise.hpp`),
   consumed by `SimulatorManager` to apply noise on successful entanglement.
   Both entanglement kinds are configured together per **link** (see Config
   pattern below), not per-node. Qubit-in-memory noise and entanglement noise
@@ -41,11 +41,11 @@ in the existing code — don't deviate from them without being asked to:
   channels must go through `compose_pauli_channels()`
   (`src/Simulator/pauli_channel_math.hpp`). Don't reimplement the composition
   formula inline — it's shared by gate noise (idle dephasing + gate
-  depolarizing) and entanglement-channel noise (link dephasing + link
+  depolarizing) and entanglement-link noise (link dephasing + link
   depolarizing).
 - **Reference implementations for validation**:
   `NoiseModels/EntanglementGenerationNoise/entanglement_attempt_noise.hpp`
-  and `.../entanglement_channel_noise.hpp` are the pattern to follow for a
+  and `.../entanglement_link_noise.hpp` are the pattern to follow for a
   new noise model:
   - Validate all parameters in the constructor; on failure, set a `valid`
     flag (exposed via `is_valid()`), log the specific problem via
@@ -66,12 +66,12 @@ in the existing code — don't deviate from them without being asked to:
   `ensure_allowed_keys`/`require_key`/`parse_non_negative_float` helpers in
   `parse_scalar_helpers.hpp` — see `qubit_basic_parser.hpp`,
   `entanglement_attempt_basic_parser.hpp`, and
-  `entanglement_channel_basic_parser.hpp` for the shape. Register the new
+  `entanglement_link_noise_basic_parser.hpp` for the shape. Register the new
   parser by uppercase type name in the parser map in `parse_node_config.hpp`
   (qubit models) or `parse_entanglement_config.hpp` (entanglement attempt +
   channel models, two separate registries). Entanglement models are declared
   per link under the top-level `entanglement_links` list (`node_a`/`node_b`
-  + `attempt_model`/`channel_model` blocks), not per-node — see
+  + `attempt_model`/`link_noise_model` blocks), not per-node — see
   `EntanglementLinkConfig` in `DataTypes/configuration_options.hpp`. Don't
   invent a bespoke parsing approach for a new model.
 - **Config/schema/docs move together**: if a noise model gains/loses a
@@ -81,7 +81,7 @@ in the existing code — don't deviate from them without being asked to:
 - **Testing**: classic unit tests for now — test the noise model directly
   through its interface (`QubitNoiseInterface`,
   `EntanglementAttemptNoiseInterface`, or
-  `EntanglementChannelNoiseInterface`), not by driving it through
+  `EntanglementLinkNoiseInterface`), not by driving it through
   `SimulatorManager`. The `SpyAdapter` pattern in
   `test/Simulator/SimulatorManager/test_simulator_manager.cpp` is closer to
   a functional test than a unit test; a dedicated functional test suite is

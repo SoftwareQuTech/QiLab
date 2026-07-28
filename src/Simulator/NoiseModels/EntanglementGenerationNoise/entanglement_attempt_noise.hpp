@@ -93,7 +93,8 @@ public:
         // first success, so the successful attempt is k = failures + 1.
         std::geometric_distribution<uint64_t> attempts_distribution(p_success);
         const uint64_t k = attempts_distribution(rng) + 1;
-
+        LOG_INFO("Entanglement attempt batch: sampled " + std::to_string(k) + " attempts until success (p_success = " +
+                 std::to_string(p_success) + ", batch_size = " + std::to_string(batch_size) + ").");
         if (k > batch_size)
         {
             return BatchOutcome{false, batch_size, batch_size * attempt_duration_ns};

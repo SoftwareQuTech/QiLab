@@ -14,7 +14,7 @@ add_executable(unit_tests
                 ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/NoiseModels/test_qubit_models.cpp
                 ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/NoiseModels/test_gate_noise_models.cpp
                 ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/NoiseModels/test_entanglement_attempt_noise.cpp
-                ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/NoiseModels/test_entanglement_channel_noise.cpp
+                ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/NoiseModels/test_entanglement_link_noise.cpp
                 ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/SimulatorManager/test_operations_engine.cpp
                 ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/SimulatorAdapters/test_stim_adapter.cpp
                 ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/SimulatorAdapters/test_stim_nv_adapter.cpp

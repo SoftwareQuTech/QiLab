@@ -18,7 +18,7 @@
 ** deterministically builds |Psi+> = (|01>+|10>)/sqrt(2) (confirmed by reading
 ** the implementation: fixed R,R,H,X,CX circuit, Bell-state code 2). In the Z
 ** basis this state is PERFECTLY ANTI-CORRELATED: measuring both qubits always
-** gives opposite bits. EntanglementChannelModel's Pauli channel is applied,
+** gives opposite bits. EntanglementLinkNoiseModel's Pauli channel is applied,
 ** per entanglement_attempt_handler, only to the initiator's own qubit via
 ** single_qubit_noise. An X or Y error flips that qubit's Z-basis outcome,
 ** which flips the pair from anti-correlated to (spuriously) correlated; a
@@ -34,21 +34,21 @@
 #include <random>
 
 #include "Simulator/SimulatorAdapters/stim_nv_adapter.hpp"
-#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_channel_noise.hpp"
+#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_link_noise.hpp"
 
 namespace {
 
 // One (initiator-side) entanglement + noise + measure-both trial. Reinitializes
 // both qubits to |0> first so each trial starts from a clean, known state.
-std::pair<uint8_t, uint8_t> run_one_trial(StimAdapterNVCenters &adapter, EntanglementChannelModel *channel_model) {
+std::pair<uint8_t, uint8_t> run_one_trial(StimAdapterNVCenters &adapter, EntanglementLinkNoiseModel *link_noise_model) {
     adapter.qubit_initialize(0);
     adapter.qubit_initialize(1);
 
     adapter.attempt_entanglement(/*fidelity=*/0, /*local_qubit=*/0, /*neighbour_address=*/1,
                                   /*is_initiator=*/true, /*qid=*/0);
 
-    if (channel_model != nullptr) {
-        const PauliChannelWeights w = channel_model->get_pauli_channel_weights();
+    if (link_noise_model != nullptr) {
+        const PauliChannelWeights w = link_noise_model->get_pauli_channel_weights();
         adapter.single_qubit_noise(/*qubit_address=*/0, w.q_x, w.q_y, w.q_z);
     }
 
@@ -66,7 +66,7 @@ TEST(NoiseStatisticalValidationTest, NoiselessEntanglementIsAlwaysAntiCorrelated
 
     constexpr int kTrials = 500;
     for (int i = 0; i < kTrials; ++i) {
-        const auto [r0, r1] = run_one_trial(adapter, /*channel_model=*/nullptr);
+        const auto [r0, r1] = run_one_trial(adapter, /*link_noise_model=*/nullptr);
         ASSERT_NE(r0, r1) << "trial " << i << ": noiseless Bell pair must be anti-correlated";
     }
 }
@@ -80,13 +80,13 @@ TEST(NoiseStatisticalValidationTest, DepolarizingChannelProducesExpectedCorrelat
     StimAdapterNVCenters adapter(seed, /*num_qubits=*/2);
 
     constexpr float kPDepolarizing = 0.3f;
-    EntanglementChannelModel channel_model(kPDepolarizing, /*p_dephasing=*/0.0f);
-    ASSERT_TRUE(channel_model.is_valid());
+    EntanglementLinkNoiseModel link_noise_model(kPDepolarizing, /*p_dephasing=*/0.0f);
+    ASSERT_TRUE(link_noise_model.is_valid());
 
     constexpr int kTrials = 20000;
     int agree_count = 0;
     for (int i = 0; i < kTrials; ++i) {
-        const auto [r0, r1] = run_one_trial(adapter, &channel_model);
+        const auto [r0, r1] = run_one_trial(adapter, &link_noise_model);
         if (r0 == r1) ++agree_count;
     }
 
@@ -107,12 +107,12 @@ TEST(NoiseStatisticalValidationTest, PureDephasingNeverBreaksZBasisCorrelation) 
     std::seed_seq seed{9, 10, 11, 12};
     StimAdapterNVCenters adapter(seed, /*num_qubits=*/2);
 
-    EntanglementChannelModel channel_model(/*p_depolarizing=*/0.0f, /*p_dephasing=*/0.9f);
-    ASSERT_TRUE(channel_model.is_valid());
+    EntanglementLinkNoiseModel link_noise_model(/*p_depolarizing=*/0.0f, /*p_dephasing=*/0.9f);
+    ASSERT_TRUE(link_noise_model.is_valid());
 
     constexpr int kTrials = 2000;
     for (int i = 0; i < kTrials; ++i) {
-        const auto [r0, r1] = run_one_trial(adapter, &channel_model);
+        const auto [r0, r1] = run_one_trial(adapter, &link_noise_model);
         ASSERT_NE(r0, r1) << "trial " << i << ": pure dephasing must not break Z-basis anti-correlation";
     }
 }

@@ -21,6 +21,15 @@
 
 #include "logger/logger_api.hpp"
 
+// Config for both gate depolarizing models: a single raw probability p. The
+// same block shape is used per qubit array (single-qubit gates) and per node
+// (two-qubit gates); the two differ only in the maximum p each model accepts,
+// which the model constructors enforce.
+struct GateNoiseDepolarizingConfig
+{
+    float depolarizing_probability;
+};
+
 // Single-qubit depolarizing gate noise (one instance per qubit array).
 // Channel: E(rho) = (1 - p) rho + p/3 (X rho X + Y rho Y + Z rho Z)
 // Fidelity relation (Eq. 2): F = 1 - 2p/3  <=>  p = 3/2 (1 - F)

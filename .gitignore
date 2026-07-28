@@ -45,6 +45,7 @@
 /build
 /build-*/
 /dist
+/dist-update
 /Release
 /Debug
 /RelWithDebInfo

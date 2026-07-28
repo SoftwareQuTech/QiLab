@@ -16,6 +16,7 @@ class MockAdapter final : public ISimulator
     bool qubit_initialize(uint8_t qubit_address) ;
     bool single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t axis) ;
     bool single_qubit_noise(uint8_t qubit_address, float x_noise_probability, float y_noise_probability, float z_noise_probability) ;
+    bool two_qubit_depolarizing_noise(uint8_t qubit1_address, uint8_t qubit2_address, float depolarizing_probability) ;
     bool two_qubit_gate(uint8_t qubit1_address, uint8_t qubit2_address, Angle_t angle, Axis_t axis) ;
     uint8_t qubit_measure(uint8_t qubit_address, bool basis) ;
     int8_t attempt_entanglement(uint16_t fidelity, uint8_t local_qubit, uint8_t neighbour_address, bool is_initiator, uint8_t qid) ;

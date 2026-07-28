@@ -14,9 +14,13 @@ KillSignal=SIGINT
 TimeoutStopSec=20
 SendSIGKILL=yes
 
-# Externalized runtime paths
+# Externalized runtime paths. ProtectHome=true below makes $HOME unwritable, so
+# both telemetry sinks must be pointed at /var/log/qilab (see ReadWritePaths).
+# These are also the paths qilab_web_control reads to offer the files for download.
 Environment=QILAB_CONFIG_DIR=/etc/qilab
 Environment=QILAB_PROFILER_DIR=/var/log/qilab/profiler
+Environment=QILAB_DAQ_DIR=/var/log/qilab/daq
+Environment=QILAB_DAQ=1
 StandardOutput=append:/var/log/qilab/qilab.log
 StandardError=append:/var/log/qilab/qilab.log
 

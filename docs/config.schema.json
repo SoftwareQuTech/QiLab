@@ -50,6 +50,7 @@
           "description": "Optional per-operation delays in nanoseconds.",
           "$ref": "#/$defs/operation_delays"
         },
+        "two_qubit_gate_noise_model": { "$ref": "#/$defs/two_qubit_gate_noise_model" },
         "qubit_arrays": {
           "title": "Qubit arrays",
           "type": "array",
@@ -62,7 +63,6 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "single_gate_rotation": { "type": "integer", "minimum": 0, "unit": "ns" },
         "two_qubit_gate_rotation": { "type": "integer", "minimum": 0, "unit": "ns" },
         "measurement": { "type": "integer", "minimum": 0, "unit": "ns" },
         "entanglement": { "type": "integer", "minimum": 0, "unit": "ns" },
@@ -74,7 +74,7 @@
     "qubit_array": {
       "title": "Qubit array",
       "type": "object",
-      "required": ["num_qubits", "noise_model"],
+      "required": ["num_qubits", "single_gate_delay_ns", "qubit_decoherence_noise_model", "gate_noise_model"],
       "additionalProperties": false,
       "properties": {
         "num_qubits": {
@@ -82,8 +82,60 @@
           "type": "integer",
           "exclusiveMinimum": 0
         },
-        "noise_model": { "$ref": "#/$defs/qubit_noise_model" }
+        "single_gate_delay_ns": {
+          "title": "Single-qubit gate delay (ns)",
+          "description": "Duration of a single-qubit gate on this array. A qubit array property, not a node one -- e.g. communication and memory qubits differ.",
+          "type": "integer",
+          "minimum": 0,
+          "unit": "ns"
+        },
+        "qubit_decoherence_noise_model": { "$ref": "#/$defs/qubit_noise_model" },
+        "gate_noise_model": { "$ref": "#/$defs/gate_noise_model" }
       }
+    },
+    "gate_noise_model": {
+      "title": "Single-qubit gate noise model",
+      "description": "Single-qubit gate noise for this qubit array (Sec. 2 Eq. 1). Applies to single-qubit gates and pre-measurement basis rotations.",
+      "type": "object",
+      "oneOf": [
+        {
+          "title": "DEPOLARIZING",
+          "additionalProperties": false,
+          "required": ["type", "depolarizing_probability"],
+          "properties": {
+            "type": { "const": "DEPOLARIZING" },
+            "depolarizing_probability": {
+              "title": "Depolarizing probability p",
+              "description": "p for the single-qubit depolarizing channel. Maximal mixing is 0.75. Relates to gate fidelity by F = 1 - 2p/3.",
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.75
+            }
+          }
+        }
+      ]
+    },
+    "two_qubit_gate_noise_model": {
+      "title": "Two-qubit gate noise model",
+      "description": "Two-qubit gate noise for this node (Sec. 2 Eq. 4). One model per node, unlike the per-qubit-array single-qubit case. Optional; omitted means noiseless two-qubit gates. The channel is correlated across the pair.",
+      "type": "object",
+      "oneOf": [
+        {
+          "title": "DEPOLARIZING",
+          "additionalProperties": false,
+          "required": ["type", "depolarizing_probability"],
+          "properties": {
+            "type": { "const": "DEPOLARIZING" },
+            "depolarizing_probability": {
+              "title": "Depolarizing probability p",
+              "description": "p for the two-qubit depolarizing channel. Maximal mixing is 0.9375. Relates to gate fidelity by F = 1 - 4p/5.",
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.9375
+            }
+          }
+        }
+      ]
     },
     "qubit_noise_model": {
       "title": "Qubit noise model",
@@ -135,13 +187,13 @@
         },
         "qubit_noise_enabled": {
           "title": "Qubit noise enabled",
-          "description": "Enables applying qubit-in-memory noise during simulation. Defaults to true if omitted.",
+          "description": "Enables ALL per-qubit noise in the simulator: in-memory decoherence AND single-/two-qubit gate depolarizing noise. Disabling it turns off gate noise too. Defaults to true if omitted.",
           "type": "boolean",
           "default": true
         },
         "entanglement_noise_enabled": {
           "title": "Entanglement noise enabled",
-          "description": "Enables applying entanglement-channel noise during simulation. Defaults to true if omitted.",
+          "description": "Enables applying entanglement-link noise during simulation. Defaults to true if omitted.",
           "type": "boolean",
           "default": true
         }
@@ -150,7 +202,7 @@
     "entanglement_link": {
       "title": "Entanglement link",
       "type": "object",
-      "required": ["node_a", "node_b", "attempt_model", "channel_model"],
+      "required": ["node_a", "node_b", "attempt_model", "link_noise_model"],
       "additionalProperties": false,
       "properties": {
         "node_a": {
@@ -168,10 +220,10 @@
           "description": "Batching/delay/success-probability model consumed by the entanglement manager.",
           "$ref": "#/$defs/entanglement_attempt_model"
         },
-        "channel_model": {
-          "title": "Entanglement channel model",
+        "link_noise_model": {
+          "title": "Entanglement link noise model",
           "description": "Pauli-noise channel model applied by the simulator manager on successful entanglement.",
-          "$ref": "#/$defs/entanglement_channel_model"
+          "$ref": "#/$defs/entanglement_link_noise_model"
         }
       }
     },
@@ -193,8 +245,8 @@
         }
       ]
     },
-    "entanglement_channel_model": {
-      "title": "Entanglement channel model",
+    "entanglement_link_noise_model": {
+      "title": "Entanglement link noise model",
       "type": "object",
       "oneOf": [
         {

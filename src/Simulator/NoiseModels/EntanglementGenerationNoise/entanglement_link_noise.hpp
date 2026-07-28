@@ -1,7 +1,7 @@
 /*
 ** Created on: 22.07.2026
 ** Created by: Claude
-** Description: Contains the entanglement-channel noise model for the
+** Description: Contains the entanglement-link noise model for the
 **              simulator manager (QILab_Noise_Models.pdf Sec. 4.3). One
 **              instance per link (pair of nodes).
 **
@@ -17,20 +17,20 @@
 #pragma once
 #include <string>
 
-#include "Simulator/entanglement_channel_noise_interface.hpp"
+#include "Simulator/entanglement_link_noise_interface.hpp"
 #include "Simulator/pauli_channel_math.hpp"
 #include "logger/logger_api.hpp"
 
-struct EntanglementChannelBasicConfig
+struct EntanglementLinkNoiseBasicConfig
 {
     float p_depolarizing;
     float p_dephasing;
 };
 
-class EntanglementChannelModel : public EntanglementChannelNoiseInterface
+class EntanglementLinkNoiseModel : public EntanglementLinkNoiseInterface
 {
 public:
-    EntanglementChannelModel(float p_depolarizing, float p_dephasing)
+    EntanglementLinkNoiseModel(float p_depolarizing, float p_dephasing)
     {
         if (p_depolarizing < 0.0f || p_depolarizing > 1.0f)
         {
@@ -56,7 +56,7 @@ public:
                                          p_depolarizing / 3.0f, p_depolarizing / 3.0f, p_depolarizing / 3.0f);
     }
 
-    ~EntanglementChannelModel() override = default;
+    ~EntanglementLinkNoiseModel() override = default;
 
     bool is_valid() const
     {

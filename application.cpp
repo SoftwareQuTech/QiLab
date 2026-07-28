@@ -1,6 +1,7 @@
 // in a source code file
 #include <iostream>
 #include <random>
+#include <csignal>
 #include <string_view>
 #include <thread>
 #include <unordered_map>
@@ -20,9 +21,9 @@
 //Intermediaries
 #include "Simulator/SimulatorManager/simulator_manager.hpp"
 #include "Simulator/entanglement_attempt_noise_interface.hpp"
-#include "Simulator/entanglement_channel_noise_interface.hpp"
+#include "Simulator/entanglement_link_noise_interface.hpp"
 #include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_attempt_noise.hpp"
-#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_channel_noise.hpp"
+#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_link_noise.hpp"
 #include "Simulator/link_key.hpp"
 
 //Data transmission
@@ -42,7 +43,9 @@
 
 //#define RUN_MOCKED_TRANSMISSION
 
-bool abort_sim = false;
+// Written from a signal handler, so it must be a lock-free, async-signal-safe
+// type rather than a plain bool.
+volatile std::sig_atomic_t abort_sim = 0;
 
 void print_startup_banner(const std::string& version) {
     std::cout << "\n"
@@ -55,7 +58,7 @@ void print_startup_banner(const std::string& version) {
 
 void signal_callback_handler(int signum) {
    // Terminate program
-   abort_sim = true;
+   abort_sim = 1;
 }
 
 int main()
@@ -119,6 +122,13 @@ int main()
     std::vector<int16_t> node_ids;
     for (size_t i = 0; i < config->nodes.size(); ++i) {
         int16_t node_id = sim_manager->register_node(config->nodes[i]);
+        if (node_id < 0) {
+            // A negative id is a failure code, not an id. Pushing it would make
+            // it wrap to a bogus uint16_t and silently mis-key entanglement links.
+            LOG_ERROR("Failed to register node '" + config->nodes[i].name + "' (code " +
+                      std::to_string(node_id) + "), exiting");
+            return 1;
+        }
         node_ids.push_back(node_id);
         LOG_INFO("Registered node " + std::to_string(i) + " with ID " +
                  std::to_string(node_id) + " (" + std::to_string(sim_manager->get_registered_qubits()) + " qubits)");
@@ -135,7 +145,7 @@ int main()
     }
 
     std::unordered_map<uint16_t, std::unique_ptr<EntanglementAttemptNoiseInterface>> attempt_models;
-    std::unordered_map<uint16_t, std::unique_ptr<EntanglementChannelNoiseInterface>> channel_models;
+    std::unordered_map<uint16_t, std::unique_ptr<EntanglementLinkNoiseInterface>> link_noise_models;
     for (const auto& link : config->entanglement_links) {
         const uint16_t node_id_a = name_to_node_id.at(link.node_a);
         const uint16_t node_id_b = name_to_node_id.at(link.node_b);
@@ -145,12 +155,12 @@ int main()
             attempt_models[link_key] = std::make_unique<EntanglementAttemptModel>(
                 basic->attempt_duration_ns, basic->batch_size, basic->p_success, basic->rng_seed);
         }
-        if (const auto* basic = std::get_if<EntanglementChannelBasicConfig>(&link.channel_model.config_data)) {
-            channel_models[link_key] = std::make_unique<EntanglementChannelModel>(basic->p_depolarizing, basic->p_dephasing);
+        if (const auto* basic = std::get_if<EntanglementLinkNoiseBasicConfig>(&link.link_noise_model.config_data)) {
+            link_noise_models[link_key] = std::make_unique<EntanglementLinkNoiseModel>(basic->p_depolarizing, basic->p_dephasing);
         }
     }
 
-    sim_manager->configure_entanglement_links(std::move(channel_models));
+    sim_manager->configure_entanglement_links(std::move(link_noise_models));
 
     SimulatorRunner sim(std::move(sim_manager), broker);
 
@@ -208,25 +218,31 @@ int main()
         return transmission_node.on_run(TRANSMISSION_CORE);
     });
 
-    PROF_SAVE_DATA("test_trace");
-
     while(!abort_sim)
     {
         //do nothing and wait for abort signal
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        //abort_sim = true;
+        // Push buffered DAQ records to disk from this non-real-time thread. Keeps
+        // the JSONL readable by external consumers WHILE the run is in progress
+        // (records otherwise sit in a 1 MiB buffer until it spills) and bounds
+        // loss to one tick if the process is killed rather than signalled.
+        DAQ_FLUSH();
     }
 
     sim.on_abort();
     simulator_thread.join();
-    
+
     ent_runner.on_abort();
     entanglement_thread.join();
 
-    transmission_node.on_abort();    
+    transmission_node.on_abort();
     thread_node_a.join();
 
-    PROF_SAVE_DATA("test_trace");
+    // Dump telemetry only after every thread has joined: each runner merges its
+    // thread-local profiler data into the global container on its way out, so
+    // dumping earlier would write a partial (or empty) file.
+    PROF_SAVE_DATA("profile");
+    DAQ_FLUSH();
     LOG_INFO("Executed the simulation");
 
     return 0;

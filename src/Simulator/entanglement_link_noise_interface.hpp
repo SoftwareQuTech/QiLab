@@ -1,7 +1,7 @@
 /*
 ** Created on: 22.07.2026
 ** Created by: Claude
-** Description: Contains the interface to entanglement-channel noise models
+** Description: Contains the interface to entanglement-link noise models
 **              (QILab_Noise_Models.pdf Sec. 4.3) for the simulator manager.
 **              The model is attached per link (pair of nodes) and covers the
 **              Pauli noise channel applied to the qubit pair once an
@@ -17,8 +17,8 @@
 // NOTE: this is a SINGLE-qubit channel - it is applied to only one of the two
 // qubits forming the entangled pair (the initiator, i.e. the lower node id).
 
-struct EntanglementChannelNoiseInterface
+struct EntanglementLinkNoiseInterface
 {
-    virtual ~EntanglementChannelNoiseInterface() = default;
+    virtual ~EntanglementLinkNoiseInterface() = default;
     virtual PauliChannelWeights get_pauli_channel_weights() = 0; // Combined dephasing+depolarizing channel (Eq. 17)
 };

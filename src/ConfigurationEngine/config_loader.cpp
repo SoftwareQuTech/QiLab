@@ -20,11 +20,13 @@ constexpr const char* kTypeKey = "type";
 constexpr const char* kNumQubitsKey = "num_qubits";
 constexpr const char* kNameKey = "name";
 constexpr const char* kNodeTypeKey = "node_type";
-constexpr const char* kNoiseModelKey = "noise_model";
+constexpr const char* kQubitDecoherenceNoiseModelKey = "qubit_decoherence_noise_model";
+constexpr const char* kGateNoiseModelKey = "gate_noise_model";
+constexpr const char* kSingleGateDelayNsKey = "single_gate_delay_ns";
+constexpr const char* kTwoQubitGateNoiseModelKey = "two_qubit_gate_noise_model";
 constexpr const char* kQubitArraysKey = "qubit_arrays";
 constexpr const char* kNodesKey = "nodes";
 constexpr const char* kQuantumOperationsDelays = "quantum_operations_delay_ns";
-constexpr const char* kSingleGateRotationKey = "single_gate_rotation";
 constexpr const char* kTwoQubitGateRotationKey = "two_qubit_gate_rotation";
 constexpr const char* kMeasurementKey = "measurement";
 constexpr const char* kEntanglementKey = "entanglement";
@@ -35,7 +37,7 @@ constexpr const char* kEntanglementLinksKey = "entanglement_links";
 constexpr const char* kNodeAKey = "node_a";
 constexpr const char* kNodeBKey = "node_b";
 constexpr const char* kAttemptModelKey = "attempt_model";
-constexpr const char* kChannelModelKey = "channel_model";
+constexpr const char* kLinkNoiseModelKey = "link_noise_model";
 constexpr const char* kSystemKey = "system";
 constexpr const char* kTransmissionCycleTimeKey = "transmission_cycle_time_us";
 constexpr const char* kQubitNoiseEnabledKey = "qubit_noise_enabled";
@@ -61,6 +63,11 @@ int count_leading_spaces(const std::string& line) noexcept
 QubitNoiseModelConfig make_default_qubit_noise_model() noexcept
 {
     return QubitNoiseModelConfig{.config_data = QubitNoiseBasicConfig{.t2_value = kDefaultT2ValueNs}};
+}
+
+GateNoiseModelConfig make_default_gate_noise_model() noexcept
+{
+    return GateNoiseModelConfig{.config_data = GateNoiseDepolarizingConfig{.depolarizing_probability = 0.0f}};
 }
 
 bool set_parse_error(std::string& error,
@@ -175,12 +182,22 @@ bool parse_inline_num_qubits(const std::string& inline_content,
     return true;
 }
 
+// Which of the qubit array's required keys have been seen so far. Grouped into
+// a struct because the two parse entry points (inline item and nested field)
+// both have to thread every flag through.
+struct QubitArraySeenKeys
+{
+    bool num_qubits = false;
+    bool decoherence_noise_model = false;
+    bool gate_noise_model = false;
+    bool single_gate_delay_ns = false;
+};
+
 bool parse_qubit_array_field(const std::vector<ParsedLine>& lines,
                              std::size_t& index,
                              int item_indent,
                              QubitArrayConfig& array_config,
-                             bool& has_num_qubits,
-                             bool& has_noise_model,
+                             QubitArraySeenKeys& seen,
                              std::string& error) noexcept
 {
     const auto key_value = config_parse::split_key_value(lines[index].content);
@@ -196,16 +213,30 @@ bool parse_qubit_array_field(const std::vector<ParsedLine>& lines,
             return set_parse_error(error, "qubit_array", "Invalid num_qubits value '" + key_value->second + "'");
         }
 
-        has_num_qubits = true;
+        seen.num_qubits = true;
         ++index;
         return true;
     }
 
-    if (key_value->first == kNoiseModelKey)
+    if (key_value->first == kSingleGateDelayNsKey)
+    {
+        if (!config_parse::parse_non_negative_u64(key_value->second, array_config.single_gate_delay_ns))
+        {
+            return set_parse_error(error,
+                                   "qubit_array",
+                                   "Invalid single_gate_delay_ns value '" + key_value->second + "'");
+        }
+
+        seen.single_gate_delay_ns = true;
+        ++index;
+        return true;
+    }
+
+    if (key_value->first == kQubitDecoherenceNoiseModelKey)
     {
         if (!key_value->second.empty())
         {
-            return set_parse_error(error, "qubit_array", "noise_model must be a nested map");
+            return set_parse_error(error, "qubit_array", "qubit_decoherence_noise_model must be a nested map");
         }
 
         ++index;
@@ -213,13 +244,35 @@ bool parse_qubit_array_field(const std::vector<ParsedLine>& lines,
                                index,
                                item_indent + kIndentStep,
                                config_parse::qubit_model_parsers(),
-                               array_config.noise_model.config_data,
+                               array_config.qubit_decoherence_noise_model.config_data,
                                error))
         {
             return false;
         }
 
-        has_noise_model = true;
+        seen.decoherence_noise_model = true;
+        return true;
+    }
+
+    if (key_value->first == kGateNoiseModelKey)
+    {
+        if (!key_value->second.empty())
+        {
+            return set_parse_error(error, "qubit_array", "gate_noise_model must be a nested map");
+        }
+
+        ++index;
+        if (!parse_model_block(lines,
+                               index,
+                               item_indent + kIndentStep,
+                               config_parse::single_qubit_gate_noise_model_parsers(),
+                               array_config.gate_noise_model.config_data,
+                               error))
+        {
+            return false;
+        }
+
+        seen.gate_noise_model = true;
         return true;
     }
 
@@ -246,8 +299,7 @@ bool parse_single_qubit_array_item(const std::vector<ParsedLine>& lines,
     const std::string inline_content = config_parse::trim(lines[index].content.substr(1));
     ++index;
 
-    bool has_num_qubits = false;
-    bool has_noise_model = false;
+    QubitArraySeenKeys seen;
 
     if (!inline_content.empty())
     {
@@ -266,26 +318,56 @@ bool parse_single_qubit_array_item(const std::vector<ParsedLine>& lines,
                                        "Invalid num_qubits value '" + inline_kv->second + "'");
             }
 
-            has_num_qubits = true;
+            seen.num_qubits = true;
         }
-        else if (inline_kv->first == kNoiseModelKey)
+        else if (inline_kv->first == kSingleGateDelayNsKey)
+        {
+            if (!config_parse::parse_non_negative_u64(inline_kv->second, array_config.single_gate_delay_ns))
+            {
+                return set_parse_error(error,
+                                       "qubit_array",
+                                       "Invalid single_gate_delay_ns value '" + inline_kv->second + "'");
+            }
+
+            seen.single_gate_delay_ns = true;
+        }
+        else if (inline_kv->first == kQubitDecoherenceNoiseModelKey)
         {
             if (!inline_kv->second.empty())
             {
-                return set_parse_error(error, "qubit_array", "noise_model must be a nested map");
+                return set_parse_error(error, "qubit_array", "qubit_decoherence_noise_model must be a nested map");
             }
 
             if (!parse_model_block(lines,
                                    index,
                                    item_indent + kIndentStep,
                                    config_parse::qubit_model_parsers(),
-                                   array_config.noise_model.config_data,
+                                   array_config.qubit_decoherence_noise_model.config_data,
                                    error))
             {
                 return false;
             }
 
-            has_noise_model = true;
+            seen.decoherence_noise_model = true;
+        }
+        else if (inline_kv->first == kGateNoiseModelKey)
+        {
+            if (!inline_kv->second.empty())
+            {
+                return set_parse_error(error, "qubit_array", "gate_noise_model must be a nested map");
+            }
+
+            if (!parse_model_block(lines,
+                                   index,
+                                   item_indent + kIndentStep,
+                                   config_parse::single_qubit_gate_noise_model_parsers(),
+                                   array_config.gate_noise_model.config_data,
+                                   error))
+            {
+                return false;
+            }
+
+            seen.gate_noise_model = true;
         }
         else
         {
@@ -302,20 +384,30 @@ bool parse_single_qubit_array_item(const std::vector<ParsedLine>& lines,
             return set_parse_error_near(error, "qubit_array", "Invalid indentation", lines[index].content);
         }
 
-        if (!parse_qubit_array_field(lines, index, item_indent, array_config, has_num_qubits, has_noise_model, error))
+        if (!parse_qubit_array_field(lines, index, item_indent, array_config, seen, error))
         {
             return false;
         }
     }
 
-    if (!has_num_qubits)
+    if (!seen.num_qubits)
     {
         return set_parse_error(error, "qubit_array", "Missing required key 'num_qubits'");
     }
 
-    if (!has_noise_model)
+    if (!seen.decoherence_noise_model)
     {
-        return set_parse_error(error, "qubit_array", "Missing required key 'noise_model'");
+        return set_parse_error(error, "qubit_array", "Missing required key 'qubit_decoherence_noise_model'");
+    }
+
+    if (!seen.gate_noise_model)
+    {
+        return set_parse_error(error, "qubit_array", "Missing required key 'gate_noise_model'");
+    }
+
+    if (!seen.single_gate_delay_ns)
+    {
+        return set_parse_error(error, "qubit_array", "Missing required key 'single_gate_delay_ns'");
     }
 
     return true;
@@ -331,7 +423,9 @@ bool parse_qubit_arrays(const std::vector<ParsedLine>& lines,
     {
         QubitArrayConfig array_config{
             .num_qubits = 0,
-            .noise_model = make_default_qubit_noise_model()};
+            .qubit_decoherence_noise_model = make_default_qubit_noise_model(),
+            .single_gate_delay_ns = 0,
+            .gate_noise_model = make_default_gate_noise_model()};
 
         if (!parse_single_qubit_array_item(lines, index, parent_indent, array_config, error))
         {
@@ -382,11 +476,7 @@ bool parse_quantum_operation_delays(const std::vector<ParsedLine>& lines,
                                    "Invalid value for '" + key_value->first + "': '" + key_value->second + "'");
         }
 
-        if (key_value->first == kSingleGateRotationKey)
-        {
-            delays.single_gate_delay = parsed_delay;
-        }
-        else if (key_value->first == kTwoQubitGateRotationKey)
+        if (key_value->first == kTwoQubitGateRotationKey)
         {
             delays.two_gate_delay = parsed_delay;
         }
@@ -519,6 +609,27 @@ bool parse_node_field(const std::vector<ParsedLine>& lines,
 
         node_config.node_type = *parsed_type;
         ++index;
+        return true;
+    }
+
+    if (key_value->first == kTwoQubitGateNoiseModelKey)
+    {
+        if (!key_value->second.empty())
+        {
+            return set_parse_error(error, "node", "two_qubit_gate_noise_model must be a nested map");
+        }
+
+        ++index;
+        if (!parse_model_block(lines,
+                               index,
+                               item_indent + kIndentStep,
+                               config_parse::two_qubit_gate_noise_model_parsers(),
+                               node_config.two_qubit_gate_noise_model.config_data,
+                               error))
+        {
+            return false;
+        }
+
         return true;
     }
 
@@ -674,7 +785,8 @@ bool parse_nodes(const std::vector<ParsedLine>& lines,
             .num_qubits = 0,
             .name = "",
             .node_type = QuantumNodeType::GENERIC,
-            .qubit_arrays = {}};
+            .qubit_arrays = {},
+            .two_qubit_gate_noise_model = make_default_gate_noise_model()};
 
         if (!parse_single_node_item(lines, index, node_config, error))
         {
@@ -694,7 +806,7 @@ bool parse_entanglement_link_field(const std::vector<ParsedLine>& lines,
                                    bool& has_node_a,
                                    bool& has_node_b,
                                    bool& has_attempt_model,
-                                   bool& has_channel_model,
+                                   bool& has_link_noise_model,
                                    std::string& error) noexcept
 {
     const auto key_value = config_parse::split_key_value(lines[index].content);
@@ -751,25 +863,25 @@ bool parse_entanglement_link_field(const std::vector<ParsedLine>& lines,
         return true;
     }
 
-    if (key_value->first == kChannelModelKey)
+    if (key_value->first == kLinkNoiseModelKey)
     {
         if (!key_value->second.empty())
         {
-            return set_parse_error(error, "entanglement_link", "channel_model must be a nested map");
+            return set_parse_error(error, "entanglement_link", "link_noise_model must be a nested map");
         }
 
         ++index;
         if (!parse_model_block(lines,
                                index,
                                item_indent + kIndentStep,
-                               config_parse::entanglement_channel_model_parsers(),
-                               link_config.channel_model.config_data,
+                               config_parse::entanglement_link_noise_model_parsers(),
+                               link_config.link_noise_model.config_data,
                                error))
         {
             return false;
         }
 
-        has_channel_model = true;
+        has_link_noise_model = true;
         return true;
     }
 
@@ -799,7 +911,7 @@ bool parse_single_entanglement_link_item(const std::vector<ParsedLine>& lines,
     bool has_node_a = false;
     bool has_node_b = false;
     bool has_attempt_model = false;
-    bool has_channel_model = false;
+    bool has_link_noise_model = false;
 
     if (!inline_content.empty())
     {
@@ -851,7 +963,7 @@ bool parse_single_entanglement_link_item(const std::vector<ParsedLine>& lines,
                                            has_node_a,
                                            has_node_b,
                                            has_attempt_model,
-                                           has_channel_model,
+                                           has_link_noise_model,
                                            error))
         {
             return false;
@@ -873,9 +985,9 @@ bool parse_single_entanglement_link_item(const std::vector<ParsedLine>& lines,
         return set_parse_error(error, "entanglement_link", "Missing required key 'attempt_model'");
     }
 
-    if (!has_channel_model)
+    if (!has_link_noise_model)
     {
-        return set_parse_error(error, "entanglement_link", "Missing required key 'channel_model'");
+        return set_parse_error(error, "entanglement_link", "Missing required key 'link_noise_model'");
     }
 
     return true;
@@ -967,10 +1079,14 @@ bool create_default_config() noexcept {
         return false;
     }
 
-    config_file << "# QILab Node Configuration\n";
-    config_file << "# This file defines the quantum network nodes for simulation\n";
+    // Convention in the generated file: '##' marks explanatory prose, a
+    // single '#' marks commented-out CONFIG placed immediately before the
+    // line's own YAML indentation. Uncommenting a block is therefore exactly
+    // "delete the first '#'" on each single-'#' line.
+    config_file << "## QILab Node Configuration\n";
+    config_file << "## This file defines the quantum network nodes for simulation\n";
     config_file << "\n";
-    config_file << "# QiLab System Configuration\n";
+    config_file << "## QiLab System Configuration\n";
     config_file << "system:\n";
     config_file << "  transmission_cycle_time_us: 5\n";
     config_file << "  qubit_noise_enabled: true\n";
@@ -978,20 +1094,67 @@ bool create_default_config() noexcept {
     config_file << "\n";
     config_file << "nodes:\n";
     config_file << "  - name: node0\n";
+    config_file << "    node_type: GENERIC\n";
+    config_file << "    two_qubit_gate_noise_model:\n";
+    config_file << "      type: DEPOLARIZING\n";
+    config_file << "      depolarizing_probability: 0.0\n";
     config_file << "    quantum_operations_delay_ns:\n";
-    config_file << "      single_gate_rotation: 0\n";
     config_file << "      two_qubit_gate_rotation: 0\n";
     config_file << "      measurement: 0\n";
     config_file << "      entanglement: 0\n";
     config_file << "      qubit_move: 0\n";
     config_file << "      qubit_swap: 0\n";
     config_file << "      qubit_init: 0\n";
-    config_file << "    node_type: GENERIC\n";
     config_file << "    qubit_arrays:\n";
     config_file << "      - num_qubits: 10\n";
-    config_file << "        noise_model:\n";
+    config_file << "        single_gate_delay_ns: 0\n";
+    config_file << "        qubit_decoherence_noise_model:\n";
     config_file << "          type: BASIC\n";
     config_file << "          t2_value: 1000\n";
+    config_file << "        gate_noise_model:\n";
+    config_file << "          type: DEPOLARIZING\n";
+    config_file << "          depolarizing_probability: 0.0\n";
+    config_file << "\n";
+    // Entanglement needs two nodes, so node1 and the link that joins it are
+    // emitted commented out: uncomment BOTH to get a working entangled setup.
+    config_file << "## Uncomment node1 AND entanglement_links below together to run a\n";
+    config_file << "## two-node network with one entangled link.\n";
+    config_file << "#  - name: node1\n";
+    config_file << "#    node_type: GENERIC\n";
+    config_file << "#    two_qubit_gate_noise_model:\n";
+    config_file << "#      type: DEPOLARIZING\n";
+    config_file << "#      depolarizing_probability: 0.0\n";
+    config_file << "#    quantum_operations_delay_ns:\n";
+    config_file << "#      two_qubit_gate_rotation: 0\n";
+    config_file << "#      measurement: 0\n";
+    config_file << "#      entanglement: 0\n";
+    config_file << "#      qubit_move: 0\n";
+    config_file << "#      qubit_swap: 0\n";
+    config_file << "#      qubit_init: 0\n";
+    config_file << "#    qubit_arrays:\n";
+    config_file << "#      - num_qubits: 10\n";
+    config_file << "#        single_gate_delay_ns: 0\n";
+    config_file << "#        qubit_decoherence_noise_model:\n";
+    config_file << "#          type: BASIC\n";
+    config_file << "#          t2_value: 1000\n";
+    config_file << "#        gate_noise_model:\n";
+    config_file << "#          type: DEPOLARIZING\n";
+    config_file << "#          depolarizing_probability: 0.0\n";
+    config_file << "\n";
+    config_file << "## One entry per physical link, keyed by node names above.\n";
+    config_file << "#entanglement_links:\n";
+    config_file << "#  - node_a: node0\n";
+    config_file << "#    node_b: node1\n";
+    config_file << "#    attempt_model:\n";
+    config_file << "#      type: BASIC\n";
+    config_file << "#      attempt_duration_ns: 1000\n";
+    config_file << "#      batch_size: 100\n";
+    config_file << "#      p_success: 0.5\n";
+    config_file << "#      rng_seed: 42\n";
+    config_file << "#    link_noise_model:\n";
+    config_file << "#      type: BASIC\n";
+    config_file << "#      p_depolarizing: 0.0\n";
+    config_file << "#      p_dephasing: 0.0\n";
 
     config_file.close();
     LOG_INFO("Created default config file at: " + config_path);

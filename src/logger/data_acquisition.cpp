@@ -35,9 +35,11 @@ void append_number(std::string &out, double value)
     out.append(buf, r.ptr);
 }
 
-// Absolute paths (e.g. from tests) are honored as-is; anything else lands in
-// ~/.qilab/logs/ next to the profiler output, so all instrument data lives in
-// one place.
+// Absolute paths (e.g. from tests) are honored as-is; anything else resolves
+// through the same three tiers the profiler uses (see
+// resolve_profiler_base_path in profiler.cpp), so both sinks can be relocated
+// off $HOME. That matters in the deployed service, which runs with systemd's
+// ProtectHome=true and only grants write access to /var/log/qilab.
 std::string resolve_daq_path(const std::string &base_path)
 {
     namespace fs = std::filesystem;
@@ -45,6 +47,16 @@ std::string resolve_daq_path(const std::string &base_path)
     fs::path base = base_path.empty() ? fs::path("data_acquisition.jsonl") : fs::path(base_path);
     if (base.is_absolute()) {
         return base.string();
+    }
+
+    const char *explicit_path = std::getenv("QILAB_DAQ_PATH");
+    if (explicit_path && explicit_path[0] != '\0') {
+        return std::string(explicit_path);
+    }
+
+    const char *daq_dir = std::getenv("QILAB_DAQ_DIR");
+    if (daq_dir && daq_dir[0] != '\0') {
+        return (fs::path(daq_dir) / base).string();
     }
 
     const char *home = std::getenv("HOME");

@@ -4,6 +4,7 @@
 #include "DataTypes/commands.hpp"
 #include "utils/thread_utils.hpp"
 #include "logger/logger_api.hpp"
+#include "logger/profiler_api.hpp"
 
 EntanglementRunner::EntanglementRunner(std::shared_ptr<MessageBroker> mb,
                                        std::unordered_map<uint16_t, std::unique_ptr<EntanglementAttemptNoiseInterface>> attempt_models)
@@ -72,8 +73,9 @@ int EntanglementRunner::on_run(int core_id)
         }
 
         entanglement_manager->update_requests();
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::this_thread::sleep_for(std::chrono::microseconds(10));
     }
+    PROF_THREAD_FLUSH();
     LOG_INFO("Ending Entanglement Runner.");
     return 0;
 }
