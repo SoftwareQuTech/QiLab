@@ -5,6 +5,46 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2]
+
+### Fixed
+- `ThreadSafeRingBuffer::push()`/`pop()` touched the slot payload *before*
+  claiming it, so two concurrent producers could both write `buffer[current]`:
+  the second write destroyed the first producer's message, the CAS winner
+  published the *other* producer's message, and the CAS loser then moved that
+  same message back out of the already-published slot. Consumers could observe
+  a queue entry whose `transport` was null, messages were silently dropped, and
+  a producer and the consumer could touch the same `unique_ptr` concurrently
+  (double free / use-after-free). This affected every `MessageBroker` queue
+  with more than one producer -- `sim_commands_` (written by the transmission
+  *and* entanglement runners) and `cmd_responses_` (written by the simulator
+  *and* entanglement runners). The buffer is now a Vyukov-style bounded MPMC
+  queue: a thread claims a ticket before it touches the payload and publishes
+  with a per-slot sequence counter, so a slot is only ever written by its
+  owner. Usable capacity is now the full `Size` (256 per queue) instead of
+  `Size - 1`, and a rejected `push()` leaves the item with the caller.
+- `MessageBrokerTest.ConcurrentCommandProducers` and
+  `ThreadSafeRingBufferThreadTest.*` only compared push counts against pop
+  counts, which the bug above preserved exactly -- so the corruption showed up
+  in CI as an occasional ASan leak report or a hung job rather than a
+  reproducible failure. The concurrency tests now verify the payloads (every
+  message arrives exactly once, non-null, matching its id), and every
+  data-dependent spin loop has a deadline so a regression fails the test
+  instead of hanging the pipeline.
+
+### CI
+- The `coverage` job failed with `genhtml: ERROR: cannot read
+  .../_deps/stim-src/...`: stim is added via `add_subdirectory()`, so its
+  objects land under `build/build/_deps/` where the `build/_deps/` artifact
+  exclude never matched them. Its `.gcda` files reached the coverage job while
+  its sources did not, and the `lcov --remove` filter had no pattern for them.
+  `_deps` is now excluded from both the artifacts and the tracefile, and
+  lcov/genhtml run with `--ignore-errors source` so a missing third-party
+  source degrades to a warning.
+- Dropped the `coverage_report`/`build/coverage.xml` artifact declaration; no
+  job ever generated that file, so it only produced upload errors. The line
+  rate still reaches GitLab through the job's `coverage:` regex.
+
 ## [0.4.1]
 
 ### Added

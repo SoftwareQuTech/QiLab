@@ -8,6 +8,23 @@
 
 #include "MessageBroker/thread_safe_ring_buffer.hpp"
 
+namespace {
+
+/// Upper bound for the spin loops below. These tests wait for items to travel
+/// between threads; if the queue ever loses one, the loop must give up so the
+/// test fails on its assertions instead of spinning forever and hanging CI.
+constexpr std::chrono::seconds SPIN_TIMEOUT{30};
+
+/// Per-thread spin budget. Generous enough never to trip on a healthy queue.
+struct SpinDeadline {
+    std::chrono::steady_clock::time_point start{std::chrono::steady_clock::now()};
+    bool expired() const noexcept {
+        return std::chrono::steady_clock::now() - start > SPIN_TIMEOUT;
+    }
+};
+
+} // namespace
+
 // Test: Basic push and pop
 TEST(ThreadSafeRingBufferBasicTest, PushAndPop) {
     ThreadSafeRingBuffer<int, 8> buffer;
@@ -39,23 +56,41 @@ TEST(ThreadSafeRingBufferBasicTest, PopFromEmpty) {
 // Test: Full buffer behavior
 TEST(ThreadSafeRingBufferBasicTest, PushToFull) {
     ThreadSafeRingBuffer<int, 4> buffer;
-    
-    // Fill the buffer (Size - 1 items due to ring buffer design)
+
+    // Per-slot sequence numbers make all Size slots usable (no sacrificed slot).
     int v1 = 1, v2 = 2, v3 = 3, v4 = 4;
     EXPECT_TRUE(buffer.push(std::move(v1)));
     EXPECT_TRUE(buffer.push(std::move(v2)));
     EXPECT_TRUE(buffer.push(std::move(v3)));
-    
+    EXPECT_TRUE(buffer.push(std::move(v4)));
+
     // Buffer should be full now
-    EXPECT_FALSE(buffer.push(std::move(v4)));
-    
+    int v5 = 5;
+    EXPECT_FALSE(buffer.push(std::move(v5)));
+
     // Pop one item
     int value;
     EXPECT_TRUE(buffer.pop(value));
-    
+    EXPECT_EQ(value, 1);
+
     // Now we can push again
-    int v5 = 4;
-    EXPECT_TRUE(buffer.push(std::move(v5)));
+    int v6 = 6;
+    EXPECT_TRUE(buffer.push(std::move(v6)));
+}
+
+// Test: A rejected push must leave the item with the caller, not consume it.
+// The caller owns the payload (a unique_ptr in production) and needs it back to
+// retry or to drop it deliberately.
+TEST(ThreadSafeRingBufferBasicTest, RejectedPushDoesNotStealItem) {
+    ThreadSafeRingBuffer<std::unique_ptr<int>, 2> buffer;
+
+    EXPECT_TRUE(buffer.push(std::make_unique<int>(1)));
+    EXPECT_TRUE(buffer.push(std::make_unique<int>(2)));
+
+    auto rejected = std::make_unique<int>(3);
+    EXPECT_FALSE(buffer.push(std::move(rejected)));
+    ASSERT_NE(rejected.get(), nullptr) << "full push must not take ownership";
+    EXPECT_EQ(*rejected, 3);
 }
 
 // Test: FIFO order guarantee
@@ -116,9 +151,10 @@ TEST(ThreadSafeRingBufferThreadTest, SingleProducerSingleConsumer) {
     
     // Producer thread
     std::thread producer([&buffer, NUM_ITEMS]() {
+        SpinDeadline deadline;
         for (int i = 0; i < NUM_ITEMS; ++i) {
             int val = i;
-            while (!buffer.push(std::move(val))) {
+            while (!buffer.push(std::move(val)) && !deadline.expired()) {
                 val = i;  // Restore value if push failed
                 std::this_thread::yield();
             }
@@ -127,8 +163,9 @@ TEST(ThreadSafeRingBufferThreadTest, SingleProducerSingleConsumer) {
     
     // Consumer thread
     std::thread consumer([&buffer, &consumed_count, &consumed_values, &values_mutex, NUM_ITEMS]() {
+        SpinDeadline deadline;
         int value;
-        while (consumed_count < NUM_ITEMS) {
+        while (consumed_count < NUM_ITEMS && !deadline.expired()) {
             if (buffer.pop(value)) {
                 std::lock_guard<std::mutex> lock(values_mutex);
                 consumed_values.push_back(value);
@@ -166,10 +203,11 @@ TEST(ThreadSafeRingBufferThreadTest, MultipleProducersSingleConsumer) {
     std::vector<std::thread> producers;
     for (int p = 0; p < NUM_PRODUCERS; ++p) {
         producers.emplace_back([&buffer, p, ITEMS_PER_PRODUCER]() {
+            SpinDeadline deadline;
             int base = p * ITEMS_PER_PRODUCER;
             for (int i = 0; i < ITEMS_PER_PRODUCER; ++i) {
                 int value = base + i;
-                while (!buffer.push(std::move(value))) {
+                while (!buffer.push(std::move(value)) && !deadline.expired()) {
                     value = base + i;  // Restore if failed
                     std::this_thread::yield();
                 }
@@ -179,8 +217,9 @@ TEST(ThreadSafeRingBufferThreadTest, MultipleProducersSingleConsumer) {
     
     // Consumer thread
     std::thread consumer([&]() {
+        SpinDeadline deadline;
         int value;
-        while (consumed_count < TOTAL_ITEMS) {
+        while (consumed_count < TOTAL_ITEMS && !deadline.expired()) {
             if (buffer.pop(value)) {
                 std::lock_guard<std::mutex> lock(consumed_mutex);
                 consumed_values.push_back(value);
@@ -203,6 +242,78 @@ TEST(ThreadSafeRingBufferThreadTest, MultipleProducersSingleConsumer) {
 
 }
 
+// Test: Concurrent producers must neither lose, duplicate nor corrupt payloads.
+//
+// Regression test: an earlier implementation wrote the payload into the slot
+// *before* claiming it with the CAS, so two producers racing on the same slot
+// destroyed one message, published the other producer's message, and then the
+// CAS loser moved that same message back out of the already-published slot.
+// Symptoms were empty (null) payloads reaching consumers, leaked/dropped
+// commands, and producer/consumer races on the same unique_ptr. Counting pushes
+// against pops cannot see any of that -- the payloads have to be verified.
+TEST(ThreadSafeRingBufferThreadTest, ConcurrentProducersPreservePayloads) {
+    // A move-only payload that also carries its own identity, so a stolen or
+    // overwritten item is detectable rather than silently plausible.
+    struct Message {
+        std::unique_ptr<int> payload;
+        int id{-1};
+    };
+
+    const int NUM_PRODUCERS = 4;
+    const int ITEMS_PER_PRODUCER = 60;
+    const int TOTAL_ITEMS = NUM_PRODUCERS * ITEMS_PER_PRODUCER; // fits in 256
+
+    ThreadSafeRingBuffer<Message, 256> buffer;
+    std::atomic<int> pushed{0};
+
+    std::vector<std::thread> producers;
+    for (int p = 0; p < NUM_PRODUCERS; ++p) {
+        producers.emplace_back([&, p]() {
+            for (int i = 0; i < ITEMS_PER_PRODUCER; ++i) {
+                Message msg;
+                msg.id = p * ITEMS_PER_PRODUCER + i;
+                msg.payload = std::make_unique<int>(msg.id);
+                if (buffer.push(std::move(msg))) pushed++;
+            }
+        });
+    }
+    for (auto& t : producers) {
+        t.join();
+    }
+
+    // Everything fits in the buffer, so nothing may be rejected.
+    ASSERT_EQ(pushed, TOTAL_ITEMS);
+
+    std::vector<int> times_seen(TOTAL_ITEMS, 0);
+    int popped = 0;
+    int empty_payloads = 0;
+    int mismatched_payloads = 0;
+
+    Message out;
+    while (buffer.pop(out)) {
+        ++popped;
+        if (!out.payload) {
+            ++empty_payloads;
+        } else {
+            if (*out.payload != out.id) ++mismatched_payloads;
+            if (out.id >= 0 && out.id < TOTAL_ITEMS) times_seen[out.id]++;
+        }
+        out.payload.reset();
+    }
+
+    EXPECT_EQ(popped, TOTAL_ITEMS);
+    EXPECT_EQ(empty_payloads, 0) << "a slot was published without its payload";
+    EXPECT_EQ(mismatched_payloads, 0) << "a slot was published with another item's payload";
+
+    int missing = 0, duplicated = 0;
+    for (int id = 0; id < TOTAL_ITEMS; ++id) {
+        if (times_seen[id] == 0) ++missing;
+        else if (times_seen[id] > 1) ++duplicated;
+    }
+    EXPECT_EQ(missing, 0) << "producer lost messages";
+    EXPECT_EQ(duplicated, 0) << "a message was delivered more than once";
+}
+
 // Test: Single producer, multiple consumers
 TEST(ThreadSafeRingBufferThreadTest, SingleProducerMultipleConsumers) {
     ThreadSafeRingBuffer<int, 128> buffer;
@@ -214,9 +325,10 @@ TEST(ThreadSafeRingBufferThreadTest, SingleProducerMultipleConsumers) {
     
     // Producer thread
     std::thread producer([&]() {
+        SpinDeadline deadline;
         for (int i = 0; i < TOTAL_ITEMS; ++i) {
             int val = i;
-            while (!buffer.push(std::move(val))) {
+            while (!buffer.push(std::move(val)) && !deadline.expired()) {
                 val = i;
                 std::this_thread::yield();
             }
@@ -227,8 +339,9 @@ TEST(ThreadSafeRingBufferThreadTest, SingleProducerMultipleConsumers) {
     std::vector<std::thread> consumers;
     for (int c = 0; c < NUM_CONSUMERS; ++c) {
         consumers.emplace_back([&, c]() {
+            SpinDeadline deadline;
             int value;
-            while (consumed_count < TOTAL_ITEMS) {
+            while (consumed_count < TOTAL_ITEMS && !deadline.expired()) {
                 if (buffer.pop(value)) {
                     per_consumer_count[c]++;
                     consumed_count++;
@@ -264,9 +377,10 @@ TEST(ThreadSafeRingBufferStressTest, RapidOperations) {
     
     // Rapid pusher
     std::thread pusher([&]() {
+        SpinDeadline deadline;
         for (int i = 0; i < NUM_ITERATIONS; ++i) {
             int val = i;
-            while (!buffer.push(std::move(val))) {
+            while (!buffer.push(std::move(val)) && !deadline.expired()) {
                 val = i;
                 std::this_thread::yield();
             }
@@ -276,8 +390,9 @@ TEST(ThreadSafeRingBufferStressTest, RapidOperations) {
     
     // Rapid popper
     std::thread popper([&]() {
+        SpinDeadline deadline;
         int value;
-        while (pop_count < NUM_ITERATIONS) {
+        while (pop_count < NUM_ITERATIONS && !deadline.expired()) {
             if (buffer.pop(value)) {
                 pop_count++;
             } else {
@@ -362,9 +477,10 @@ TEST(ThreadSafeRingBufferThreadTest, HighContention) {
     // Half push, half pop
     for (int i = 0; i < NUM_THREADS / 2; ++i) {
         threads.emplace_back([&, i]() {
+            SpinDeadline deadline;
             for (int j = 0; j < OPERATIONS_PER_THREAD; ++j) {
                 int value = i * OPERATIONS_PER_THREAD + j;
-                while (!buffer.push(std::move(value))) {
+                while (!buffer.push(std::move(value)) && !deadline.expired()) {
                     value = i * OPERATIONS_PER_THREAD + j;
                     std::this_thread::yield();
                 }
@@ -375,9 +491,10 @@ TEST(ThreadSafeRingBufferThreadTest, HighContention) {
     
     for (int i = 0; i < NUM_THREADS / 2; ++i) {
         threads.emplace_back([&]() {
+            SpinDeadline deadline;
             int value;
             int popped = 0;
-            while (popped < OPERATIONS_PER_THREAD) {
+            while (popped < OPERATIONS_PER_THREAD && !deadline.expired()) {
                 if (buffer.pop(value)) {
                     popped++;
                     total_popped++;
@@ -404,9 +521,10 @@ TEST(ThreadSafeRingBufferPerformanceTest, Throughput) {
     auto start = std::chrono::high_resolution_clock::now();
     
     std::thread producer([&]() {
+        SpinDeadline deadline;
         for (int i = 0; i < NUM_OPERATIONS; ++i) {
             int val = i;
-            while (!buffer.push(std::move(val))) {
+            while (!buffer.push(std::move(val)) && !deadline.expired()) {
                 val = i;
                 std::this_thread::yield();
             }
@@ -414,9 +532,10 @@ TEST(ThreadSafeRingBufferPerformanceTest, Throughput) {
     });
     
     std::thread consumer([&]() {
+        SpinDeadline deadline;
         int value;
         for (int i = 0; i < NUM_OPERATIONS; ++i) {
-            while (!buffer.pop(value)) {
+            while (!buffer.pop(value) && !deadline.expired()) {
                 std::this_thread::yield();
             }
         }

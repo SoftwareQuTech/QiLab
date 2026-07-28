@@ -9,6 +9,23 @@
 #include "DataTypes/commands.hpp"
 #include "DataTypes/responses.hpp"
 
+namespace {
+
+/// Upper bound for the consumer spin loops below. If the broker ever loses a
+/// message, the loop must give up so the test fails on its assertions instead
+/// of spinning forever and hanging the CI job.
+constexpr std::chrono::seconds SPIN_TIMEOUT{30};
+
+/// Per-thread spin budget. Generous enough never to trip on a healthy broker.
+struct SpinDeadline {
+    std::chrono::steady_clock::time_point start{std::chrono::steady_clock::now()};
+    bool expired() const noexcept {
+        return std::chrono::steady_clock::now() - start > SPIN_TIMEOUT;
+    }
+};
+
+} // namespace
+
 // Test fixture for MessageBroker tests
 class MessageBrokerTest : public ::testing::Test {
 protected:
@@ -160,44 +177,67 @@ TEST_F(MessageBrokerTest, MultipleResponseDestinations) {
     EXPECT_FALSE(broker->get_response(retrieved));
 }
 // Test: Concurrent producers, single consumer (commands)
+//
+// Counting posts against retrievals is not enough on its own: a broker that
+// races on a queue slot can publish the same number of entries while silently
+// destroying one command and handing out another with an empty payload. So the
+// commands themselves are verified -- every one must arrive exactly once, with
+// its payload intact.
 TEST_F(MessageBrokerTest, ConcurrentCommandProducers) {
     const int NUM_PRODUCERS = 4;
     // Keep total commands well within ring buffer capacity (256) to avoid intentional drops
     // and simplify ASan leak checking. Using 60 per producer = 240 total to be safe.
     const int COMMANDS_PER_PRODUCER = 60;
     const int TOTAL_COMMANDS = NUM_PRODUCERS * COMMANDS_PER_PRODUCER;
-    
+
     std::atomic<int> posted{0};
-    
+
     // Producer threads
     std::vector<std::thread> producers;
     for (int p = 0; p < NUM_PRODUCERS; ++p) {
         producers.emplace_back([&, p]() {
             for (int i = 0; i < COMMANDS_PER_PRODUCER; ++i) {
-                auto cmd = make_transport_command(Command_t::ENTANGLEMENT_ATTEMPT, 
+                auto cmd = make_transport_command(Command_t::ENTANGLEMENT_ATTEMPT,
                                                   p * COMMANDS_PER_PRODUCER + i, DestinationType::SimRunner);
                 if(broker->route_command(std::move(cmd))) posted++;
             }
         });
     }
-    
+
     // Wait for all posts
     for (auto& t : producers) {
         t.join();
     }
-    
+
     // All commands should fit in the buffer given the capped total
     EXPECT_EQ(posted, TOTAL_COMMANDS);
-    
+
     // Consume all commands
     int consumed = 0;
+    int empty_payloads = 0;
+    std::vector<int> times_seen(TOTAL_COMMANDS, 0);
     TransportData<CommandBase> retrieved;
     while (broker->get_command(retrieved, DestinationType::SimRunner)) {
         consumed++;
+        if (!retrieved.transport) {
+            empty_payloads++;
+        } else {
+            EXPECT_EQ(retrieved.transport->command_type, Command_t::ENTANGLEMENT_ATTEMPT);
+            if (retrieved.node_id < TOTAL_COMMANDS) times_seen[retrieved.node_id]++;
+        }
         retrieved.transport.reset();  // Explicitly free the command
     }
-    
+
     EXPECT_EQ(consumed, posted);
+    EXPECT_EQ(empty_payloads, 0) << "broker handed out a command without its payload";
+
+    int missing = 0, duplicated = 0;
+    for (int id = 0; id < TOTAL_COMMANDS; ++id) {
+        if (times_seen[id] == 0) ++missing;
+        else if (times_seen[id] > 1) ++duplicated;
+    }
+    EXPECT_EQ(missing, 0) << "commands were lost between producers";
+    EXPECT_EQ(duplicated, 0) << "a command was delivered more than once";
 
     // Ensure broker (and any queued commands) are destroyed before the next test
     broker.reset();
@@ -231,8 +271,9 @@ TEST_F(MessageBrokerTest, ConcurrentProducersAndConsumers) {
     std::vector<std::thread> consumers;
     for (int c = 0; c < NUM_CONSUMERS; ++c) {
         consumers.emplace_back([&]() {
+            SpinDeadline deadline;
             TransportData<CommandBase> retrieved;
-            while (consumed < TOTAL_MESSAGES) {
+            while (consumed < TOTAL_MESSAGES && !deadline.expired()) {
                 if (broker->get_command(retrieved, DestinationType::SimRunner)) {
                     consumed++;
                     retrieved.transport.reset();  // Explicitly free the command
@@ -313,9 +354,10 @@ TEST_F(MessageBrokerTest, MultipleDestinationsConcurrent) {
     // Consumer threads for each destination
     std::vector<std::thread> consumers;
     consumers.emplace_back([&]() {
+        SpinDeadline deadline;
         int consumed = 0;
         TransportData<CommandBase> retrieved;
-        while (consumed < MESSAGES_PER_DEST) {
+        while (consumed < MESSAGES_PER_DEST && !deadline.expired()) {
             if (broker->get_command(retrieved, DestinationType::SimRunner)) {
                 consumed++;
                 total_consumed++;
@@ -323,11 +365,12 @@ TEST_F(MessageBrokerTest, MultipleDestinationsConcurrent) {
             }
         }
     });
-    
+
     consumers.emplace_back([&]() {
+        SpinDeadline deadline;
         int consumed = 0;
         TransportData<CommandBase> retrieved;
-        while (consumed < MESSAGES_PER_DEST) {
+        while (consumed < MESSAGES_PER_DEST && !deadline.expired()) {
             if (broker->get_command(retrieved, DestinationType::EntanglementRunner)) {
                 consumed++;
                 total_consumed++;

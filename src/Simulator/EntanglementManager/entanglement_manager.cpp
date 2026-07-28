@@ -3,6 +3,7 @@
 #include "entanglement_manager.hpp"
 #include "Simulator/link_key.hpp"
 #include "logger/logger_api.hpp"
+#include "logger/data_acquisition_api.hpp"
 
 #define EXPECTED_MAX_REQUESTS 100
 #define EXPECTED_MAX_PAIRS 50
@@ -137,6 +138,8 @@ bool EntanglementManager::add_new_request(std::unique_ptr<CommandBase> command, 
             {
                 outcome = model_it->second->attempt_batch();
             }
+            
+            DAQ_RECORD("EntanglementAttempt").set("node_a", it->node_id).set("node_b", node_id).set("attempts", int(outcome.attempts)).set("duration_ns", outcome.duration_ns).set("success", outcome.success);
 
             if (!outcome.success)
             {
@@ -146,7 +149,6 @@ bool EntanglementManager::add_new_request(std::unique_ptr<CommandBase> command, 
                 swap_pop_erase(pending_requests, static_cast<std::size_t>(it - pending_requests.begin()));
                 return true;
             }
-
             matched_pairs.push_back(EntanglementPair{
                 .command1 = std::move(it->command),
                 .command2 = std::move(command),
