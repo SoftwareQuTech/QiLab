@@ -19,10 +19,12 @@
 #pragma once
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 
 #include <MessageBroker/message_broker.hpp>
 #include "DataTypes/command_data.hpp"
 #include "Simulator/EntanglementManager/entanglement_manager.hpp"
+#include "Simulator/entanglement_attempt_noise_interface.hpp"
 
 /**
  * @brief Runs the entanglement coordination loop on a dedicated thread.
@@ -65,11 +67,16 @@ class EntanglementRunner
      * @brief Constructs an EntanglementRunner with a message broker.
      *
      * Initializes the EntanglementManager with callback functions that route
-     * responses and commands through the message broker.
+     * responses and commands through the message broker, and configures it
+     * with the given per-link entanglement-attempt models.
      *
      * @param mb Shared pointer to the MessageBroker for command/response routing
+     * @param attempt_models Per-link attempt models, keyed by
+     *                        encode_link_key(node_a, node_b). A link with no
+     *                        entry here fails fast on match.
      */
-    EntanglementRunner(std::shared_ptr<MessageBroker> mb);
+    EntanglementRunner(std::shared_ptr<MessageBroker> mb,
+                       std::unordered_map<uint16_t, std::unique_ptr<EntanglementAttemptNoiseInterface>> attempt_models);
 
     /**
      * @brief Destructor (defaulted).

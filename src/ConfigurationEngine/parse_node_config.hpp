@@ -13,10 +13,9 @@
 #include <unordered_map>
 
 #include "ConfigurationEngine/parse_scalar_helpers.hpp"
+#include "ConfigurationEngine/model_parsers/gate_noise_depolarizing_parser.hpp"
 #include "ConfigurationEngine/model_parsers/qubit_advanced_parser.hpp"
-#include "ConfigurationEngine/model_parsers/qubit_amplitude_damping_parser.hpp"
 #include "ConfigurationEngine/model_parsers/qubit_basic_parser.hpp"
-#include "ConfigurationEngine/model_parsers/qubit_depolarizing_parser.hpp"
 #include "ConfigurationEngine/model_parsers/qubit_phase_flip_parser.hpp"
 #include "DataTypes/configuration_options.hpp"
 
@@ -55,9 +54,30 @@ inline const std::unordered_map<std::string, QubitModelParser>& qubit_model_pars
     static const std::unordered_map<std::string, QubitModelParser> parsers = {
         {"BASIC", &parse_qubit_basic_model},
         {"ADVANCED", &parse_qubit_advanced_model},
-        {"DEPOLARIZING", &parse_qubit_depolarizing_model},
-        {"AMPLITUDE_DAMPING", &parse_qubit_amplitude_damping_model},
         {"PHASE_FLIP", &parse_qubit_phase_flip_model},
+    };
+
+    return parsers;
+}
+
+using GateNoiseModelParser = bool (*)(const FieldMap&, GateNoiseConfigData&, std::string&) noexcept;
+
+// Two registries, because the single- and two-qubit depolarizing channels accept
+// different maximum probabilities (0.75 vs 0.9375) and are configured at
+// different granularities: per qubit array vs per node (Sec. 2.1).
+inline const std::unordered_map<std::string, GateNoiseModelParser>& single_qubit_gate_noise_model_parsers() noexcept
+{
+    static const std::unordered_map<std::string, GateNoiseModelParser> parsers = {
+        {"DEPOLARIZING", &parse_single_qubit_gate_noise_depolarizing_model},
+    };
+
+    return parsers;
+}
+
+inline const std::unordered_map<std::string, GateNoiseModelParser>& two_qubit_gate_noise_model_parsers() noexcept
+{
+    static const std::unordered_map<std::string, GateNoiseModelParser> parsers = {
+        {"DEPOLARIZING", &parse_two_qubit_gate_noise_depolarizing_model},
     };
 
     return parsers;

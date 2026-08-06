@@ -1,7 +1,10 @@
 // in a source code file
 #include <iostream>
 #include <random>
+#include <csignal>
+#include <string_view>
 #include <thread>
+#include <unordered_map>
 #include <signal.h>
 
 
@@ -17,6 +20,11 @@
 
 //Intermediaries
 #include "Simulator/SimulatorManager/simulator_manager.hpp"
+#include "Simulator/entanglement_attempt_noise_interface.hpp"
+#include "Simulator/entanglement_link_noise_interface.hpp"
+#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_attempt_noise.hpp"
+#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_link_noise.hpp"
+#include "Simulator/link_key.hpp"
 
 //Data transmission
 #include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
@@ -27,6 +35,7 @@
 //Loggers and profilers
 #include "logger/profiler_api.hpp"
 #include "logger/logger_api.hpp"
+#include "logger/data_acquisition_api.hpp"
 
 //Config
 #include "qilab/version.hpp"
@@ -34,7 +43,9 @@
 
 //#define RUN_MOCKED_TRANSMISSION
 
-bool abort_sim = false;
+// Written from a signal handler, so it must be a lock-free, async-signal-safe
+// type rather than a plain bool.
+volatile std::sig_atomic_t abort_sim = 0;
 
 void print_startup_banner(const std::string& version) {
     std::cout << "\n"
@@ -47,7 +58,7 @@ void print_startup_banner(const std::string& version) {
 
 void signal_callback_handler(int signum) {
    // Terminate program
-   abort_sim = true;
+   abort_sim = 1;
 }
 
 int main()
@@ -69,6 +80,11 @@ int main()
     } else {
         LOG_LEVEL("DEBUG"); // default log level
     }
+    // Structured research data acquisition is opt-in via QILAB_DAQ=1. Output
+    // goes to ~/.qilab/logs/data_acquisition.jsonl, next to the profiler data.
+    const char* daq_env = std::getenv("QILAB_DAQ");
+    const bool daq_enabled = daq_env && std::string_view(daq_env) == "1";
+    DAQ_CONFIGURE(daq_enabled, "");
 
 #if defined(__linux) && defined(__GLIBCXX__) && __GLIBCXX__ >= 20200128
     // Workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=94087
@@ -98,17 +114,53 @@ int main()
     LOG_INFO("Configuration loaded with " + std::to_string(config->nodes.size()) + " nodes");
     
     std::unique_ptr<StimAdapterNVCenters> stim_adapter =  std::make_unique<StimAdapterNVCenters>(seq, 0); //the seed is problematic
-    std::unique_ptr<SimulatorManager> sim_manager = std::make_unique<SimulatorManager>(std::move(stim_adapter));
-    
-    
+    std::unique_ptr<SimulatorManager> sim_manager = std::make_unique<SimulatorManager>(
+        std::move(stim_adapter), config->system.qubit_noise_enabled, config->system.entanglement_noise_enabled);
+
+
     // Register nodes dynamically from configuration
     std::vector<int16_t> node_ids;
     for (size_t i = 0; i < config->nodes.size(); ++i) {
         int16_t node_id = sim_manager->register_node(config->nodes[i]);
+        if (node_id < 0) {
+            // A negative id is a failure code, not an id. Pushing it would make
+            // it wrap to a bogus uint16_t and silently mis-key entanglement links.
+            LOG_ERROR("Failed to register node '" + config->nodes[i].name + "' (code " +
+                      std::to_string(node_id) + "), exiting");
+            return 1;
+        }
         node_ids.push_back(node_id);
-        LOG_INFO("Registered node " + std::to_string(i) + " with ID " + 
+        LOG_INFO("Registered node " + std::to_string(i) + " with ID " +
                  std::to_string(node_id) + " (" + std::to_string(sim_manager->get_registered_qubits()) + " qubits)");
     }
+
+    // Resolve entanglement_links (config, keyed by node name) into per-link
+    // attempt models (for the entanglement manager) and channel models (for
+    // the simulator manager), keyed by encode_link_key(node_id_a, node_id_b),
+    // using the node-name -> node-id mapping established by the registration
+    // loop above.
+    std::unordered_map<std::string, uint16_t> name_to_node_id;
+    for (size_t i = 0; i < config->nodes.size(); ++i) {
+        name_to_node_id[config->nodes[i].name] = static_cast<uint16_t>(node_ids[i]);
+    }
+
+    std::unordered_map<uint16_t, std::unique_ptr<EntanglementAttemptNoiseInterface>> attempt_models;
+    std::unordered_map<uint16_t, std::unique_ptr<EntanglementLinkNoiseInterface>> link_noise_models;
+    for (const auto& link : config->entanglement_links) {
+        const uint16_t node_id_a = name_to_node_id.at(link.node_a);
+        const uint16_t node_id_b = name_to_node_id.at(link.node_b);
+        const uint16_t link_key = encode_link_key(static_cast<uint8_t>(node_id_a), static_cast<uint8_t>(node_id_b));
+
+        if (const auto* basic = std::get_if<EntanglementAttemptBasicConfig>(&link.attempt_model.config_data)) {
+            attempt_models[link_key] = std::make_unique<EntanglementAttemptModel>(
+                basic->attempt_duration_ns, basic->batch_size, basic->p_success, basic->rng_seed);
+        }
+        if (const auto* basic = std::get_if<EntanglementLinkNoiseBasicConfig>(&link.link_noise_model.config_data)) {
+            link_noise_models[link_key] = std::make_unique<EntanglementLinkNoiseModel>(basic->p_depolarizing, basic->p_dephasing);
+        }
+    }
+
+    sim_manager->configure_entanglement_links(std::move(link_noise_models));
 
     SimulatorRunner sim(std::move(sim_manager), broker);
 
@@ -116,15 +168,15 @@ int main()
     LOG_INFO("Using SPI transmission handler");
     std::unique_ptr<ITransmissionHandler> transportA = std::make_unique<SPIHandler>();
     std::unique_ptr<TransmissionProcessor> command_handlerA = std::make_unique<TransmissionProcessor>(std::move(transportA));
-    DataTransmissionRunner transmission_node(node_ids, std::move(command_handlerA), broker);
+    DataTransmissionRunner transmission_node(node_ids, std::move(command_handlerA), broker, config->system.transmission_cycle_time_us);
 #else
     LOG_INFO("Using mocked transmission handler");
     std::unique_ptr<ITransmissionHandler> transportB = std::make_unique<MockHandler>();
     std::unique_ptr<TransmissionProcessor> command_handlerB = std::make_unique<TransmissionProcessor>(std::move(transportB));
-    DataTransmissionRunner transmission_node(node_ids, std::move(command_handlerB), broker);
+    DataTransmissionRunner transmission_node(node_ids, std::move(command_handlerB), broker, config->system.transmission_cycle_time_us);
 #endif
 
-    EntanglementRunner ent_runner(broker);
+    EntanglementRunner ent_runner(broker, std::move(attempt_models));
 
     LOG_INFO("Starting simulation");
 
@@ -166,25 +218,31 @@ int main()
         return transmission_node.on_run(TRANSMISSION_CORE);
     });
 
-    PROF_SAVE_DATA("test_trace");
-
     while(!abort_sim)
     {
         //do nothing and wait for abort signal
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        //abort_sim = true;
+        // Push buffered DAQ records to disk from this non-real-time thread. Keeps
+        // the JSONL readable by external consumers WHILE the run is in progress
+        // (records otherwise sit in a 1 MiB buffer until it spills) and bounds
+        // loss to one tick if the process is killed rather than signalled.
+        DAQ_FLUSH();
     }
 
     sim.on_abort();
     simulator_thread.join();
-    
+
     ent_runner.on_abort();
     entanglement_thread.join();
 
-    transmission_node.on_abort();    
+    transmission_node.on_abort();
     thread_node_a.join();
 
-    PROF_SAVE_DATA("test_trace");
+    // Dump telemetry only after every thread has joined: each runner merges its
+    // thread-local profiler data into the global container on its way out, so
+    // dumping earlier would write a partial (or empty) file.
+    PROF_SAVE_DATA("profile");
+    DAQ_FLUSH();
     LOG_INFO("Executed the simulation");
 
     return 0;

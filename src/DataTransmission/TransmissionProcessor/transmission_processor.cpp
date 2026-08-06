@@ -223,7 +223,7 @@ std::unique_ptr<CommandBase> TransmissionProcessor::deserialize_command(const ui
 {
     // Fast bounds check first
     const uint8_t cmd_type = received_data[0];
-    if (cmd_type > Command_t::QUBIT_SWAP) {
+    if (cmd_type > Command_t::ENTANGLEMENT_SWAP) {
         return nullptr;
     }
     

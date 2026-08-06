@@ -18,6 +18,22 @@ bool MockAdapter::single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t
 
     return true;
 }
+bool MockAdapter::single_qubit_noise(uint8_t qubit_address, float x_noise_probability, float y_noise_probability, float z_noise_probability)
+{
+    std::cout << "MOCK SIM: Apply single qubit noise on address: " << qubit_address << std::endl;
+    std::cout << "MOCK SIM: Apply single qubit noise x probability: " << x_noise_probability << std::endl;
+    std::cout << "MOCK SIM: Apply single qubit noise y probability: " << y_noise_probability << std::endl;
+    std::cout << "MOCK SIM: Apply single qubit noise z probability: " << z_noise_probability << std::endl;
+
+    return true;
+}
+bool MockAdapter::two_qubit_depolarizing_noise(uint8_t qubit1_address, uint8_t qubit2_address, float depolarizing_probability)
+{
+    std::cout << "MOCK SIM: Apply two qubit depolarizing noise on addresses: " << qubit1_address << ", " << qubit2_address << std::endl;
+    std::cout << "MOCK SIM: Apply two qubit depolarizing noise probability: " << depolarizing_probability << std::endl;
+
+    return true;
+}
 bool MockAdapter::two_qubit_gate(uint8_t qubit1_address, uint8_t qubit2_address, Angle_t angle, Axis_t axis)
 {
     std::cout << "MOCK SIM: Single qubit 1 gate address: " << qubit1_address << std::endl;
@@ -35,9 +51,10 @@ uint8_t MockAdapter::qubit_measure(uint8_t qubit_address, bool basis)
     //return some measurement result as per spec
     return 0x08;
 }
-int8_t MockAdapter::attempt_entanglement(uint16_t fidelity, uint8_t neighbour_address, bool is_initiator, uint8_t qid)
+int8_t MockAdapter::attempt_entanglement(uint16_t fidelity, uint8_t local_qubit, uint8_t neighbour_address, bool is_initiator, uint8_t qid)
 {
     std::cout << "MOCK SIM: Attempt entanglemet with fidelity: " << fidelity << std::endl;
+    std::cout << "MOCK SIM: Attempt entanglemet on local qubit: " << local_qubit << std::endl;
     std::cout << "MOCK SIM: Attempt entanglemet on neightbour: " << neighbour_address << std::endl;
     std::cout << "MOCK SIM: Attempt entanglemet with quid: " << qid << std::endl;
 
@@ -86,6 +103,13 @@ bool MockAdapter::apply_qubit_noise(uint8_t qubit_address, float p_dephasing, fl
     std::cout << "MOCK SIM: Apply qubit noise on address: " << qubit_address << std::endl;
     std::cout << "MOCK SIM: Apply qubit noise with dephasing probability: " << p_dephasing << std::endl;
     std::cout << "MOCK SIM: Apply qubit noise with depolarizing probability: " << p_depolarizing << std::endl;
+
+    return true;
+}
+
+bool MockAdapter::allocate_qubits(uint8_t num_qubits)
+{
+    std::cout << "MOCK SIM: Allocate qubits: " << static_cast<int>(num_qubits) << std::endl;
 
     return true;
 }

@@ -10,7 +10,8 @@
  * @brief Application configuration loaded from YAML file
  */
 struct AppConfig {
-    EntanglementNoiseConfigData entanglement_noise_model;
+    std::vector<EntanglementLinkConfig> entanglement_links;
+    SystemConfig system;
     std::vector<NodeConfig> nodes;
 };
 

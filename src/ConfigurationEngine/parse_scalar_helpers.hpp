@@ -90,6 +90,22 @@ inline bool parse_non_negative_float(const std::string& text, float& value) noex
     return true;
 }
 
+inline bool parse_bool(const std::string& text, bool& value) noexcept
+{
+    const std::string normalized = trim(text);
+    if (normalized == "true")
+    {
+        value = true;
+        return true;
+    }
+    if (normalized == "false")
+    {
+        value = false;
+        return true;
+    }
+    return false;
+}
+
 inline bool parse_non_negative_u16(const std::string& text, uint16_t& value) noexcept
 {
     const std::string normalized = trim(text);

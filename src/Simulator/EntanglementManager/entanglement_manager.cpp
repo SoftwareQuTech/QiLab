@@ -1,7 +1,9 @@
 #include <iostream>
 
 #include "entanglement_manager.hpp"
+#include "Simulator/link_key.hpp"
 #include "logger/logger_api.hpp"
+#include "logger/data_acquisition_api.hpp"
 
 #define EXPECTED_MAX_REQUESTS 100
 #define EXPECTED_MAX_PAIRS 50
@@ -34,6 +36,14 @@ bool EntanglementManager::check_request_is_expired(const EntanglementRequest &re
     }
 
     return false;
+}
+
+void EntanglementManager::configure_links(std::unordered_map<uint16_t, std::unique_ptr<EntanglementAttemptNoiseInterface>> models)
+{
+    for (auto &entry : models)
+    {
+        attempt_models[entry.first] = std::move(entry.second);
+    }
 }
 
 bool EntanglementManager::match_request(const EntanglementRequest &request)
@@ -116,13 +126,36 @@ bool EntanglementManager::add_new_request(std::unique_ptr<CommandBase> command, 
     {
         if (it->neighbour_node == node_id && it->node_id == neighbour_node)
         {
+            const uint16_t link_key = encode_link_key(static_cast<uint8_t>(it->node_id), static_cast<uint8_t>(node_id));
+            const auto model_it = attempt_models.find(link_key);
+
+            BatchOutcome outcome{false, 0, 0};
+            if (model_it == attempt_models.end())
+            {
+                LOG_ERROR("No entanglement attempt model configured for link (" + std::to_string(it->node_id) + ", " + std::to_string(node_id) + "); failing fast.");
+            }
+            else
+            {
+                outcome = model_it->second->attempt_batch();
+            }
+            
+            DAQ_RECORD("EntanglementAttempt").set("node_a", it->node_id).set("node_b", node_id).set("attempts", int(outcome.attempts)).set("duration_ns", outcome.duration_ns).set("success", outcome.success);
+
+            if (!outcome.success)
+            {
+                LOG_INFO("Entanglement attempt batch failed for pair (node " + std::to_string(it->node_id) + ", node " + std::to_string(node_id) + "); reporting failure, no retry.");
+                response_callback(it->node_id, Outcome_Status_t::ENTANGLEMENT_FAILURE);
+                response_callback(node_id, Outcome_Status_t::ENTANGLEMENT_FAILURE);
+                swap_pop_erase(pending_requests, static_cast<std::size_t>(it - pending_requests.begin()));
+                return true;
+            }
             matched_pairs.push_back(EntanglementPair{
                 .command1 = std::move(it->command),
                 .command2 = std::move(command),
                 .node_id_1 = it->node_id,
                 .node_id_2 = it->neighbour_node,
                 .match_time = std::chrono::steady_clock::now(),
-                .calculated_success_time_delay = DEFAULT_SUCCESS_DELAY_NS // Placeholder for actual calculation
+                .calculated_success_time_delay = outcome.duration_ns
             });
             swap_pop_erase(pending_requests, static_cast<std::size_t>(it - pending_requests.begin()));
             LOG_INFO("Entanglement request matched between node " + std::to_string(node_id) + " and neighbour " + std::to_string(neighbour_node) + ".");

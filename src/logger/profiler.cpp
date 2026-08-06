@@ -42,7 +42,11 @@ struct EventData
     std::int64_t max_runtime;
     std::int64_t min_runtime;
     std::uint64_t event_count;
-    std::int64_t event_duration_average;
+    // Sum of every sample, so the mean is total_runtime / event_count at dump
+    // time. Stored as a sum rather than a running mean because sums merge
+    // exactly across threads, whereas averaging two means silently weights
+    // unequal sample counts the same.
+    std::int64_t total_runtime;
 };
 
 // ----------------- Private TLS class -----------------
@@ -58,7 +62,7 @@ public:
         for(auto& e: event_data)
         {
             e.event_count = 0;
-            e.event_duration_average = 0;
+            e.total_runtime = 0;
             e.max_runtime = 0;
             e.min_runtime = 0;
         }
@@ -108,6 +112,7 @@ public:
             data->min_runtime = ns;
         }
         data->event_count++;
+        data->total_runtime += static_cast<std::int64_t>(ns);
 
     }
 
@@ -133,14 +138,11 @@ public:
                 common_container[i].min_runtime = event_data[i].min_runtime;
             }
 
-            // Accumulate the event count
+            // Accumulate the event count and the total runtime. Summing both
+            // keeps the derived mean exact regardless of how unevenly the
+            // samples were distributed across threads.
             common_container[i].event_count += event_data[i].event_count;
-            
-            // Update average duration if needed
-            if (event_data[i].event_count > 0) {
-                common_container[i].event_duration_average = 
-                    (common_container[i].event_duration_average + event_data[i].event_duration_average) / 2;
-            }
+            common_container[i].total_runtime += event_data[i].total_runtime;
         }
 
         event_data.clear();
@@ -235,14 +237,19 @@ void Profiler::dump_csv(const std::string& base_path) {
     {
         std::lock_guard<std::mutex> lk(merge_lock_);
         std::ofstream ofs(resolved_base_path + "_durations.csv");
-        ofs << "Event,Max[ns],Min[ns],Count\n";
+        ofs << "Event,Max[ns],Min[ns],Count,Avg[ns]\n";
         const std::size_t n = std::min(common_container_.size(), names_.size());
         for (std::size_t id = 0; id < n; ++id) {
             const std::string& name = names_[id];
             ofs << name << "," ;
             ofs << std::to_string(common_container_[id].max_runtime) << ",";
             ofs << std::to_string(common_container_[id].min_runtime) << ",";
-            ofs << std::to_string(common_container_[id].event_count) << "\n";
+            ofs << std::to_string(common_container_[id].event_count) << ",";
+            const std::uint64_t count = common_container_[id].event_count;
+            const std::int64_t average = count > 0
+                ? common_container_[id].total_runtime / static_cast<std::int64_t>(count)
+                : 0;
+            ofs << std::to_string(average) << "\n";
 
             // for (const auto ns : common_container_[id]) {
             //     ofs << name << "," << ns << "\n";

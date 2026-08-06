@@ -61,6 +61,21 @@ public:
     bool single_qubit_gate(uint8_t qubit_address, Angle_t angle, Axis_t axis) override;
 
     /**
+     * @copydoc ISimulator::single_qubit_noise
+     *
+     * @details Applies a Pauli channel to the specified qubit with the given probabilities.
+     *          The probabilities for X, Y, and Z errors are specified by the parameters.
+     *          The sum of the probabilities should not exceed 1.0.
+     *          The implementation uses Stim's Pauli channel functionality to apply the noise.
+     */
+    bool single_qubit_noise(uint8_t qubit_address, float x_noise_probability, float y_noise_probability, float z_noise_probability) override;
+
+    /**
+     * @copydoc ISimulator::two_qubit_depolarizing_noise
+     */
+    bool two_qubit_depolarizing_noise(uint8_t qubit1_address, uint8_t qubit2_address, float depolarizing_probability) override;
+
+    /**
      * @copydoc ISimulator::two_qubit_gate
      *
      * @details Implementations typically realize CX/CZ/iSWAP via Stim’s
@@ -95,23 +110,9 @@ public:
      */
     int8_t attempt_entanglement(uint16_t fidelity, uint8_t local_qubit, uint8_t neighbour_address, bool is_initiator, uint8_t qid) override;
 
-    /**
-     * @copydoc ISimulator::entanglement_measure
-     *
-     * @details Typically mocked: optionally performs @p repetitions attempts
-     *          when @p try_now is true and returns a synthesized outcome.
-     * @param is_initiator Whether this node initiates entanglement (applies gates) or just measures.
-     */
-    int8_t entanglement_measure(uint16_t fidelity, uint8_t local_qubit, uint8_t neighbour_address, bool basis,
-                                 bool is_initiator, uint8_t qid, bool try_now, uint8_t repetitions) override;
-
-    /**
-     * @copydoc ISimulator::pre_measure_gates_selection
-     *
-     * @details Stores a policy used to inject pre-measurement single-qubit
-     *          rotations in subsequent @c qubit_measure calls.
-     */
-    void pre_measure_gates_selection(bool target, Angle_t angle_1, Angle_t angle_2, Angle_t angle_3) override;
+    // Note: entanglement_measure / pre_measure_gates_selection are intentionally
+    // absent -- entanglement measurement is orchestrated by the SimulatorManager
+    // (attempt_entanglement -> single_qubit_gate -> qubit_measure).
 
     /**
      * @copydoc ISimulator::qubit_move
@@ -132,7 +133,6 @@ public:
      *          returns a result code
      */
     bool entanglement_swap(uint8_t qubit1_address, uint8_t qubit2_address) override;
-    bool apply_qubit_noise(uint8_t qubit_address, float p_dephasing, float p_depolarizing) override;
     bool allocate_qubits(uint8_t num_qubits) override;
 private:
     // Cached objects for all quantum operations
@@ -146,7 +146,7 @@ private:
     
     // Initialization specific
     stim::CircuitInstruction init_inst;
-    
+
     // Single qubit gate specific
     stim::CircuitInstruction h_gate_inst;       // H
     stim::CircuitInstruction x_gate_inst;       // X
@@ -171,21 +171,15 @@ private:
     stim::CircuitInstruction sqrt_yy_dag_inst;    // Custom instruction for SQRT_YY_DAG
     stim::CircuitInstruction sqrt_xx_inst;        // Custom instruction for SQRT_XX
     stim::CircuitInstruction sqrt_xx_dag_inst;    // Custom instruction for SQRT_XX_DAG
-    
-    // Pre-measurement gate configuration storage
-    struct PreMeasureConfig {
-        bool enabled = false;
-        Angle_t angle1;
-        Angle_t angle2;
-        Angle_t angle3;
-    };
-    
-    PreMeasureConfig pre_measure_config;         // target=0: for qubit_measure
-    PreMeasureConfig pre_entangle_measure_config; // target=1: for entanglement_measure
-    
-    // Helper to apply pre-measurement gates from a configuration
-    void apply_pre_measure_gates(uint8_t qubit_address, const PreMeasureConfig& config);
-    
+
+    // Additional parameters for noise channels
+    std::array<double, 3> pauli_channel_probs; // Probabilities for X, Y, Z errors
+    stim::SpanRef<double> pauli_probs_span;   // SpanRef for the probabilities array
+    stim::CircuitInstruction pauli_channel_1_inst; // Custom instruction for PAULI_CHANNEL_1
+    std::array<double, 1> depolarize_2_prob;       // args[0] for DEPOLARIZE2
+    stim::SpanRef<double> depolarize_2_prob_span;
+    stim::CircuitInstruction depolarize_2_inst;    // Custom instruction for DEPOLARIZE2
+
     // Threshold for measurement record clearing
     static constexpr size_t MEASUREMENT_CLEAR_THRESHOLD = 1024;
     

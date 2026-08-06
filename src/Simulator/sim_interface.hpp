@@ -64,6 +64,46 @@ struct ISimulator
                                    Axis_t axis) = 0;
 
     /**
+     * @brief Apply a single-qubit noise channel to the specified qubit.
+     *     * Applies a Pauli noise channel to @p qubit_address with the specified
+     * probabilities for X, Y, and Z errors. The sum of the probabilities should
+     * not exceed 1.0. The implementation uses the underlying simulator's noise
+     * functionality to apply the noise.
+     *     * @param qubit_address Target qubit address.
+     * @param x_noise_probability Probability of an X error occurring on the qubit.
+     * @param y_noise_probability Probability of a Y error occurring on the qubit.
+     * @param z_noise_probability Probability of a Z error occurring on the qubit.
+     * @return true on success; false on invalid parameters or unsupported noise channel.
+     */
+    virtual bool single_qubit_noise(uint8_t qubit_address,
+                                   float x_noise_probability,
+                                   float y_noise_probability,
+                                   float z_noise_probability) = 0;
+
+    /**
+     * @brief Apply a two-qubit depolarizing channel to a qubit pair.
+     *
+     * Applies E(rho) = (1-p) rho + p/15 * sum over the 15 non-identity two-qubit
+     * Pauli pairs (QILab_Noise_Models.pdf Sec. 2 Eq. 4). This is a CORRELATED
+     * channel: it is deliberately not expressible as two single_qubit_noise
+     * calls, nor through compose_pauli_channels() (a single-qubit composer),
+     * which is why it needs its own adapter entry point.
+     *
+     * Unlike single_qubit_noise this takes one scalar p rather than per-Pauli
+     * weights: no configured model produces a general 15-weight two-qubit Pauli
+     * channel, so the interface stays at the depolarizing special case.
+     *
+     * @param qubit1_address First qubit address.
+     * @param qubit2_address Second qubit address; must differ from the first.
+     * @param depolarizing_probability p in [0, 0.9375]; p == 0 is a no-op.
+     * @return true on success; false on invalid parameters or addresses.
+     */
+    virtual bool two_qubit_depolarizing_noise(uint8_t qubit1_address,
+                                              uint8_t qubit2_address,
+                                              float depolarizing_probability) = 0;
+
+
+    /**
      * @brief Apply a two-qubit gate between a control/target pair.
      *
      * Applies the two-qubit operation selected by @p axis and parameterized by
@@ -121,56 +161,14 @@ struct ISimulator
                                          uint8_t qid) = 0;
 
     /**
-     * @brief Measure an entangled link/pair with optional immediate execution.
-     *
-     * Executes an entanglement measurement against @p neighbour_address with
-     * the specified @p fidelity constraint and basis. If @p try_now is true,
-     * the implementation may perform immediate attempts up to @p repetitions.
-     *
-     * If @p is_initiator is true, this node applies entangling gates (H+CNOT) before measurement.
-     * If @p is_initiator is false, this node just measures without applying gates.
-     *
-     * @param fidelity Target fidelity threshold or parameter.
-     * @param local_qubit Local qubit identifier associated with the link.
-     * @param neighbour_address Peer/link identifier for the entanglement.
-     * @param basis Measurement basis selector (implementation-defined).
-     * @param is_initiator Whether this node is the initiator (applies gates) or responder (just measures).
-     * @param qid Local qubit identifier associated with the link.
-     * @param try_now If true, perform the measurement attempt immediately.
-     * @param repetitions Maximum number of attempts if immediate mode is enabled.
-     * @return Implementation-defined status/result code.
-     *
-     * @note Define and document the mapping of the return value (e.g., success,
-     *       failure, timeout, or an encoded measurement outcome).
+     * @note Entanglement measurement is orchestrated by the SimulatorManager, not
+     *       the adapter: it establishes/identifies the pair via
+     *       @c attempt_entanglement, applies any basis-rotation gates via
+     *       @c single_qubit_gate, then reads the outcome via @c qubit_measure.
+     *       There is deliberately no @c entanglement_measure or
+     *       @c pre_measure_gates_selection on this interface -- the adapter holds
+     *       no per-node pre-measurement state.
      */
-    virtual int8_t entanglement_measure(uint16_t fidelity,
-                                         uint8_t local_qubit,
-                                         uint8_t neighbour_address,
-                                         bool basis,
-                                         bool is_initiator,
-                                         uint8_t qid,
-                                         bool try_now,
-                                         uint8_t repetitions) = 0;
-
-    /**
-     * @brief Configure a sequence of single-qubit gates to be applied pre-measurement.
-     *
-     * Pre-selects up to three single-qubit gates (parameterized by angles) that
-     * will be applied automatically before subsequent measurements, typically
-     * to rotate into a desired basis.
-     *
-     * @param target If true, apply to the target qubit role; otherwise the control/other role.
-     * @param angle_1 Angle for the first gate.
-     * @param angle_2 Angle for the second gate.
-     * @param angle_3 Angle for the third gate.
-     *
-     * @note The exact gates implied by these angles and the intended axes should
-     *       be documented by the implementation or the ::Axis_t definition used elsewhere.
-     */
-    virtual void pre_measure_gates_selection(bool target,
-                                             Angle_t angle_1,
-                                             Angle_t angle_2,
-                                             Angle_t angle_3) = 0;
 
     /**
      * @brief Move (teleport/route/alias) a qubit state from one address to another.
@@ -209,8 +207,6 @@ struct ISimulator
     virtual bool entanglement_swap(uint8_t qubit1_address,
                                       uint8_t qubit2_address) = 0;
 
-    virtual bool apply_qubit_noise(uint8_t qubit_address, float p_dephasing, float p_depolarizing) = 0;
-    
     virtual bool allocate_qubits(uint8_t num_qubits) = 0;
 
 };

@@ -1,15 +1,15 @@
 #include <thread>
 #include <iostream>
 #include <chrono>
+#include <cmath>
 
 #include "transmission_runner.hpp"
 #include "logger/logger_api.hpp"
 #include "utils/thread_utils.hpp"
 
-#define TRANSMISSION_STEP_DELAY 5  // microseconds
-
-DataTransmissionRunner::DataTransmissionRunner(std::vector<int16_t> nodes, std::unique_ptr<TransmissionProcessor> processor, std::shared_ptr<MessageBroker> broker) 
-    : transmission_processor(std::move(processor)), registered_nodes(nodes), message_broker(broker) 
+DataTransmissionRunner::DataTransmissionRunner(std::vector<int16_t> nodes, std::unique_ptr<TransmissionProcessor> processor, std::shared_ptr<MessageBroker> broker, float cycle_time_us)
+    : transmission_processor(std::move(processor)), registered_nodes(nodes), message_broker(broker),
+      transmission_cycle_time(std::chrono::nanoseconds(std::llround(static_cast<double>(cycle_time_us) * 1000.0)))
 {
     // Initialize per-node transmission data for each registered node
     node_transmission_data.reserve(registered_nodes.size());
@@ -84,7 +84,7 @@ int DataTransmissionRunner::on_run(int core_id)
         if(transmission_processor->transmit_msg(responses, commands, registered_nodes.size(), node_transmission_data) != 0)
         {
             LOG_ERROR("Transmission Failed during SPI transfer.");
-            //std::this_thread::sleep_for(std::chrono::milliseconds(TRANSMISSION_STEP_DELAY));
+            //std::this_thread::sleep_for(transmission_cycle_time);
             continue;
         }
 
@@ -95,7 +95,7 @@ int DataTransmissionRunner::on_run(int core_id)
         {
             if (commands[i] == nullptr || commands[i]->command_type == Command_t::NOP)
             {
-                //std::this_thread::sleep_for(std::chrono::milliseconds(TRANSMISSION_STEP_DELAY));   
+                //std::this_thread::sleep_for(transmission_cycle_time);
                 responses[i]->status = NodeStatus_t::READY;
                 responses[i]->outcome = Outcome_Status_t::SUCCESS;
                 continue;
@@ -122,12 +122,12 @@ int DataTransmissionRunner::on_run(int core_id)
         //
         // CPU_PAUSE();
         // With this (no syscall — clock_gettime uses VDSO on aarch64):
-        auto deadline = std::chrono::steady_clock::now() + std::chrono::microseconds(TRANSMISSION_STEP_DELAY);
+        auto deadline = std::chrono::steady_clock::now() + transmission_cycle_time;
         while (std::chrono::steady_clock::now() < deadline)
         {
             // spin — thread is pinned to a dedicated core anyway
         }
-        //std::this_thread::sleep_for(std::chrono::microseconds(TRANSMISSION_STEP_DELAY));
+        //std::this_thread::sleep_for(transmission_cycle_time);
         PROF_STOP(prof_event_deserialize);
         // std::this_thread::yield();
     }

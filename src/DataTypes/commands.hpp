@@ -30,6 +30,7 @@ enum Axis_t
 
 enum Angle_t
 {
+    _0_PI_16 = 0, // no rotation; used to omit a gate without affecting the quantum state
     _PI_16 = 1,
     _2_PI_16 = 2,
     _3_PI_16= 3,

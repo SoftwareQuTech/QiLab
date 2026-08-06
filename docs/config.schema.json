@@ -3,14 +3,21 @@
   "$id": "https://qilab/config.schema.json",
   "title": "QILab Node Configuration",
   "description": "Machine-readable mirror of the qilab config format documented in config_guide.md. Source of truth for the qilab_web_control structured editor. If you change the config format, update this file in the same change.",
+  "x-qilab-schema-version": "dev",
   "type": "object",
   "required": ["nodes"],
   "additionalProperties": false,
   "properties": {
-    "entanglement_noise_model": {
-      "title": "Entanglement noise model",
-      "description": "Optional. Defaults to BASIC with t2_value 1000 if omitted.",
-      "$ref": "#/$defs/entanglement_noise_model"
+    "entanglement_links": {
+      "title": "Entanglement links",
+      "description": "Optional. One entry per physical link between two configured nodes. node_a/node_b must match names under 'nodes'.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/entanglement_link" }
+    },
+    "system": {
+      "title": "QiLab System Configuration",
+      "description": "Optional. Global runtime parameters; defaults apply if omitted.",
+      "$ref": "#/$defs/system"
     },
     "nodes": {
       "title": "Nodes",
@@ -43,6 +50,7 @@
           "description": "Optional per-operation delays in nanoseconds.",
           "$ref": "#/$defs/operation_delays"
         },
+        "two_qubit_gate_noise_model": { "$ref": "#/$defs/two_qubit_gate_noise_model" },
         "qubit_arrays": {
           "title": "Qubit arrays",
           "type": "array",
@@ -55,7 +63,6 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "single_gate_rotation": { "type": "integer", "minimum": 0, "unit": "ns" },
         "two_qubit_gate_rotation": { "type": "integer", "minimum": 0, "unit": "ns" },
         "measurement": { "type": "integer", "minimum": 0, "unit": "ns" },
         "entanglement": { "type": "integer", "minimum": 0, "unit": "ns" },
@@ -67,7 +74,7 @@
     "qubit_array": {
       "title": "Qubit array",
       "type": "object",
-      "required": ["num_qubits", "noise_model"],
+      "required": ["num_qubits", "single_gate_delay_ns", "qubit_decoherence_noise_model", "gate_noise_model"],
       "additionalProperties": false,
       "properties": {
         "num_qubits": {
@@ -75,8 +82,60 @@
           "type": "integer",
           "exclusiveMinimum": 0
         },
-        "noise_model": { "$ref": "#/$defs/qubit_noise_model" }
+        "single_gate_delay_ns": {
+          "title": "Single-qubit gate delay (ns)",
+          "description": "Duration of a single-qubit gate on this array. A qubit array property, not a node one -- e.g. communication and memory qubits differ.",
+          "type": "integer",
+          "minimum": 0,
+          "unit": "ns"
+        },
+        "qubit_decoherence_noise_model": { "$ref": "#/$defs/qubit_noise_model" },
+        "gate_noise_model": { "$ref": "#/$defs/gate_noise_model" }
       }
+    },
+    "gate_noise_model": {
+      "title": "Single-qubit gate noise model",
+      "description": "Single-qubit gate noise for this qubit array (Sec. 2 Eq. 1). Applies to single-qubit gates and pre-measurement basis rotations.",
+      "type": "object",
+      "oneOf": [
+        {
+          "title": "DEPOLARIZING",
+          "additionalProperties": false,
+          "required": ["type", "depolarizing_probability"],
+          "properties": {
+            "type": { "const": "DEPOLARIZING" },
+            "depolarizing_probability": {
+              "title": "Depolarizing probability p",
+              "description": "p for the single-qubit depolarizing channel. Maximal mixing is 0.75. Relates to gate fidelity by F = 1 - 2p/3.",
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.75
+            }
+          }
+        }
+      ]
+    },
+    "two_qubit_gate_noise_model": {
+      "title": "Two-qubit gate noise model",
+      "description": "Two-qubit gate noise for this node (Sec. 2 Eq. 4). One model per node, unlike the per-qubit-array single-qubit case. Optional; omitted means noiseless two-qubit gates. The channel is correlated across the pair.",
+      "type": "object",
+      "oneOf": [
+        {
+          "title": "DEPOLARIZING",
+          "additionalProperties": false,
+          "required": ["type", "depolarizing_probability"],
+          "properties": {
+            "type": { "const": "DEPOLARIZING" },
+            "depolarizing_probability": {
+              "title": "Depolarizing probability p",
+              "description": "p for the two-qubit depolarizing channel. Maximal mixing is 0.9375. Relates to gate fidelity by F = 1 - 4p/5.",
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.9375
+            }
+          }
+        }
+      ]
     },
     "qubit_noise_model": {
       "title": "Qubit noise model",
@@ -103,57 +162,101 @@
           }
         },
         {
-          "title": "DEPOLARIZING",
-          "additionalProperties": false,
-          "required": ["type", "error_rate", "gate_time_ns"],
-          "properties": {
-            "type": { "const": "DEPOLARIZING" },
-            "error_rate": { "type": "number", "minimum": 0 },
-            "gate_time_ns": { "type": "number", "minimum": 0, "unit": "ns" }
-          }
-        },
-        {
-          "title": "AMPLITUDE_DAMPING",
-          "additionalProperties": false,
-          "required": ["type", "t1_ns", "t2_ns"],
-          "properties": {
-            "type": { "const": "AMPLITUDE_DAMPING" },
-            "t1_ns": { "type": "number", "minimum": 0, "unit": "ns" },
-            "t2_ns": { "type": "number", "minimum": 0, "unit": "ns" }
-          }
-        },
-        {
           "title": "PHASE_FLIP",
           "additionalProperties": false,
-          "required": ["type", "flip_probability"],
+          "required": ["type", "t2_value"],
           "properties": {
             "type": { "const": "PHASE_FLIP" },
-            "flip_probability": { "type": "number", "minimum": 0 }
+            "t2_value": { "type": "number", "minimum": 0, "unit": "ns" }
           }
         }
       ]
     },
-    "entanglement_noise_model": {
-      "title": "Entanglement noise model",
+    "system": {
+      "title": "QiLab System Configuration",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "transmission_cycle_time_us": {
+          "title": "Transmission cycle time",
+          "description": "Period of the transmission runner's busy-spin cycle. Defaults to 5 if omitted.",
+          "type": "number",
+          "minimum": 0,
+          "unit": "us",
+          "default": 5
+        },
+        "qubit_noise_enabled": {
+          "title": "Qubit noise enabled",
+          "description": "Enables ALL per-qubit noise in the simulator: in-memory decoherence AND single-/two-qubit gate depolarizing noise. Disabling it turns off gate noise too. Defaults to true if omitted.",
+          "type": "boolean",
+          "default": true
+        },
+        "entanglement_noise_enabled": {
+          "title": "Entanglement noise enabled",
+          "description": "Enables applying entanglement-link noise during simulation. Defaults to true if omitted.",
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "entanglement_link": {
+      "title": "Entanglement link",
+      "type": "object",
+      "required": ["node_a", "node_b", "attempt_model", "link_noise_model"],
+      "additionalProperties": false,
+      "properties": {
+        "node_a": {
+          "title": "Node A",
+          "description": "Name of the first node of the link. Must match a configured node's name.",
+          "type": "string"
+        },
+        "node_b": {
+          "title": "Node B",
+          "description": "Name of the second node of the link. Must match a configured node's name.",
+          "type": "string"
+        },
+        "attempt_model": {
+          "title": "Entanglement attempt model",
+          "description": "Batching/delay/success-probability model consumed by the entanglement manager.",
+          "$ref": "#/$defs/entanglement_attempt_model"
+        },
+        "link_noise_model": {
+          "title": "Entanglement link noise model",
+          "description": "Pauli-noise channel model applied by the simulator manager on successful entanglement.",
+          "$ref": "#/$defs/entanglement_link_noise_model"
+        }
+      }
+    },
+    "entanglement_attempt_model": {
+      "title": "Entanglement attempt model",
       "type": "object",
       "oneOf": [
         {
           "title": "BASIC",
           "additionalProperties": false,
-          "required": ["type", "t2_value"],
+          "required": ["type", "attempt_duration_ns", "batch_size", "p_success", "rng_seed"],
           "properties": {
             "type": { "const": "BASIC" },
-            "t2_value": { "type": "number", "minimum": 0, "unit": "ns" }
+            "attempt_duration_ns": { "type": "integer", "minimum": 1, "unit": "ns" },
+            "batch_size": { "type": "integer", "minimum": 1 },
+            "p_success": { "type": "number", "minimum": 0, "maximum": 1 },
+            "rng_seed": { "type": "integer", "minimum": 0 }
           }
-        },
+        }
+      ]
+    },
+    "entanglement_link_noise_model": {
+      "title": "Entanglement link noise model",
+      "type": "object",
+      "oneOf": [
         {
-          "title": "DEPOLARIZING",
+          "title": "BASIC",
           "additionalProperties": false,
-          "required": ["type", "error_rate", "gate_time_ns"],
+          "required": ["type", "p_depolarizing", "p_dephasing"],
           "properties": {
-            "type": { "const": "DEPOLARIZING" },
-            "error_rate": { "type": "number", "minimum": 0 },
-            "gate_time_ns": { "type": "number", "minimum": 0, "unit": "ns" }
+            "type": { "const": "BASIC" },
+            "p_depolarizing": { "type": "number", "minimum": 0, "maximum": 1 },
+            "p_dephasing": { "type": "number", "minimum": 0, "maximum": 1 }
           }
         }
       ]

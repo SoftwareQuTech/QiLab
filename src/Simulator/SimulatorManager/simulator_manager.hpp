@@ -12,11 +12,13 @@
 #include "memory"
 #include "array"
 #include "chrono"
+#include "unordered_map"
 
 #include "DataTypes/commands.hpp"
 #include "DataTypes/responses.hpp"
 #include "Simulator/sim_interface.hpp"
 #include "Simulator/qubit_noise_interface.hpp"
+#include "Simulator/entanglement_link_noise_interface.hpp"
 #include "DataTypes/configuration_options.hpp"
 #include "logger/profiler_api.hpp"
 #include "Simulator/SimulatorManager/operations_engine.hpp"
@@ -28,8 +30,21 @@ class SimulatorManager
     using duration = typename clock_type::duration;
     
 public:
-    SimulatorManager(std::unique_ptr<ISimulator> simulator);
+    SimulatorManager(std::unique_ptr<ISimulator> simulator, bool qubit_noise_enabled = true, bool entanglement_noise_enabled = true);
     ~SimulatorManager();
+
+    /**
+     * @brief Configures per-link entanglement-link noise models.
+     *
+     * Merges the given models into the existing set (keyed by
+     * encode_pair_key(node_a, node_b)) rather than replacing it, so it may be
+     * called multiple times to layer in additional links. A link with no
+     * configured model has no noise applied on successful entanglement (a
+     * warning is logged).
+     *
+     * @param models Map of link key to channel model, moved in.
+     */
+    void configure_entanglement_links(std::unordered_map<uint16_t, std::unique_ptr<EntanglementLinkNoiseInterface>> models);
 
         /**
      * @brief Register a new quantum node with the specified number of qubits.
@@ -94,11 +109,78 @@ private:
     uint16_t registered_qubits = 0;
     std::array<std::unique_ptr<QubitNoiseInterface>, MAX_QUBITS_AVAILABLE> simulation_qubits;
 
+    /// Per-qubit properties resolved once at registration from the owning qubit
+    /// array's config. Flattened into the same global-qubit index space as
+    /// simulation_qubits so the gate hot path resolves them with a single
+    /// indexed load and no search. Both fields live in one struct because both
+    /// are read for the same qubit within one command (the delay in
+    /// build_command_timing_info, the probability in the gate handler).
+    /// Zero-initialised: a qubit belonging to no registered array is noiseless
+    /// and instant rather than garbage.
+    struct QubitArrayProperties
+    {
+        uint64_t single_gate_delay_ns = 0;
+        float gate_depolarizing_p = 0.0f; ///< Sec. 2.1; validated at registration, 0 == noiseless
+    };
+    std::array<QubitArrayProperties, MAX_QUBITS_AVAILABLE> qubit_array_properties{};
+
+    /// Two-qubit gate depolarizing probability per node (Sec. 2.1: one model per
+    /// node, unlike the per-array single-qubit case). Validated at registration.
+    std::array<float, MAX_NODES_AVAILABLE> node_two_qubit_depolarizing_p{};
+
+    /// Per-pair cache of the 4-way Bell state identified by the initiator of an
+    /// entanglement pair (the lower node id, which is dispatched and processed
+    /// first). The responder reads and erases the entry so both nodes report the
+    /// same Bell state, without the simulator adapter having to hold any per-pair
+    /// coordination state. Keyed by encode_pair_key(node_a, node_b).
+    std::unordered_map<uint16_t, int8_t> pair_bell_states;
+
+    /// Build an order-independent key for a node pair: (min << 8) | max.
+    static uint16_t encode_pair_key(uint8_t node_a, uint8_t node_b);
+
+    /// Per-link entanglement-link noise models, keyed by encode_pair_key(node_a, node_b).
+    std::unordered_map<uint16_t, std::unique_ptr<EntanglementLinkNoiseInterface>> entanglement_link_noise_models;
+
+    /// Pending basis-rotation (pre-measurement) gates for a node, set by a
+    /// PRE_MEASUREMENT_GATES_SELECTION command and consumed by the next matching
+    /// measurement. Kept per node (and per target) in the manager -- NOT in the
+    /// adapter -- so one node's selection can never be applied to another node's
+    /// qubit when commands interleave across the shared simulator.
+    struct PreMeasureGates
+    {
+        bool enabled = false;
+        Angle_t angle1{};
+        Angle_t angle2{};
+        Angle_t angle3{};
+    };
+
+    /// [node_id][target]: target 0 = regular qubit_measure, 1 = entanglement measure.
+    std::array<std::array<PreMeasureGates, 2>, MAX_NODES_AVAILABLE> pre_measure_gates{};
+
+    /// Apply this node's pending pre-measurement rotation (if any) to @p global_qubit
+    /// via single_qubit_gate, applying per-gate noise for each non-zero-angle
+    /// sub-gate. The selection persists (is NOT cleared) and re-applies on every
+    /// subsequent matching measurement, until overwritten by a new
+    /// PRE_MEASUREMENT_GATES_SELECTION. @p target selects the slot.
+    void apply_pre_measure_gates(uint8_t node_id, uint16_t global_qubit, bool target);
+
+    /// Resolve the 4-way Bell state to report for one side of a matched pair:
+    /// the initiator caches its freshly identified state; the responder reads the
+    /// cached value (and erases it). Falls back to @p local_bell on a cache miss.
+    int8_t resolve_pair_bell_state(uint8_t node_id, uint8_t neighbour_id, bool is_initiator, int8_t local_bell);
+
     /// Registry of delays per node. Keep it separate in order to keep the nodes array as ligh as possible
     /// The array index is equal to the node index
     std::array<QuantumOperationsDelaysNs, MAX_NODES_AVAILABLE> node_operation_delays;
     /// The underlying quantum simulator
     std::unique_ptr<ISimulator> simulator_inst;
+
+    /// Gates ALL per-qubit noise application: in-memory decoherence AND single-/two-qubit
+    /// gate depolarizing noise. From system.qubit_noise_enabled config.
+    bool qubit_noise_enabled = true;
+
+    /// Gates entanglement-link noise application in entanglement_attempt_handler/entanglement_measure_handler, from system.entanglement_noise_enabled config
+    bool entanglement_noise_enabled = true;
 
     std::array<SimCommandFn, MAX_COMMANDS_AVAILABLE> sim_command_table = {};
 
@@ -118,7 +200,6 @@ private:
     ResponseData entanglement_attempt_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id);
     ResponseData entanglement_measure_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id);
     ResponseData entanglement_swap_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id);
-    ResponseData pre_measure_and_entangle_measure_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id);
     ResponseData pre_measurement_gates_selection_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id);
     ResponseData qubit_move_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id);
     ResponseData qubit_swap_handler(std::unique_ptr<CommandBase> command, int16_t qubit_offset, uint8_t node_id);
