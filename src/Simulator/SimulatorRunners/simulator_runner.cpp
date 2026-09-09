@@ -5,6 +5,7 @@
 #include "simulator_runner.hpp"
 #include "Simulator/SimulatorManager/simulator_manager.hpp"
 #include "utils/thread_utils.hpp"
+#include "utils/periodic_pacer.hpp"
 #include "logger/logger_api.hpp"
 
 SimulatorRunner::SimulatorRunner(std::unique_ptr<SimulatorManager> sim, std::shared_ptr<MessageBroker> broker) : simulator_manager(std::move(sim)), message_broker(broker)
@@ -38,6 +39,12 @@ int SimulatorRunner::on_run(int core_id)
 
     ProfGuard pg{};
 
+    // Poll interval for the command/response pump. This runner is pinned and running
+    // at SCHED_FIFO(80), so it must block every cycle or it starves the per-CPU kernel
+    // threads on its core exactly as the transmission runner's old spin did — less
+    // likely here only because this loop has always had a sleep in it.
+    constexpr auto kPollInterval = std::chrono::microseconds(5);
+
     TransportData<CommandBase> command; // Command from message broker
     TransportData<ResponseData> response;
 
@@ -47,6 +54,8 @@ int SimulatorRunner::on_run(int core_id)
     // Pre-initialize constant fields
     response.destination = DestinationType::CommandRunner;
     response.source = DestinationType::SimRunner;
+
+    thread_utils::PeriodicPacer pacer{kPollInterval};
 
     while (!abort)
     {
@@ -85,12 +94,14 @@ int SimulatorRunner::on_run(int core_id)
             // LOG_INFO("No ready response from simulator manager.");
         }
         PROF_STOP(prof_event_try_new_response);
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
         PROF_STOP(prof_event_simulation_thread_log);
-        // CPU_PAUSE();
-        // std::this_thread::yield();
+
+        // Absolute-deadline pace: drift-free, and guarantees the core is released even
+        // when a command takes longer than the poll interval to process.
+        pacer.wait_for_next_cycle();
     }
     PROF_THREAD_FLUSH();
+    LOG_INFO("Simulator Runner pacing: " + thread_utils::pacing_summary(pacer) + ".");
     LOG_INFO("Ending Simulator Runner.");
     // optional: drain/notify when aborting
     return 1;

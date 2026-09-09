@@ -5,6 +5,75 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3]
+
+### Fixed
+- The transmission runner paced its loop with a busy wait
+  (`while (steady_clock::now() < deadline) {}`) on a thread that is pinned and
+  running at `SCHED_FIFO` priority 80. Because that thread never blocked, every
+  lower-priority per-CPU kernel thread on its core was starved: `rcuc/N` (prio
+  1) never ran, the core never reported an RCU quiescent state, and the grace
+  period never completed. Anything parked in `synchronize_rcu()` while holding
+  `cgroup_mutex` then wedged systemd's `cgroup_rmdir()` path, so at boot no
+  units were dispatched, exited children were never reaped, and `systemctl`
+  stopped answering. The loop now paces through `thread_utils::PeriodicPacer`
+  (`src/utils/periodic_pacer.hpp`), which blocks on an absolute-deadline
+  `clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME)`. Note that
+  `sched_yield()`/`std::this_thread::yield()` would *not* have fixed this: for
+  `SCHED_FIFO` it only rotates the caller within its own priority level, so a
+  prio-1 kernel thread is still never picked. The thread has to genuinely block.
+- Pacing on an absolute deadline also removes the phase drift a relative
+  `sleep_for(cycle_time)` introduced: the period was measured from the *end* of
+  the cycle body, so the real cadence was `work + cycle_time + wakeup_latency`
+  and every cycle's work time and wakeup jitter accumulated. The deadline is
+  now measured from the start of the cycle.
+- A failed SPI transfer `continue`d without any pacing at all, turning a
+  persistent transmission fault into a tight `SCHED_FIFO` error loop with the
+  same core-starvation effect as the spin. The retry is now paced.
+- When the cycle body outruns the configured period (the default
+  `transmission_cycle_time_us` is 5 us, which the SPI transfer alone can
+  exceed) the deadline is already in the past, so a naive deadline sleep would
+  never block and the starvation would return. The pacer re-anchors the
+  deadline to the current time instead of chasing an unreachable schedule, and
+  forces a short blocking sleep if the core has not been released within 200
+  us. Missed deadlines are counted and the total is logged when the runner
+  stops.
+- `handler_thread_deserialize` included the end-of-cycle pacing sleep in its
+  measurement, so the reported deserialization time was really
+  deserialization + idle wait. The profiler event now stops before pacing.
+- The simulator and entanglement runners are pinned and run at `SCHED_FIFO`
+  priority 80 as well, and paced themselves with a relative
+  `sleep_for(5 us)` / `sleep_for(10 us)`. They were less exposed than the
+  transmission runner only because they always had *a* sleep in the loop, but
+  they carried the same phase drift and the same failure mode as soon as a
+  cycle body outran its poll interval. Both now use `PeriodicPacer` and log
+  their pacing summary on shutdown.
+- The entanglement runner's non-entanglement command path `continue`d out of
+  the loop body, skipping both `entanglement_manager->update_requests()` --
+  delaying every in-flight request behind an unrelated bad command -- and the
+  pacing sleep, which turned a run of unroutable commands into an unpaced
+  `SCHED_FIFO` loop. The command is now dropped without abandoning the rest of
+  the cycle.
+
+### Changed
+- Pre-measurement basis rotations are now applied only when the measurement is
+  in a **non-Z basis**. Z is already the measurement basis, so there is nothing
+  to rotate into; `qubit_measure_handler` and `entanglement_measure_handler`
+  previously applied the stored X-Y-X rotation unconditionally, rotating out of
+  the very basis being measured. Skipping does not consume the selection -- it
+  stays live for a later non-Z measurement on the same node.
+- `PeriodicPacer`'s relinquish interval (200 us) and block duration (20 us) are
+  constructor parameters rather than fixed constants. They matter most in the
+  *flat-out* regime, where the configured period is deliberately shorter than
+  the achievable cycle time -- the transmission runner's 5 us period against a
+  30-45 us userspace SPI transfer means every cycle overruns, so the forced
+  relinquish is the only mechanism releasing the core, not a fallback. At the
+  defaults that costs roughly 9% of throughput, paid once every ~5 cycles.
+- The runners' shutdown log reports cycles, overruns as a percentage, and the
+  worst deadline overshoot (`thread_utils::pacing_summary()`) instead of a bare
+  overrun count. In flat-out mode the overrun count is 100% by construction and
+  says nothing on its own; the overshoot is what reveals the real cycle time.
+
 ## [0.4.2]
 
 ### Fixed

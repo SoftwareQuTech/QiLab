@@ -142,10 +142,16 @@ private:
     std::unordered_map<uint16_t, std::unique_ptr<EntanglementLinkNoiseInterface>> entanglement_link_noise_models;
 
     /// Pending basis-rotation (pre-measurement) gates for a node, set by a
-    /// PRE_MEASUREMENT_GATES_SELECTION command and consumed by the next matching
+    /// PRE_MEASUREMENT_GATES_SELECTION command and applied by the next matching
     /// measurement. Kept per node (and per target) in the manager -- NOT in the
     /// adapter -- so one node's selection can never be applied to another node's
     /// qubit when commands interleave across the shared simulator.
+    ///
+    /// Only a NON-Z measurement rotates: Z is already the measurement basis, so
+    /// there is nothing to rotate into. The callers
+    /// (qubit_measure_handler/entanglement_measure_handler) gate on the command's
+    /// basis bit; a Z-basis measurement skips the rotation without consuming the
+    /// selection, which stays live for a later non-Z measurement.
     struct PreMeasureGates
     {
         bool enabled = false;

@@ -6,6 +6,7 @@
 #include "transmission_runner.hpp"
 #include "logger/logger_api.hpp"
 #include "utils/thread_utils.hpp"
+#include "utils/periodic_pacer.hpp"
 
 DataTransmissionRunner::DataTransmissionRunner(std::vector<int16_t> nodes, std::unique_ptr<TransmissionProcessor> processor, std::shared_ptr<MessageBroker> broker, float cycle_time_us)
     : transmission_processor(std::move(processor)), registered_nodes(nodes), message_broker(broker),
@@ -54,7 +55,11 @@ int DataTransmissionRunner::on_run(int core_id)
     }
 
     LOG_INFO("Starting Transmission Runner with " + std::to_string(registered_nodes.size()) + " registered nodes.");
-    
+
+    // Anchor the cadence after all startup work is done, so the first cycle is not
+    // immediately reported as an overrun.
+    thread_utils::PeriodicPacer pacer{transmission_cycle_time};
+
     while (!abort)
     {
         PROF_START(prof_event_serialize);
@@ -84,7 +89,8 @@ int DataTransmissionRunner::on_run(int core_id)
         if(transmission_processor->transmit_msg(responses, commands, registered_nodes.size(), node_transmission_data) != 0)
         {
             LOG_ERROR("Transmission Failed during SPI transfer.");
-            //std::this_thread::sleep_for(transmission_cycle_time);
+            // Pace the retry as well: a tight error loop starves the core just as a spin does.
+            pacer.wait_for_next_cycle();
             continue;
         }
 
@@ -95,7 +101,6 @@ int DataTransmissionRunner::on_run(int core_id)
         {
             if (commands[i] == nullptr || commands[i]->command_type == Command_t::NOP)
             {
-                //std::this_thread::sleep_for(transmission_cycle_time);
                 responses[i]->status = NodeStatus_t::READY;
                 responses[i]->outcome = Outcome_Status_t::SUCCESS;
                 continue;
@@ -119,23 +124,21 @@ int DataTransmissionRunner::on_run(int core_id)
             message_broker->route_command(std::move(command_context));
         }
 
-        //
-        // CPU_PAUSE();
-        // With this (no syscall — clock_gettime uses VDSO on aarch64):
-        auto deadline = std::chrono::steady_clock::now() + transmission_cycle_time;
-        while (std::chrono::steady_clock::now() < deadline)
-        {
-            // spin — thread is pinned to a dedicated core anyway
-        }
-        //std::this_thread::sleep_for(transmission_cycle_time);
         PROF_STOP(prof_event_deserialize);
-        // std::this_thread::yield();
+
+        // Pace to the configured period with an absolute-deadline sleep. This thread is
+        // SCHED_FIFO(80) and pinned, so it MUST block every cycle: a spin (or a
+        // sched_yield, which only rotates within the same priority level) starves the
+        // per-CPU kernel threads on this core — rcuc/N never runs, RCU grace periods
+        // stall, and systemd deadlocks in cgroup teardown. See PeriodicPacer for detail.
+        pacer.wait_for_next_cycle();
     }
     for (size_t node = 0; node < node_transmission_data.size(); ++node)
     {
         const auto &node_data = node_transmission_data[node];
         LOG_INFO("Final cycle count for node: " + std::to_string(node) + ", " + std::to_string(node_data.cycle_count) + ", CRC error count: " + std::to_string(node_data.crc_error_count));
     }
+    LOG_INFO("Transmission Runner pacing: " + thread_utils::pacing_summary(pacer) + ".");
     PROF_THREAD_FLUSH();
     LOG_INFO("Ending Transmission Runner.");
     return 0;

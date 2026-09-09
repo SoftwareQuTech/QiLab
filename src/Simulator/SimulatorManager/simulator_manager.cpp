@@ -760,7 +760,11 @@ ResponseData SimulatorManager::entanglement_measure_handler(std::unique_ptr<Comm
 
     // Step 2: basis rotation on this node's own qubit (must land AFTER the peek in
     // step 1 and BEFORE the measurement in step 3 -- which is exactly this order).
-    apply_pre_measure_gates(node_id, local_qubit, /*target=*/true);
+    // basis rotation is only applied if the command specifies basis 1.
+    if(cmd->basis == 1)
+    {
+        apply_pre_measure_gates(node_id, local_qubit, /*target=*/true);
+    }
 
     // Step 3: measure this node's own qubit for its (correlated) outcome bit.
     const uint8_t measurement = simulator_inst->qubit_measure(local_qubit, cmd->basis);
@@ -957,7 +961,11 @@ ResponseData SimulatorManager::qubit_measure_handler(std::unique_ptr<CommandBase
     // immediately before measuring, within this single atomic handler call, so no
     // other node's command can consume them first.
     const uint16_t global_qubit = static_cast<uint16_t>(cmd->qubit1_address + qubit_offset);
-    apply_pre_measure_gates(node_id, global_qubit, /*target=*/false);
+    // basis rotation is only applied if the command specifies basis 1 (basis different than Z)
+    if(cmd->basis == 1)
+    {
+        apply_pre_measure_gates(node_id, global_qubit, /*target=*/false);
+    }
 
     auto res = simulator_inst->qubit_measure(global_qubit, cmd->basis);
     response.status = NodeStatus_t::READY | NodeStatus_t::OUTCOME_READY;

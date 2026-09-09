@@ -1,8 +1,10 @@
 #include <thread>
+#include <chrono>
 
 #include "entanglement_runner.hpp"
 #include "DataTypes/commands.hpp"
 #include "utils/thread_utils.hpp"
+#include "utils/periodic_pacer.hpp"
 #include "logger/logger_api.hpp"
 #include "logger/profiler_api.hpp"
 
@@ -42,6 +44,12 @@ int EntanglementRunner::on_run(int core_id)
     }
     TransportData<CommandBase> command; // Command from message broker
 
+    // Poll interval for the request pump. Pinned and SCHED_FIFO(80) like the other
+    // runners, so this loop must block every cycle to keep the per-CPU kernel threads
+    // on its core runnable.
+    constexpr auto kPollInterval = std::chrono::microseconds(10);
+    thread_utils::PeriodicPacer pacer{kPollInterval};
+
     while (!abort)
     {
         if(message_broker->get_command(command, DestinationType::EntanglementRunner))
@@ -50,6 +58,7 @@ int EntanglementRunner::on_run(int core_id)
             auto cmd = std::move(command.transport);
             uint16_t node_id = command.node_id;
             uint16_t neighbour_node = 0; // TODO: extract from cmd
+            bool is_entanglement_command = true;
 
             //extract neighbour node from command - placeholder here
             if(cmd->command_type == Command_t::ENTANGLEMENT_ATTEMPT)
@@ -63,19 +72,28 @@ int EntanglementRunner::on_run(int core_id)
             else
             {
                 LOG_WARNING("Received non-entanglement command in EntanglementRunner. Ignoring.");
-                continue; // not an entanglement command
+                is_entanglement_command = false;
             }
 
-            if(!entanglement_manager->add_new_request(std::move(cmd), node_id, neighbour_node))
+            // Drop an unroutable command without skipping the rest of the cycle: an
+            // early `continue` here bypassed both update_requests() (delaying every
+            // in-flight request) and the pacing sleep, so a run of bad commands turned
+            // this into an unpaced SCHED_FIFO(80) loop.
+            if(is_entanglement_command &&
+               !entanglement_manager->add_new_request(std::move(cmd), node_id, neighbour_node))
             {
                 LOG_ERROR("Failed to add new entanglement request from node " + std::to_string(node_id) + " to neighbour " + std::to_string(neighbour_node) + ".");
             }
         }
 
         entanglement_manager->update_requests();
-        std::this_thread::sleep_for(std::chrono::microseconds(10));
+
+        // Absolute-deadline pace: drift-free, and guarantees the core is released even
+        // when update_requests() runs longer than the poll interval.
+        pacer.wait_for_next_cycle();
     }
     PROF_THREAD_FLUSH();
+    LOG_INFO("Entanglement Runner pacing: " + thread_utils::pacing_summary(pacer) + ".");
     LOG_INFO("Ending Entanglement Runner.");
     return 0;
 }

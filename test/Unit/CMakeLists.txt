@@ -22,6 +22,7 @@ add_executable(unit_tests
                 ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/SimulatorRunners/test_simulator_runner.cpp
                 ${CMAKE_CURRENT_SOURCE_DIR}/Simulator/SimulatorRunners/test_entanglement_runner.cpp
                 ${CMAKE_CURRENT_SOURCE_DIR}/DataTransmission/TransmissionRunner/test_transmission_runner.cpp
+                ${CMAKE_CURRENT_SOURCE_DIR}/utils/test_periodic_pacer.cpp
                 )
 target_compile_definitions(unit_tests PRIVATE PROF_ENABLED=0 LOGGING_ENABLED=0)
 target_include_directories(unit_tests PRIVATE ${CMAKE_SOURCE_DIR}/test)

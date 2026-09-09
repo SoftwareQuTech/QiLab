@@ -270,8 +270,10 @@ make_link_noise_model_for_link(uint8_t node_a, uint8_t node_b, float p_depolariz
 
 // ---- Tests -----------------------------------------------------------------
 
-// A regular measurement applies the node's selected basis rotation (X-Y-X) to
-// that node's own global qubit, then measures the same qubit.
+// A regular measurement in a NON-Z basis applies the node's selected basis
+// rotation (X-Y-X) to that node's own global qubit, then measures the same
+// qubit. A Z-basis measurement needs no rotation at all -- see
+// RegularMeasureInZBasisSkipsRotation.
 TEST_F(SimulatorManagerTest, RegularMeasureRotatesOwnQubitThenMeasures)
 {
     auto sel = build_command(PreMeasureGateSelect(_2_PI_16, _3_PI_16, _4_PI_16, /*target=*/false));
@@ -280,8 +282,8 @@ TEST_F(SimulatorManagerTest, RegularMeasureRotatesOwnQubitThenMeasures)
     run(/*node=*/0, std::move(sel));
     EXPECT_TRUE(spy->ops.empty()) << "selection must not touch the simulator";
 
-    // Node 0, local qubit 1 -> global qubit 1.
-    run(/*node=*/0, build_command(QMeasure(/*addr=*/1, /*basis=*/false, X_AXIS)));
+    // Node 0, local qubit 1 -> global qubit 1. Non-Z basis, so the rotation runs.
+    run(/*node=*/0, build_command(QMeasure(/*addr=*/1, /*basis=*/true, X_AXIS)));
 
     // Idle-dephasing noise is applied first for the measurement itself, then
     // each non-zero-angle rotation gate gets its OWN preceding noise call, then
@@ -314,8 +316,11 @@ TEST_F(SimulatorManagerTest, SelectionIsNotConsumedByAnotherNode)
 {
     run(/*node=*/0, build_command(PreMeasureGateSelect(_2_PI_16, _3_PI_16, _4_PI_16, /*target=*/false)));
 
-    // Node 1 measures first (local qubit 0 -> global qubit 2): noise but no rotation.
-    run(/*node=*/1, build_command(QMeasure(/*addr=*/0, /*basis=*/false, X_AXIS)));
+    // Node 1 measures first (local qubit 0 -> global qubit 2): noise but no
+    // rotation. Deliberately a non-Z basis, so the *only* reason node 1 skips the
+    // rotation is that the selection belongs to node 0 -- a Z-basis measurement
+    // here would pass this test for the wrong reason.
+    run(/*node=*/1, build_command(QMeasure(/*addr=*/0, /*basis=*/true, X_AXIS)));
     ASSERT_EQ(spy->ops.size(), 2u);
     EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Noise);
     EXPECT_EQ(spy->ops[0].qubit, 2u);
@@ -323,7 +328,7 @@ TEST_F(SimulatorManagerTest, SelectionIsNotConsumedByAnotherNode)
     EXPECT_EQ(spy->ops[1].qubit, 2u);
 
     // Node 0 measures (local qubit 0 -> global qubit 0): rotation still applied.
-    run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/false, X_AXIS)));
+    run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/true, X_AXIS)));
     ASSERT_EQ(spy->ops.size(), 10u);
     EXPECT_EQ(spy->ops[2].kind, RecordedOp::Kind::Noise); // measurement's own idle noise
     EXPECT_EQ(spy->ops[2].qubit, 0u);
@@ -340,6 +345,58 @@ TEST_F(SimulatorManagerTest, SelectionIsNotConsumedByAnotherNode)
     EXPECT_EQ(spy->ops[9].qubit, 0u);
 }
 
+// The Z basis IS the measurement basis, so there is nothing to rotate into: a
+// Z-basis measurement must skip the pre-measure gates entirely, even with a
+// selection active. Only the measurement's own idle noise and the measurement
+// itself reach the adapter.
+TEST_F(SimulatorManagerTest, RegularMeasureInZBasisSkipsRotation)
+{
+    run(/*node=*/0, build_command(PreMeasureGateSelect(_2_PI_16, _3_PI_16, _4_PI_16, /*target=*/false)));
+
+    run(/*node=*/0, build_command(QMeasure(/*addr=*/1, /*basis=*/false, X_AXIS)));
+
+    ASSERT_EQ(spy->ops.size(), 2u);
+    EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Noise); // measurement's own idle noise
+    EXPECT_EQ(spy->ops[0].qubit, 1u);
+    EXPECT_EQ(spy->ops[1].kind, RecordedOp::Kind::Measure);
+    EXPECT_EQ(spy->ops[1].qubit, 1u);
+    EXPECT_FALSE(spy->ops[1].basis);
+}
+
+// Skipping the rotation must not consume the selection: a Z-basis measurement
+// leaves it in place for a later non-Z measurement on the same node.
+TEST_F(SimulatorManagerTest, ZBasisMeasureDoesNotConsumeTheSelection)
+{
+    run(/*node=*/0, build_command(PreMeasureGateSelect(_2_PI_16, _3_PI_16, _4_PI_16, /*target=*/false)));
+
+    run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/false, X_AXIS)));
+    ASSERT_EQ(spy->ops.size(), 2u) << "Z basis: idle noise + measure only";
+
+    // Same node, same qubit, now in a non-Z basis: the selection is still there.
+    run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/true, X_AXIS)));
+    ASSERT_EQ(spy->ops.size(), 10u) << "non-Z basis: the stored rotation re-applies";
+    EXPECT_EQ(spy->ops[4].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[6].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[8].kind, RecordedOp::Kind::SingleGate);
+    EXPECT_EQ(spy->ops[9].kind, RecordedOp::Kind::Measure);
+}
+
+// The same basis gate on the entanglement-measure path: establish (and its link
+// noise) still run, but the rotation between establish and measure does not.
+TEST_F(SimulatorManagerTest, EntanglementMeasureInZBasisSkipsRotation)
+{
+    run(/*node=*/0, build_command(PreMeasureGateSelect(_2_PI_16, _3_PI_16, _4_PI_16, /*target=*/true)));
+
+    run(/*node=*/0, build_command(EntanMeasure(/*fidelity=*/0, wire_nghbr(1), /*qid=*/0,
+                                               /*try_now=*/true, /*basis=*/false, /*repeat=*/0)));
+
+    ASSERT_EQ(spy->ops.size(), 2u);
+    EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Establish);
+    EXPECT_EQ(spy->ops[0].qubit, 0u);
+    EXPECT_EQ(spy->ops[1].kind, RecordedOp::Kind::Measure);
+    EXPECT_EQ(spy->ops[1].qubit, 0u);
+}
+
 // A selection is NOT one-shot: it persists across measurements and re-applies
 // (with its own per-gate noise) on every matching measurement, until a new
 // PRE_MEASUREMENT_GATES_SELECTION overwrites it.
@@ -347,10 +404,10 @@ TEST_F(SimulatorManagerTest, SelectionPersistsAcrossMultipleMeasurements)
 {
     run(/*node=*/0, build_command(PreMeasureGateSelect(_2_PI_16, _3_PI_16, _4_PI_16, /*target=*/false)));
 
-    run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/false, X_AXIS)));
+    run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/true, X_AXIS)));
     ASSERT_EQ(spy->ops.size(), 8u); // measurement noise + 3x(per-gate noise + rotation) + measure
 
-    run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/false, X_AXIS)));
+    run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/true, X_AXIS)));
     ASSERT_EQ(spy->ops.size(), 16u); // the same 8-op sequence repeats
     EXPECT_EQ(spy->ops[8].kind, RecordedOp::Kind::Noise);
     EXPECT_EQ(spy->ops[9].kind, RecordedOp::Kind::Noise);
@@ -371,7 +428,7 @@ TEST_F(SimulatorManagerTest, SelectionWithOneZeroAngleSkipsOnlyThatSubGate)
 {
     run(/*node=*/0, build_command(PreMeasureGateSelect(_0_PI_16, _3_PI_16, _4_PI_16, /*target=*/false)));
 
-    run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/false, X_AXIS)));
+    run(/*node=*/0, build_command(QMeasure(/*addr=*/0, /*basis=*/true, X_AXIS)));
 
     // measurement noise + 2x(per-gate noise + rotation) [angle2, angle3 only] + measure
     ASSERT_EQ(spy->ops.size(), 6u);
@@ -392,9 +449,10 @@ TEST_F(SimulatorManagerTest, EntanglementMeasureEstablishesThenRotatesThenMeasur
     // target=1 selects the entanglement-measure slot.
     run(/*node=*/0, build_command(PreMeasureGateSelect(_2_PI_16, _3_PI_16, _4_PI_16, /*target=*/true)));
 
-    // Node 0 measures entanglement with node 1 (initiator, since 0 < 1).
+    // Node 0 measures entanglement with node 1 (initiator, since 0 < 1). Non-Z
+    // basis, so the rotation runs.
     run(/*node=*/0, build_command(EntanMeasure(/*fidelity=*/0, wire_nghbr(1), /*qid=*/0,
-                                               /*try_now=*/true, /*basis=*/false, /*repeat=*/0)));
+                                               /*try_now=*/true, /*basis=*/true, /*repeat=*/0)));
 
     ASSERT_EQ(spy->ops.size(), 8u);
     EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Establish);
@@ -554,7 +612,7 @@ TEST_F(SimulatorManagerTest, EntanglementMeasureAppliesLinkNoiseBeforeRotationAn
 
     run(/*node=*/0, build_command(PreMeasureGateSelect(_2_PI_16, _3_PI_16, _4_PI_16, /*target=*/true)));
     run(/*node=*/0, build_command(EntanMeasure(/*fidelity=*/0, wire_nghbr(1), /*qid=*/0,
-                                               /*try_now=*/true, /*basis=*/false, /*repeat=*/0)));
+                                               /*try_now=*/true, /*basis=*/true, /*repeat=*/0)));
 
     ASSERT_EQ(spy->ops.size(), 9u);
     EXPECT_EQ(spy->ops[0].kind, RecordedOp::Kind::Establish);
