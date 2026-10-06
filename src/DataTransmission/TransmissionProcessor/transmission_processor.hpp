@@ -1,3 +1,6 @@
+// Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+// SPDX-License-Identifier: BSD-3-Clause-Clear
+
 /*
 ** Created on: 25.08.2025
 ** Created by: mrkolev
@@ -8,6 +11,7 @@
 #pragma once
 #include <memory>
 #include <vector>
+#include <array>
 #include <cstdint>
 
 #include "DataTransmission/transmision_handler.hpp"
@@ -21,6 +25,20 @@
 #define CONTROL_WORD_LEN           4
 #define MAX_NUMBER_OF_COMMANDS     ((MAX_BUFFER_LENGTH - CONTROL_WORD_LEN) / COMMAND_MESSAGE_LENGTH)
 #define LP_DATA_BUFFER_LENGTH      32   
+/**
+ * @brief Per-node transmission state data.
+ *
+ * Holds cycle counter and LP data buffer for a single node.
+ * This allows each node to maintain independent transmission state.
+ */
+struct NodeTransmissionData
+{
+    uint64_t cycle_count = 0;
+    std::array<uint32_t, LP_DATA_BUFFER_LENGTH> lp_data_buffer;
+    uint64_t crc_error_count = 0;
+    NodeTransmissionData() : lp_data_buffer{} {}
+};
+
 /**
  * @brief Handles reception and transmission of single commands/responses,
  *        plus synchronous request/response exchanges.
@@ -40,8 +58,6 @@ private:
     // Aligned buffers for DMA efficiency
     __attribute__((aligned(64))) static uint8_t tx_buffer[MAX_BUFFER_LENGTH];
     __attribute__((aligned(64))) static uint8_t rx_buffer[MAX_BUFFER_LENGTH];
-    static uint32_t lp_data_buffer[LP_DATA_BUFFER_LENGTH];
-    uint64_t cycle_count_ = 0;
 public:
     /**
      * @brief Bind the processor to a transport implementation.
@@ -95,8 +111,10 @@ public:
      * DMA efficiency. Commands are deserialized with minimal allocation overhead.
      *
      * @param[in]  responses           Responses to serialize and send (size must match transfer_msg_count).
-     * @param[out] commands            Command vector; successfully decoded commands swap into indices [0..transfer_msg_count-1].
+    * @param[out] commands            Command vector; successfully decoded commands swap into indices [0..transfer_msg_count-1].
+    *                               If CRC or deserialize fails for a slot, that entry is reset to nullptr.
      * @param[in]  transfer_msg_count  Number of messages to TX/RX atomically (≤ responses.size(), ≤ commands.size()).
+     * @param[in,out] node_data_vec    Vector of per-node transmission data; processor extracts cycle counter and LP data per node during batch transmission.
      * @return int8_t
      *         - 0  on full success (TX/RX complete; all commands decoded)
      *         - -1 invalid sizes/counts or null entries
@@ -105,7 +123,8 @@ public:
      */
     int8_t transmit_msg(const std::vector<std::unique_ptr<ResponseData>> &responses,
                         std::vector<std::unique_ptr<CommandBase>> &commands,
-                        uint8_t transfer_msg_count);
+                        uint8_t transfer_msg_count,
+                        std::vector<NodeTransmissionData> &node_data_vec);
 
 private:
     /// Shared pointer to the transport handler used for sending/receiving raw data.

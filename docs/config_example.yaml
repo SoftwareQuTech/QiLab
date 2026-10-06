@@ -1,0 +1,88 @@
+# QILab Node Configuration
+# This file defines the quantum network nodes for simulation
+#
+# Location: ~/.qilab/config/nodes.yaml
+# See config_guide.md for the field-by-field reference, and config.schema.json
+# for the machine-readable schema.
+
+# QiLab System Configuration
+system:
+  transmission_cycle_time_us: 5
+  qubit_noise_enabled: true
+  entanglement_noise_enabled: true
+
+nodes:
+  - name: node0
+    node_type: GENERIC
+    # Two-qubit gate depolarizing noise is one model per NODE (Sec. 2.1),
+    # unlike the single-qubit case which is per qubit array below.
+    two_qubit_gate_noise_model:
+      type: DEPOLARIZING
+      depolarizing_probability: 0.02
+    # Node-wide operation delays. The single-qubit gate delay is NOT here:
+    # it is a qubit array property (single_gate_delay_ns below).
+    quantum_operations_delay_ns:
+      two_qubit_gate_rotation: 300
+      measurement: 400
+      entanglement: 500
+      qubit_move: 600
+      qubit_swap: 400
+      qubit_init: 200
+    qubit_arrays:
+      # A communication array: fast gates, short-lived.
+      - num_qubits: 1
+        single_gate_delay_ns: 200
+        qubit_decoherence_noise_model:
+          type: PHASE_FLIP
+          t2_value: 3.17e+7
+        gate_noise_model:
+          type: DEPOLARIZING
+          depolarizing_probability: 0.001
+      # A memory array on the same node: slower gates, different gate fidelity.
+      - num_qubits: 4
+        single_gate_delay_ns: 1200
+        qubit_decoherence_noise_model:
+          type: BASIC
+          t2_value: 1.0e+8
+        gate_noise_model:
+          type: DEPOLARIZING
+          depolarizing_probability: 0.005
+
+  - name: node1
+    node_type: NV_CENTER
+    two_qubit_gate_noise_model:
+      type: DEPOLARIZING
+      depolarizing_probability: 0.03
+    quantum_operations_delay_ns:
+      two_qubit_gate_rotation: 300
+      measurement: 400
+      entanglement: 500
+      qubit_move: 600
+      qubit_swap: 400
+      qubit_init: 200
+    qubit_arrays:
+      - num_qubits: 4
+        single_gate_delay_ns: 250
+        qubit_decoherence_noise_model:
+          type: BASIC
+          t2_value: 1000
+        gate_noise_model:
+          type: DEPOLARIZING
+          depolarizing_probability: 0.002
+
+# One entry per physical link, referencing node names above. Each link carries
+# its own attempt model (batching/success/delay) and link noise model (the Pauli
+# channel applied on a successful attempt).
+entanglement_links:
+  - node_a: node0
+    node_b: node1
+    attempt_model:
+      type: BASIC
+      attempt_duration_ns: 1000
+      batch_size: 100
+      p_success: 0.5
+      rng_seed: 42
+    link_noise_model:
+      type: BASIC
+      p_depolarizing: 0.01
+      p_dephasing: 0.02

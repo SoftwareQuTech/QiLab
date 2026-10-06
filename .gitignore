@@ -43,6 +43,18 @@
 
 #builds
 /build
+/build-*/
+/dist
+/dist-update
+/Release
+/Debug
+/RelWithDebInfo
+/MinSizeRel
+/Testing
+
 
 #vscode
 .vscode
+
+#github
+.github

@@ -1,3 +1,6 @@
+// Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+// SPDX-License-Identifier: BSD-3-Clause-Clear
+
 /*
 ** Created on: 21.08.2025
 ** Created by: mrkolev
@@ -30,6 +33,7 @@ enum Axis_t
 
 enum Angle_t
 {
+    _0_PI_16 = 0, // no rotation; used to omit a gate without affecting the quantum state
     _PI_16 = 1,
     _2_PI_16 = 2,
     _3_PI_16= 3,
@@ -77,7 +81,21 @@ enum Command_t
     QUBIT_MOVE =                        0x08,
     QUBIT_SWAP =                        0x09,
     ENTANGLEMENT_SWAP =                 0x0A,
+    PRE_MEASURE_AND_ENTANGLE_MEASURE =  0x0B,
     INVALID_COMMAND =                   0xFF
+};
+
+struct EntanglementNoise
+{
+    explicit EntanglementNoise(float place_holder_1, float place_holder_2, float place_holder_3) noexcept
+        : place_holder_1(place_holder_1)
+        , place_holder_2(place_holder_2)
+        , place_holder_3(place_holder_3)
+    {}
+    
+    float place_holder_1;
+    float place_holder_2;
+    float place_holder_3;
 };
 
 struct CommandBase
@@ -163,7 +181,7 @@ struct EntanglementAttempt final: public CommandBase
     explicit EntanglementAttempt(const uint8_t* data) noexcept
         : CommandBase(data)
         , fidelity(FIDELITY_BIT_MASK & data[1])
-        , nghbr((NGHBR_BIT_MASK & data[1]) >> 4)
+        , nghbr(((NGHBR_BIT_MASK & data[1]) >> 4) - 1) // Adjusting for 0-based indexing
         //TODO: Figure out how this is done in QNodeOS
         //WORKAROUND: get the address of the qubit as a whole
         , qid(data[2]) // ((QID_BIT_MASK & data[2]) >> 2)
@@ -172,6 +190,7 @@ struct EntanglementAttempt final: public CommandBase
     uint8_t fidelity;
     uint8_t nghbr;
     uint8_t qid;
+    EntanglementNoise noise_parameters{0.0f, 0.0f, 0.0f}; // Placeholder for noise parameters
 };
 
 struct EntangleMeasure final: public CommandBase
@@ -179,7 +198,7 @@ struct EntangleMeasure final: public CommandBase
     explicit EntangleMeasure(const uint8_t* data) noexcept
         : CommandBase(data)
         , fidelity(FIDELITY_BIT_MASK & data[1])
-        , nghbr((NGHBR_BIT_MASK & data[1]) >> 4)
+        , nghbr(((NGHBR_BIT_MASK & data[1]) >> 4) - 1) // Adjusting for 0-based indexing
         , qid((QID_BIT_MASK & data[2]) >> 2)
         , basis(BASIS_BIT_MASK & data[2])
         , immediate((0x02 & data[2]) >> 1)
@@ -192,6 +211,7 @@ struct EntangleMeasure final: public CommandBase
     uint8_t basis;
     bool immediate;
     uint8_t repetitions;
+    EntanglementNoise noise_parameters{0.0f, 0.0f, 0.0f}; // Placeholder for noise parameters
 };
 
 struct PreMeasureGatesSelection final: public CommandBase
@@ -245,3 +265,4 @@ struct EntanglementSwap final: public CommandBase
     uint8_t qubit1_address;
     uint8_t qubit2_address;
 };
+

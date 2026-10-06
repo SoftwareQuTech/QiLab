@@ -1,37 +1,94 @@
+// Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+// SPDX-License-Identifier: BSD-3-Clause-Clear
+
 // in a source code file
 #include <iostream>
 #include <random>
+#include <csignal>
+#include <string_view>
 #include <thread>
+#include <unordered_map>
 #include <signal.h>
 
-#include "stim.h"
-#include "stim/circuit/gate_target.h"
-#include "stim/circuit/circuit_instruction.h"
 
-#include <Simulator/adapters/mock_adapter.hpp>
-#include <Simulator/adapters/stim_adapter.hpp>
-#include <SimulatorRunners/simulator_runner.hpp>
+//Simulator implementations
+#include <Simulator/SimulatorAdapters/mock_adapter.hpp>
+#include <Simulator/SimulatorAdapters/stim_adapter.hpp>
+#include <Simulator/SimulatorAdapters/stim_nv_adapter.hpp>
+
+//Runners
+#include "Simulator/SimulatorRunners/simulator_runner.hpp"
 #include "DataTransmission/TransmissionRunner/transmission_runner.hpp"
+#include "Simulator/SimulatorRunners/entanglement_runner.hpp"
+
+//Intermediaries
+#include "Simulator/SimulatorManager/simulator_manager.hpp"
+#include "Simulator/entanglement_attempt_noise_interface.hpp"
+#include "Simulator/entanglement_link_noise_interface.hpp"
+#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_attempt_noise.hpp"
+#include "Simulator/NoiseModels/EntanglementGenerationNoise/entanglement_link_noise.hpp"
+#include "Simulator/link_key.hpp"
+
+//Data transmission
 #include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
 #include "DataTransmission/handlers/mock_handler.hpp"
-#include "logger/profiler_api.hpp"
-#include "logger/logger_api.hpp"
 #include "DataTransmission/handlers/spi_master_handler.hpp"
-#include "SimulatorRunners/entanglement_runner.hpp"
 #include "MessageBroker/message_broker.hpp"
 
-bool abort_sim = false;
+//Loggers and profilers
+#include "logger/profiler_api.hpp"
+#include "logger/logger_api.hpp"
+#include "logger/data_acquisition_api.hpp"
+
+//Config
+#include "qilab/version.hpp"
+#include "ConfigurationEngine/config_loader.hpp"
+
+//#define RUN_MOCKED_TRANSMISSION
+
+// Written from a signal handler, so it must be a lock-free, async-signal-safe
+// type rather than a plain bool.
+volatile std::sig_atomic_t abort_sim = 0;
+
+void print_startup_banner(const std::string& version) {
+    std::cout << "\n"
+              << "==== QILAB :: Quantum Interface Lab ====\n"
+              << "Product of TU Delft | v" << version << "\n"
+              << "========================================\n"
+              << std::endl;
+}
 
 
 void signal_callback_handler(int signum) {
-   std::cout << "Caught signal " << signum << std::endl;
    // Terminate program
-   abort_sim = true;
+   abort_sim = 1;
 }
 
 int main()
 {
+    const std::string version = std::to_string(QILab::VERSION_MAJOR) + "."
+                              + std::to_string(QILab::VERSION_MINOR) + "."
+                              + std::to_string(QILab::VERSION_PATCH)
+                              + " (" + QILab::VERSION_GIT_COMMIT + ")";
+
+    print_startup_banner(version);
+
     signal(SIGINT, signal_callback_handler);
+    signal(SIGTERM, signal_callback_handler);
+    //get the log level from environment variable and set it in the logger
+    const char* log_level_env = std::getenv("QILAB_LOG_LEVEL");
+    if (log_level_env) {
+        std::string log_level_str(log_level_env);
+        LOG_LEVEL(log_level_str);
+    } else {
+        LOG_LEVEL("DEBUG"); // default log level
+    }
+    // Structured research data acquisition is opt-in via QILAB_DAQ=1. Output
+    // goes to ~/.qilab/logs/data_acquisition.jsonl, next to the profiler data.
+    const char* daq_env = std::getenv("QILAB_DAQ");
+    const bool daq_enabled = daq_env && std::string_view(daq_env) == "1";
+    DAQ_CONFIGURE(daq_enabled, "");
+
 #if defined(__linux) && defined(__GLIBCXX__) && __GLIBCXX__ >= 20200128
     // Workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=94087
     // See https://github.com/quantumlib/Stim/issues/26
@@ -43,20 +100,92 @@ int main()
 
     std::shared_ptr<MessageBroker> broker = std::make_shared<MessageBroker>();
     
-    std::unique_ptr<StimAdapter> stim_adapter =  std::make_unique<StimAdapter>(seq, 0); //the seed is problematic
-    SimulatorRunner sim(std::move(stim_adapter), broker);
-    int16_t node_id_1 = sim.register_node(10);
+    // Load configuration from file
+    const std::string config_path = get_default_config_path();
+    LOG_INFO("Using configuration file: " + config_path);
+    auto config = load_config(config_path);
+    if (!config) {
+        LOG_ERROR("Failed to load configuration, exiting");
+        return 1;
+    }
+    
+    if (config->nodes.empty()) {
+        LOG_ERROR("No nodes configured, exiting");
+        return 1;
+    }
+    
+    LOG_INFO("Configuration loaded with " + std::to_string(config->nodes.size()) + " nodes");
+    
+    std::unique_ptr<StimAdapterNVCenters> stim_adapter =  std::make_unique<StimAdapterNVCenters>(seq, 0); //the seed is problematic
+    std::unique_ptr<SimulatorManager> sim_manager = std::make_unique<SimulatorManager>(
+        std::move(stim_adapter), config->system.qubit_noise_enabled, config->system.entanglement_noise_enabled);
 
 
-    std::unique_ptr<ITransmissionHandler> transportB = std::make_unique<MockHandler>();
+    // Register nodes dynamically from configuration
+    std::vector<int16_t> node_ids;
+    for (size_t i = 0; i < config->nodes.size(); ++i) {
+        int16_t node_id = sim_manager->register_node(config->nodes[i]);
+        if (node_id < 0) {
+            // A negative id is a failure code, not an id. Pushing it would make
+            // it wrap to a bogus uint16_t and silently mis-key entanglement links.
+            LOG_ERROR("Failed to register node '" + config->nodes[i].name + "' (code " +
+                      std::to_string(node_id) + "), exiting");
+            return 1;
+        }
+        node_ids.push_back(node_id);
+        LOG_INFO("Registered node " + std::to_string(i) + " with ID " +
+                 std::to_string(node_id) + " (" + std::to_string(sim_manager->get_registered_qubits()) + " qubits)");
+    }
+
+    // Resolve entanglement_links (config, keyed by node name) into per-link
+    // attempt models (for the entanglement manager) and channel models (for
+    // the simulator manager), keyed by encode_link_key(node_id_a, node_id_b),
+    // using the node-name -> node-id mapping established by the registration
+    // loop above.
+    std::unordered_map<std::string, uint16_t> name_to_node_id;
+    for (size_t i = 0; i < config->nodes.size(); ++i) {
+        name_to_node_id[config->nodes[i].name] = static_cast<uint16_t>(node_ids[i]);
+    }
+
+    std::unordered_map<uint16_t, std::unique_ptr<EntanglementAttemptNoiseInterface>> attempt_models;
+    std::unordered_map<uint16_t, std::unique_ptr<EntanglementLinkNoiseInterface>> link_noise_models;
+    for (const auto& link : config->entanglement_links) {
+        const uint16_t node_id_a = name_to_node_id.at(link.node_a);
+        const uint16_t node_id_b = name_to_node_id.at(link.node_b);
+        const uint16_t link_key = encode_link_key(static_cast<uint8_t>(node_id_a), static_cast<uint8_t>(node_id_b));
+
+        if (const auto* basic = std::get_if<EntanglementAttemptBasicConfig>(&link.attempt_model.config_data)) {
+            attempt_models[link_key] = std::make_unique<EntanglementAttemptModel>(
+                basic->attempt_duration_ns, basic->batch_size, basic->p_success, basic->rng_seed);
+        }
+        if (const auto* basic = std::get_if<EntanglementLinkNoiseBasicConfig>(&link.link_noise_model.config_data)) {
+            link_noise_models[link_key] = std::make_unique<EntanglementLinkNoiseModel>(basic->p_depolarizing, basic->p_dephasing);
+        }
+    }
+
+    sim_manager->configure_entanglement_links(std::move(link_noise_models));
+
+    SimulatorRunner sim(std::move(sim_manager), broker);
+
+#ifndef RUN_MOCKED_TRANSMISSION
+    LOG_INFO("Using SPI transmission handler");
     std::unique_ptr<ITransmissionHandler> transportA = std::make_unique<SPIHandler>();
     std::unique_ptr<TransmissionProcessor> command_handlerA = std::make_unique<TransmissionProcessor>(std::move(transportA));
-    DataTransmissionRunner nodeA({node_id_1}, std::move(command_handlerA), broker);
+    DataTransmissionRunner transmission_node(node_ids, std::move(command_handlerA), broker, config->system.transmission_cycle_time_us);
+#else
+    LOG_INFO("Using mocked transmission handler");
+    std::unique_ptr<ITransmissionHandler> transportB = std::make_unique<MockHandler>();
+    std::unique_ptr<TransmissionProcessor> command_handlerB = std::make_unique<TransmissionProcessor>(std::move(transportB));
+    DataTransmissionRunner transmission_node(node_ids, std::move(command_handlerB), broker, config->system.transmission_cycle_time_us);
+#endif
 
-    EntanglementRunner ent_runner(broker);
+    EntanglementRunner ent_runner(broker, std::move(attempt_models));
 
     LOG_INFO("Starting simulation");
-    
+
+    LOG_WARNING("This build uses reset of the qubits in the entanglement attempt. This is needed in order to run the qia-test apps correctly.");
+    LOG_WARNING("This will be removed in the future when we have a better way to ensure state of the qubits for testing.");
+
     // Pre-define core assignments
     constexpr int SIMULATOR_CORE = 2;
     constexpr int ENTANGLEMENT_CORE = 2;
@@ -74,91 +203,49 @@ int main()
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     // Start entanglement thread with affinity check
-    // LOG_INFO("Starting entanglement thread on core: " + std::to_string(ENTANGLEMENT_CORE));
-    // std::jthread entanglement_thread([&ent_runner, ENTANGLEMENT_CORE]() {
-    //     // Set name for easier identification
-    //     pthread_setname_np(pthread_self(), "entanglement");
-    //     return ent_runner.on_run(ENTANGLEMENT_CORE);
-    // });
+    LOG_INFO("Starting entanglement thread on core: " + std::to_string(ENTANGLEMENT_CORE));
+    std::jthread entanglement_thread([&ent_runner, ENTANGLEMENT_CORE]() {
+        // Set name for easier identification
+        pthread_setname_np(pthread_self(), "entanglement");
+        return ent_runner.on_run(ENTANGLEMENT_CORE);
+    });
 
-    // Small delay to ensure first thread is settled
+    // Small delay to ensure second thread is settled
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     // Start transmission thread with affinity check
     LOG_INFO("Starting transmission thread on core: " + std::to_string(TRANSMISSION_CORE));
-    std::jthread thread_node_a([&nodeA, TRANSMISSION_CORE]() {
+    std::jthread thread_node_a([&transmission_node, TRANSMISSION_CORE]() {
         // Set name for easier identification
         pthread_setname_np(pthread_self(), "transmit");
-        return nodeA.on_run(TRANSMISSION_CORE);
+        return transmission_node.on_run(TRANSMISSION_CORE);
     });
-
 
     while(!abort_sim)
     {
         //do nothing and wait for abort signal
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        //abort_sim = true;
+        // Push buffered DAQ records to disk from this non-real-time thread. Keeps
+        // the JSONL readable by external consumers WHILE the run is in progress
+        // (records otherwise sit in a 1 MiB buffer until it spills) and bounds
+        // loss to one tick if the process is killed rather than signalled.
+        DAQ_FLUSH();
     }
 
     sim.on_abort();
     simulator_thread.join();
-    
-    //ent_runner.on_abort();
-    //entanglement_thread.join();
 
-    nodeA.on_abort();    
+    ent_runner.on_abort();
+    entanglement_thread.join();
+
+    transmission_node.on_abort();
     thread_node_a.join();
-/*
-    std::shared_ptr<ITransmissionHandler> transportA = std::make_shared<MockHandler>();
-    TransmissionProcessor* command_handlerA = new TransmissionProcessor(transportA);
-    DataTransmissionRunner* nodeA = new DataTransmissionRunner({0}, command_handlerA, nullptr);
 
-
-    int16_t node_id = sim.register_node(10);
-
-
-    std::cout << "Starting simulation" << std::endl;
-
-    std::jthread simulator_thread(&SimulatorRunner::on_run, &sim);
-    //std::jthread ent_manager_thread(&EntanglementManager::on_run, &ent_manager);
-
-    std::unique_ptr<std::jthread> thread_node_a;
-
-
-    if(nodeA != nullptr)
-    {
-        thread_node_a = std::make_unique<std::jthread>([nodeA]{ nodeA->on_run(); });
-    }
-
-    while(!abort_sim)
-    {
-        //do nothing and wait for abort signal
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        abort_sim = true;
-    }
-    std::cout << "Timer expired" << std::endl;
-
-    nodeA->on_abort();
-
-    std::cout << "Node Stopped" << std::endl;
-
-    sim.on_abort();
-        std::cout << "Sim stopped" << std::endl;
-
-    simulator_thread.join();
-        std::cout << "Join sim thread" << std::endl;
-
-    thread_node_a->join();
-
-    std::cout << "Join node thread" << std::endl;
-
-
-    //logger->save_to_file("simple_prg_10000r_3n");
-
-    delete stim_adapter;
-    delete command_handlerA;
-    */
-    PROF_SAVE_DATA("test_trace");
+    // Dump telemetry only after every thread has joined: each runner merges its
+    // thread-local profiler data into the global container on its way out, so
+    // dumping earlier would write a partial (or empty) file.
+    PROF_SAVE_DATA("profile");
+    DAQ_FLUSH();
     LOG_INFO("Executed the simulation");
 
     return 0;

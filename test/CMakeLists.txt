@@ -1,3 +1,6 @@
+# Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
 # tests/CMakeLists.txt
 cmake_minimum_required(VERSION 3.16)
 
@@ -12,59 +15,12 @@ include(FetchContent)
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-add_executable(transmission_processor_test
-                ${CMAKE_CURRENT_SOURCE_DIR}/DataTransmission/TransmissionProcessor/test_transmission_processor_sync.cpp
-                ${CMAKE_CURRENT_SOURCE_DIR}/DataTransmission/TransmissionProcessor/test_transmission_processor_simple.cpp                
-                #${CMAKE_CURRENT_SOURCE_DIR}/mocks/mock_transmission.hpp
-                )
-target_compile_definitions(transmission_processor_test PRIVATE PROF_ENABLED=0 LOGGING_ENABLED=0)
-target_include_directories(transmission_processor_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(transmission_processor_test PRIVATE 
-GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
-add_test(NAME transmission_processor_test COMMAND transmission_processor_test)
-
-add_executable(entanglement_manager_test
-                ${CMAKE_CURRENT_SOURCE_DIR}/Entanglement/test_entanglement_manager.cpp
-                )
-target_compile_definitions(entanglement_manager_test PRIVATE PROF_ENABLED=0 LOGGING_ENABLED=0)
-target_include_directories(entanglement_manager_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(entanglement_manager_test PRIVATE 
-GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
-target_compile_definitions(entanglement_manager_test PRIVATE LOGGING_ENABLED=0)
-add_test(NAME entanglement_manager_test COMMAND entanglement_manager_test)
-
-add_executable(message_broker_test
-                ${CMAKE_CURRENT_SOURCE_DIR}/MessageBroker/test_message_broker.cpp
-                ${CMAKE_CURRENT_SOURCE_DIR}/MessageBroker/test_ring_buffer.cpp
-                )
-target_compile_definitions(message_broker_test PRIVATE PROF_ENABLED=0 LOGGING_ENABLED=0)
-target_include_directories(message_broker_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(message_broker_test PRIVATE 
-GTest::gtest GTest::gtest_main GTest::gmock qilab_lib)
-target_compile_definitions(message_broker_test PRIVATE LOGGING_ENABLED=0)
-add_test(NAME message_broker_test COMMAND message_broker_test)
-
-# -------- Enabled tests (only build if PROF_ENABLED is set) --------
-add_executable(prof_tests_enabled 
-${CMAKE_CURRENT_SOURCE_DIR}/logger/test_profiler_enabled.cpp)
-target_include_directories(prof_tests_enabled PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(prof_tests_enabled PRIVATE GTest::gtest_main profiler qilab_lib)
-# Make sure tests see the enabled flag
-target_compile_definitions(prof_tests_enabled PRIVATE PROF_ENABLED=1)
-add_test(NAME prof_enabled COMMAND prof_tests_enabled)
-
-# -------- Disabled tests (always build) --------
-add_executable(prof_tests_disabled 
-    ${CMAKE_CURRENT_SOURCE_DIR}/logger/test_profiler_disabled.cpp)
-target_include_directories(prof_tests_disabled PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_definitions(prof_tests_disabled PRIVATE PROF_ENABLED=0)
-target_link_libraries(prof_tests_disabled PRIVATE GTest::gtest_main qilab_lib)
-add_test(NAME prof_disabled COMMAND prof_tests_disabled)
-
 include(GoogleTest)
-gtest_discover_tests(transmission_processor_test)
-gtest_discover_tests(prof_tests_disabled)
-gtest_discover_tests(prof_tests_enabled)
-gtest_discover_tests(entanglement_manager_test)
-gtest_discover_tests(message_broker_test)
 
+add_subdirectory(Unit)
+add_subdirectory(Functional)
+
+option(QILAB_BUILD_INTEGRATION_TESTS "Build integration tests requiring real hardware" OFF)
+if(QILAB_BUILD_INTEGRATION_TESTS)
+  add_subdirectory(Integration)
+endif()

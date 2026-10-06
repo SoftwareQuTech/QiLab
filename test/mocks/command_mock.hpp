@@ -1,3 +1,6 @@
+// Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+// SPDX-License-Identifier: BSD-3-Clause-Clear
+
 /*
 ** Created on: 03.09.2025
 ** Created by: mrkolev
@@ -255,8 +258,11 @@ struct PreMeasureGateSelect : public BaseC
             return 0;
 
         buff[0] = Command_t::PRE_MEASUREMENT_GATES_SELECTION;
-        buff[1] = ((a2 & 0x0e) << 5) | (ANGLE_BIT_MASK & a1);
-        buff[2] = ((t << 7) & 0x80) | ((a3 << 2) & 0xec) | ((a2 & 0x18) >> 3);
+        // Must match PreMeasureGatesSelection's decode in DataTypes/commands.hpp:
+        // angle2's low 3 bits live in data[1] bits5-7, its high 2 bits in data[2]
+        // bits0-1; angle3 (5 bits) lives in data[2] bits2-6.
+        buff[1] = ((a2 & 0x07) << 5) | (ANGLE_BIT_MASK & a1);
+        buff[2] = ((t << 7) & 0x80) | ((a3 << 2) & 0x7c) | ((a2 & 0x18) >> 3);
         uint8_t crc = crc8_ccitt(buff, 3);
         buff[3] = crc;
 

@@ -1,0 +1,27 @@
+# QILab Node Configuration
+# Minimal single-node config for manual smoke runs.
+#
+# Location: ~/.qilab/config/nodes.yaml
+
+# QiLab System Configuration
+system:
+  transmission_cycle_time_us: 5
+  qubit_noise_enabled: true
+  entanglement_noise_enabled: true
+
+nodes:
+  - name: test_node
+    node_type: GENERIC
+    qubit_arrays:
+      - num_qubits: 1
+        single_gate_delay_ns: 0
+        # t2_value is 1.0e+6 ns == 1 ms. Note the loader does not strip trailing
+        # comments from a value, so keep comments on their own line.
+        qubit_decoherence_noise_model:
+          type: PHASE_FLIP
+          t2_value: 1.0e+6
+        gate_noise_model:
+          type: DEPOLARIZING
+          depolarizing_probability: 0.0
+
+# See config_example.yaml for a two-node config with entanglement_links.

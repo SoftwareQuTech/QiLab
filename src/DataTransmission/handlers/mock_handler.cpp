@@ -1,3 +1,6 @@
+// Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+// SPDX-License-Identifier: BSD-3-Clause-Clear
+
 #include <algorithm>
 
 #include "mock_handler.hpp"
@@ -21,39 +24,87 @@ MockHandler::~MockHandler()
 
 void MockHandler::create_commands()
 {
-    const int number_of_nodes = 1;
+    const int number_of_nodes = 5;
 
     // for (auto y = 0; y < (2 * number_of_nodes) - 2; y++)
     // {
-    //     command_list.push_back(new InitQubit(y));
+        //  command_list.push_back(new InitQubit(y));
+         
     // }
-    // command_list.push_back(new SingleQGate(1, Angle_t::_15_PI_16, Axis_t::X_AXIS));
-    // command_list.push_back(new Entangle(1, 1, 0));
-    // int i = 0;
-    // for (i = 1; i < (number_of_nodes - 1); i++)
+    // command_list.push_back(new Nop());
+    // command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::Z_AXIS));
+    // bool do_h_gate = false;
+    // bool measure_x_basis = false;
+    // int nop_count = 12;
+    // if (do_h_gate)
+    // { 
+    //     command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::Z_AXIS));
+    //     command_list.push_back(new SingleQGate(0, Angle_t::_8_PI_16, Axis_t::Y_AXIS));
+    // }
+    // for (int i = 1; i < nop_count; i++)
     // {
-    //     // run the loop here with commands
-    //     command_list.push_back(new SingleQGate(2 * i + 1, Angle_t::_15_PI_16, Axis_t::X_AXIS));
-    //     command_list.push_back(new Entangle(1, 2 * i + 1, 2 * i));
-    //     command_list.push_back(new EntangleSwap(2 * i - 1, 2 * i));
-    //     command_list.push_back(new QMeasure(2 * i - 1, 0, Axis_t::Z_AXIS));
-    //     command_list.push_back(new ConditionalCommand([](const int &latest_measure_response)
-    //                                                   { return latest_measure_response == 1; },
-    //                                                   new SingleQGate(2 * i + 1, Angle_t::_15_PI_16, Axis_t::Z_AXIS)));
-    //     command_list.push_back(new QMeasure(2 * i, 0, Axis_t::Z_AXIS));
-    //     command_list.push_back(new ConditionalCommand([](const int &latest_measure_response)
-    //                                                   { return latest_measure_response == 0; },
-    //                                                   new SingleQGate(2 * i + 1, Angle_t::_15_PI_16, Axis_t::X_AXIS)));
+    //     command_list.push_back(new Nop());
     // }
-    // command_list.push_back(new QMeasure(2 * i - 1, 0, Axis_t::Z_AXIS));
+    // if (measure_x_basis)
+    // {
+    //     command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::Z_AXIS));
+    //     command_list.push_back(new SingleQGate(0, Angle_t::_8_PI_16, Axis_t::Y_AXIS));
+    // }
+    // command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::Z_AXIS));
+    // X Y X rotation sequence for pre-measurement gates
+    // pi/2 pi/2 pi/2 is equivalent to hadamard gate
+    // -pi/2 -pi/2 -pi is equivalent to Y basis measurement
+    // command_list.push_back(new PreMeasureGateSelect(Angle_t::_8_PI_16, Angle_t::_8_PI_16, Angle_t::_8_PI_16, 0));
     // command_list.push_back(new QMeasure(0, 0, Axis_t::Z_AXIS));
 
-    command_list.push_back(new Entangle(1, 1, 3));
-    command_list.push_back(new Entangle(1, 0, 3));
-    command_list.push_back(new Entangle(1, 3, 3));
-    command_list.push_back(new Entangle(1, 2, 3));
+    // Select a state and measurement basis for testing gate noise
+    bool prep_one_state = false;
+    bool prep_plus_state = false;
+    bool prep_iplus_state = false;
+    bool measure_x_basis = false;
+    bool measure_y_basis = false;
 
-    //command_list.push_back(new EntanMeasure(1, 2, 3, true, false, 1));
+    // Prepare one of the following states: |0>, |1>, |+>, or |i+>
+    command_list.push_back(new InitQubit(0));
+    if (prep_one_state)
+    {
+        command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::X_AXIS));
+    }
+    else if (prep_plus_state)
+    {
+        command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::Z_AXIS));
+        command_list.push_back(new SingleQGate(0, Angle_t::_8_PI_16, Axis_t::Y_AXIS));
+    }
+    else if (prep_iplus_state)
+    {
+        command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_8_PI_16, Axis_t::X_AXIS));
+    }
+
+    // Here we want to do an identity operation to test gate noise
+    if (prep_plus_state)
+    {
+        // We do an X gate since this is equivalent to an identity operation on the |+> state
+        command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::X_AXIS));
+    }
+    else if (prep_iplus_state)
+    {
+        // We do a Y gate since this is equivalent to an identity operation on the |i+> state
+        command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::Y_AXIS));
+    }
+    else {
+        // We do a Z gate since this is equivalent to an identity operation on the |0> state
+        command_list.push_back(new SingleQGate(0, Angle_t::_MINUS_PI, Axis_t::Z_AXIS));
+    }
+
+    if (measure_x_basis)
+    {
+        command_list.push_back(new PreMeasureGateSelect(Angle_t::_8_PI_16, Angle_t::_8_PI_16, Angle_t::_8_PI_16, 0));
+    }
+    else if (measure_y_basis)
+    {
+        command_list.push_back(new PreMeasureGateSelect(Angle_t::_MINUS_8_PI_16, Angle_t::_MINUS_8_PI_16, Angle_t::_MINUS_PI, 0));
+    }
+    command_list.push_back(new QMeasure(0, 0, Axis_t::Z_AXIS));
 }
 
 void MockHandler::fill_mock_message(uint8_t const* output)
@@ -102,7 +153,7 @@ int8_t MockHandler::transfer(uint8_t const* tx_buffer, uint8_t const* rx_buffer,
     // {
     //     return -1;
     // }
-    for(int i = 0; i < length/4; i++)
+    for (int i = 0; i < length/4; i++)
     {
         fill_mock_message(rx_buffer + i * EXPECTED_MESSAGE_SIZE);
     }

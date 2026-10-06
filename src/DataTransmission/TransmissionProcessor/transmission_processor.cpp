@@ -1,4 +1,8 @@
+// Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+// SPDX-License-Identifier: BSD-3-Clause-Clear
+
 #include <iostream>
+#include <cstring>
 
 #include "DataTransmission/TransmissionProcessor/transmission_processor.hpp"
 #include "logger/logger_api.hpp"
@@ -18,9 +22,9 @@
 
 
     // Define static buffers
+// Define static buffers
 __attribute__((aligned(64))) uint8_t TransmissionProcessor::tx_buffer[MAX_BUFFER_LENGTH];
 __attribute__((aligned(64))) uint8_t TransmissionProcessor::rx_buffer[MAX_BUFFER_LENGTH];
-uint32_t TransmissionProcessor::lp_data_buffer[LP_DATA_BUFFER_LENGTH];
 
 // CRC-8/CCITT parameters.
 static constexpr uint8_t CRC8_CCITT_POLY = 0x07u;
@@ -29,7 +33,6 @@ static constexpr uint8_t CRC8_XOROUT = 0x00u;
 
 TransmissionProcessor::TransmissionProcessor(std::unique_ptr<ITransmissionHandler> transmission_handler) : data_handler(std::move(transmission_handler)) 
 {
-    lp_data_buffer[0] = 0xDEADBEEF; //just to avoid compiler warnings
 }
 
 TransmissionProcessor::~TransmissionProcessor() {}
@@ -54,7 +57,7 @@ static uint8_t crc8_ccitt(const uint8_t *data, std::size_t len) noexcept
     return static_cast<uint8_t>(crc ^ CRC8_XOROUT);
 }
 
-int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<ResponseData>> &responses, std::vector<std::unique_ptr<CommandBase>> &commands, uint8_t transfer_msg_count)
+int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<ResponseData>> &responses, std::vector<std::unique_ptr<CommandBase>> &commands, uint8_t transfer_msg_count, std::vector<NodeTransmissionData> &node_data_vec)
 {
     // Using class-level buffers, no need to reallocate or zero
     static_assert(sizeof(TransmissionProcessor::tx_buffer) % 64 == 0, "tx_buffer not aligned");
@@ -64,8 +67,16 @@ int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<Res
     ASSERT_INPUT_RANGE(commands.size(), 0, MAX_NUMBER_OF_COMMANDS);
     ASSERT_INPUT_RANGE(transfer_msg_count, 0, responses.size());
     ASSERT_INPUT_RANGE(transfer_msg_count, 0, commands.size());
+    ASSERT_INPUT_RANGE(node_data_vec.size(), 0, 256);
 
+    std::memset(TransmissionProcessor::tx_buffer, 0, sizeof(TransmissionProcessor::tx_buffer));
+    std::memset(TransmissionProcessor::rx_buffer, 0, sizeof(TransmissionProcessor::rx_buffer));
     if(responses.size() != commands.size())
+    {
+        return -1;
+    }
+
+    if(node_data_vec.size() < transfer_msg_count)
     {
         return -1;
     }
@@ -79,35 +90,30 @@ int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<Res
             LOG_ERROR("Null response data provided.");
             return -2;
         }
-        if((cycle_count_ & 0xFF) == 0)
+        // Extract per-node data for this message
+        NodeTransmissionData &node_data = node_data_vec[i];
+        
+        if((node_data.cycle_count & 0xFF) == 0)
         {
-            lp_data_buffer[2] = static_cast<uint32_t>(cycle_count_ & 0xFFFFFFFFULL);
-            lp_data_buffer[3] = static_cast<uint32_t>((cycle_count_ >> 32) & 0xFFFFFFFFULL);
-            //LOG_INFO("Cycle count updated in LP buffer: " + std::to_string(lp_data_buffer[2]) + ", " + std::to_string(lp_data_buffer[3]));
+            node_data.lp_data_buffer[2] = static_cast<uint32_t>(node_data.cycle_count & 0xFFFFFFFFULL);
+            node_data.lp_data_buffer[3] = static_cast<uint32_t>((node_data.cycle_count >> 32) & 0xFFFFFFFFULL);
+            //LOG_INFO("Cycle count updated in LP buffer: " + std::to_string(node_data.lp_data_buffer[2]) + ", " + std::to_string(node_data.lp_data_buffer[3]));
         }
         uint8_t* dest = TransmissionProcessor::tx_buffer + (i * RESPONSE_MESSAGE_LENGTH);
-        dest[0] = cycle_count_ & 0xFF;
-        //LOG_INFO("Current cycle count: " + std::to_string(dest[0]));
-        //if (response->outcome_status == Outcome_Status_t::SUCCESS)
-        //{
-            dest[1] = (0xf0 & ((uint8_t)response->outcome << 4)) | (0x0f & (uint8_t)response->status);
-        //}
-        // else
-        // {
-        //     dest[1] = (0xf0 & ((uint8_t)response->outcome_status << 4)) | (0x0f & (uint8_t)response->status);
-        // }
-        
+        dest[0] = node_data.cycle_count & 0xFF;
+        dest[1] = (0xf0 & ((uint8_t)response->outcome << 4)) | (0x0f & (uint8_t)response->status);
+                
         // Extract LP data nibble from lp_data_buffer (match Python baseline: walk nibbles LSB->MSB)
         constexpr uint8_t nibbles_per_word = 8; // 32 bits / 4 bits per nibble
-        uint32_t lp_data_word = lp_data_buffer[(cycle_count_ & 0xFF) / nibbles_per_word];
-        uint8_t nibble_index = (cycle_count_ & 0xFF) & (nibbles_per_word - 1);
+        uint32_t lp_data_word = node_data.lp_data_buffer[(node_data.cycle_count & 0xFF) / nibbles_per_word];
+        uint8_t nibble_index = (node_data.cycle_count & 0xFF) & (nibbles_per_word - 1);
         uint8_t nibble_offset = nibble_index * 4;
         uint8_t lp_data = static_cast<uint8_t>((lp_data_word >> nibble_offset) & 0x0F);
 
         dest[2] = lp_data;
         dest[3] = crc8_ccitt(dest, 3); // CRC for this message
 
-        cycle_count_++;
+        node_data.cycle_count++;
     }
 
     if(data_handler->transfer(tx_buffer, rx_buffer, RESPONSE_MESSAGE_LENGTH * transfer_msg_count))
@@ -123,13 +129,17 @@ int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<Res
         // LOG_INFO("Received command data: 0x");
         // for(int j = 0; j < COMMAND_MESSAGE_LENGTH; j++)
         // {
-        //    std::cout << std::hex << static_cast<int>(rx_buffer[j]) << std::dec;
+        //    std::cout << std::hex << static_cast<int>(cmd_data[j]) << std::dec;
         // }
         // std::cout << std::endl;
         if (!verify_crc(cmd_data, 3))
         {
-            LOG_ERROR("CRC verification failed.");
-            return -4;
+            // Explicitly clear the command slot so callers do not reuse stale commands.
+            commands[i].reset();
+            //LOG_ERROR("CRC verification failed for received command on node index " + std::to_string(i) + ".");
+            node_data_vec[i].crc_error_count++;
+            continue; //does not seem logical to fail entire batch on single CRC failure, so just skip this command and continue with the rest.
+            //return -4;
         }
         auto cmd = deserialize_command(cmd_data);
         if (cmd != nullptr)
@@ -138,10 +148,17 @@ int8_t TransmissionProcessor::transmit_msg(const std::vector<std::unique_ptr<Res
         }
         else
         {
-            LOG_ERROR("Command deserialization failed.");
-            return -4;
+            // Explicitly clear the command slot so callers do not reuse stale commands.
+            commands[i].reset();
+            LOG_ERROR("Command deserialization failed for received command on node index " + std::to_string(i) + ".");
+            continue;
+            //return -4;
         }
     }
+
+    // Reset buffers after transaction
+    std::memset(tx_buffer, 0, sizeof(tx_buffer));
+    std::memset(rx_buffer, 0, sizeof(rx_buffer));
 
     return 0;
 }
@@ -156,7 +173,7 @@ int8_t TransmissionProcessor::receive_command(std::unique_ptr<CommandBase> &comm
     }
     if (!verify_crc(data_buffer, 3))
     {
-        LOG_ERROR("CRC verification failed.");
+        LOG_ERROR("CRC verification failed for received command.");
         return -2;
     }
     std::unique_ptr<CommandBase> cmd = deserialize_command(data_buffer);
@@ -167,7 +184,7 @@ int8_t TransmissionProcessor::receive_command(std::unique_ptr<CommandBase> &comm
     }
     else
     {
-        LOG_ERROR("Command deserialization failed.");
+        LOG_ERROR("Command deserialization failed for received command.");
         return -3;
     }
 
@@ -209,7 +226,7 @@ std::unique_ptr<CommandBase> TransmissionProcessor::deserialize_command(const ui
 {
     // Fast bounds check first
     const uint8_t cmd_type = received_data[0];
-    if (cmd_type > Command_t::QUBIT_SWAP) {
+    if (cmd_type > Command_t::ENTANGLEMENT_SWAP) {
         return nullptr;
     }
     
@@ -223,8 +240,6 @@ std::unique_ptr<CommandBase> TransmissionProcessor::deserialize_command(const ui
             return std::make_unique<QubitMeasure>(received_data);
         case Command_t::NOP:
             return std::make_unique<NOP_Command>(received_data);
-            
-        // Less common operations
         case Command_t::QUBIT_INIT:
             return std::make_unique<QubitInitialize>(received_data);
         case Command_t::ENTANGLEMENT_SWAP:

@@ -1,3 +1,6 @@
+// Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+// SPDX-License-Identifier: BSD-3-Clause-Clear
+
 /*
 ** Created on: 21.08.2025
 ** Created by: mrkolev
@@ -53,4 +56,5 @@ struct ResponseData
 {
     uint8_t status = NodeStatus_t::READY;
     uint8_t outcome = Outcome_Status_t::SUCCESS;
+    uint64_t cycle_count = 0;
 };

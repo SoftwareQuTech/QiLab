@@ -5,6 +5,7 @@ stages:
   - build
   - test
   - coverage
+  - release
 
 variables:
   DEBIAN_FRONTEND: noninteractive
@@ -13,23 +14,20 @@ build:
   stage: build
   before_script:
     - apt-get update -y
-    - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git
+    - apt-get install -y --no-install-recommends ca-certificates cmake build-essential ninja-build git
     - mkdir -p build && cd build
   script:
-    - cmake .. -DCMAKE_BUILD_TYPE=Release 
-        -DCMAKE_C_COMPILER=/usr/bin/gcc 
-        -DCMAKE_CXX_COMPILER=/usr/bin/g++ 
-        -DCMAKE_CXX_FLAGS="--coverage" 
-        -DCMAKE_C_FLAGS="--coverage"
-        -DBUILD_TESTING=ON
-    - cmake --build . -- -j$(nproc)
+    - cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++ -DCMAKE_CXX_FLAGS="--coverage" -DCMAKE_C_FLAGS="--coverage" -DQILAB_CI_TAG=${CI_COMMIT_TAG} -DBUILD_TESTING=ON
+    - cmake --build . --parallel $(nproc)
   artifacts:
     paths:
       - build/test/*_tests           # Only your test executables
       - build/**/*.gcno
       - build/CMakeCache.txt
     exclude:
-      - build/_deps/
+      # stim/googletest notes: FetchContent deps are re-built in the test job, and
+      # stim's objects land under build/build/_deps/, so match _deps at any depth.
+      - build/**/_deps/**/*
     expire_in: 1 hour
 
 test:
@@ -38,16 +36,11 @@ test:
     - build
   before_script:
     - apt-get update -y
-    - apt-get install -y --no-install-recommends ca-certificates cmake build-essential git
+    - apt-get install -y --no-install-recommends ca-certificates cmake build-essential ninja-build git
     - cd build
-    - cmake .. -DCMAKE_BUILD_TYPE=Release 
-      -DCMAKE_C_COMPILER=/usr/bin/gcc 
-      -DCMAKE_CXX_COMPILER=/usr/bin/g++ 
-      -DCMAKE_CXX_FLAGS="--coverage" 
-      -DCMAKE_C_FLAGS="--coverage"
-      -DBUILD_TESTING=ON
+    - cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++ -DCMAKE_CXX_FLAGS="--coverage" -DCMAKE_C_FLAGS="--coverage" -DQILAB_CI_TAG=${CI_COMMIT_TAG} -DBUILD_TESTING=ON
     # Rebuild only Stim if needed as stim is 1gb and too big to be an artifact
-    - cmake --build . -- -j$(nproc)
+    - cmake --build . --parallel $(nproc)
   script:
     - ctest --output-on-failure --parallel $(nproc) --output-junit junit.xml
   artifacts:
@@ -57,7 +50,7 @@ test:
       - build/**/*.gcda
       - build/**/*.gcno
     exclude:
-      - build/_deps/
+      - build/**/_deps/**/*
     when: always
 
 coverage:
@@ -69,12 +62,16 @@ coverage:
     - apt-get install -y --no-install-recommends lcov
   script:
     - cd build
-    # Capture coverage data
-    - lcov --capture --directory . --output-file coverage.info
-    # Remove system headers and test files from coverage
-    - lcov --remove coverage.info '/usr/*' '*/test/*' '*/googletest/*' '*/gmock/*' 'src/gmock*' '*/gmock*' --output-file coverage_filtered.info
+    # Capture coverage data. Third-party sources (stim, googletest) are not part
+    # of the artifacts, so geninfo cannot read them -- tolerate that here and
+    # drop those entries in the --remove step below.
+    - lcov --capture --directory . --output-file coverage.info --ignore-errors source,graph
+    # Remove system headers, test files and all FetchContent dependencies
+    # (stim lands in build/build/_deps/stim-src because CMakeLists.txt
+    # add_subdirectory()s it, so match _deps at any depth).
+    - lcov --remove coverage.info '/usr/*' '*/test/*' '*/_deps/*' '*/googletest/*' '*/gmock/*' 'src/gmock*' '*/gmock*' --output-file coverage_filtered.info
     # Generate HTML report
-    - genhtml coverage_filtered.info --output-directory coverage_html
+    - genhtml coverage_filtered.info --output-directory coverage_html --ignore-errors source
     # Print summary
     - lcov --list coverage_filtered.info
     # Move to public directory for GitLab Pages
@@ -85,10 +82,10 @@ coverage:
     paths:
       - public
       - build/coverage_filtered.info
-    reports:
-      coverage_report:
-        coverage_format: cobertura
-        path: build/coverage.xml
+    # NOTE: no artifacts:reports:coverage_report here. Cobertura XML would need an
+    # extra converter (e.g. lcov_cobertura) -- the previously declared
+    # build/coverage.xml was never generated and only produced upload errors.
+    # The line rate still reaches GitLab through the `coverage:` regex above.
 
 pages:
   stage: coverage
@@ -99,3 +96,86 @@ pages:
   artifacts:
     paths:
       - public
+
+release_prepare:
+  stage: release
+  before_script:
+    - apt-get update -y
+    - apt-get install -y --no-install-recommends ca-certificates cmake ninja-build git gcc-aarch64-linux-gnu g++-aarch64-linux-gnu file python3
+  script:
+    - |
+      set -euo pipefail
+      VERSION="${CI_COMMIT_TAG#v}"
+
+      cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=/usr/bin/aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=/usr/bin/aarch64-linux-gnu-g++ -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DQILAB_CI_TAG=${CI_COMMIT_TAG} -DBUILD_TESTING=OFF
+      cmake --build build-release --target qilab --parallel "$(nproc)"
+      test -f build-release/qilab
+      file build-release/qilab | tee build-release/binary_arch.txt
+      grep -E "aarch64|ARM aarch64" build-release/binary_arch.txt
+
+      mkdir -p "dist/qilab-${VERSION}/"
+      mkdir -p "dist-update/qilab-update-${VERSION}/deploy/systemd" "dist-update/qilab-update-${VERSION}/scripts"
+
+      cp build-release/qilab "dist/qilab-${VERSION}/"
+      mv "dist/qilab-${VERSION}/qilab" "dist/qilab-${VERSION}/qilab-${VERSION}-linux-arm64"
+      
+      cp README.md "dist/qilab-${VERSION}/"
+      # License texts: QiLab (BSD-3-Clause-Clear) and Stim, which is statically
+      # linked into the binary (Apache-2.0). Both licenses require these to ship.
+      cp LICENSE "dist/qilab-${VERSION}/LICENSE"
+      cp build-release/_deps/stim-src/LICENSE "dist/qilab-${VERSION}/LICENSE.stim"
+      cp deploy/systemd/qilab.service "dist-update/qilab-update-${VERSION}/deploy/systemd/qilab.service"
+      cp scripts/update_release.sh "dist-update/qilab-update-${VERSION}/scripts/update_release.sh"
+      chmod +x "dist-update/qilab-update-${VERSION}/scripts/update_release.sh"
+      if [ -f docs/config_example.yaml ]; then cp docs/config_example.yaml "dist/qilab-${VERSION}/config_example.yaml"; fi
+
+      # Ship the config schema alongside the binary, stamped with this release's
+      # version, so qilab_web_control can consume it straight from the deployed
+      # release directory (see docs/config_guide.md).
+      python3 scripts/stamp_schema_version.py "${VERSION}" "dist/qilab-${VERSION}/config.schema.json"
+      tar -czf "dist/qilab-${CI_COMMIT_TAG}-linux-arm64.tar.gz" -C dist "qilab-${VERSION}"
+      tar -czf "dist-update/qilab-update-${CI_COMMIT_TAG}.tar.gz" -C dist-update "qilab-update-${VERSION}"
+
+      awk -v v="$VERSION" '
+        index($0, "## [" v "]") == 1 { in_section=1 }
+        in_section && index($0, "## [") == 1 && index($0, "## [" v "]") != 1 { exit }
+        in_section { print }
+      ' CHANGELOG.md > dist/release_notes.md
+
+      test -s dist/release_notes.md || { echo "Missing changelog section for ${VERSION} in CHANGELOG.md"; exit 1; }
+  artifacts:
+    paths:
+      - dist/*-linux-arm64.tar.gz
+      - dist-update/*.tar.gz
+      - dist/release_notes.md
+      - build-release/binary_arch.txt
+    expire_in: 1 week
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: on_success
+    - when: never
+
+release_publish:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - job: release_prepare
+      artifacts: true
+  script:
+    - test -s dist/release_notes.md
+    - test -f "dist/qilab-${CI_COMMIT_TAG}-linux-arm64.tar.gz"
+    - test -f "dist-update/qilab-update-${CI_COMMIT_TAG}.tar.gz"
+  release:
+    tag_name: '$CI_COMMIT_TAG'
+    name: 'QILab $CI_COMMIT_TAG'
+    description: './dist/release_notes.md'
+    assets:
+      links:
+        - name: 'qilab-$CI_COMMIT_TAG-linux-arm64.tar.gz'
+          url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/dist/qilab-$CI_COMMIT_TAG-linux-arm64.tar.gz?job=release_prepare'
+        - name: 'qilab-update-$CI_COMMIT_TAG.tar.gz'
+          url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/dist-update/qilab-update-$CI_COMMIT_TAG.tar.gz?job=release_prepare'
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: on_success
+    - when: never

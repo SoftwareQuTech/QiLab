@@ -1,0 +1,159 @@
+// Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+// SPDX-License-Identifier: BSD-3-Clause-Clear
+
+// tests/test_prof_enabled.cpp
+#include <gtest/gtest.h>
+#include <filesystem>
+#include <fstream>
+#include <regex>
+#include <thread>
+#include <vector>
+#include <atomic>
+
+#include "logger/profiler_api.hpp"   // API users include only this
+#if PROF_ENABLED
+  #include "logger/profiler.hpp"    // we use Profiler::dump_csv in assertions
+#endif
+
+namespace fs = std::filesystem;
+
+static fs::path temp_base(const char* tag) {
+  auto base = fs::temp_directory_path()
+            / (std::string("prof_ut_") + tag + "_" +
+               std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  return base;
+}
+
+static std::vector<std::string> read_lines(const fs::path& p) {
+  std::ifstream ifs(p);
+  std::vector<std::string> out;
+  std::string line;
+  while (std::getline(ifs, line)) out.push_back(line);
+  return out;
+}
+
+TEST(Registration, SameNameSameId) {
+#if PROF_ENABLED
+  ProfGuard pg;
+  Profiler_id id1 = PROF_REGISTER_EVENT("foo");
+  Profiler_id id2 = PROF_REGISTER_EVENT("foo");
+  EXPECT_EQ(id1, id2);
+#else
+  GTEST_SKIP() << "Profiling disabled";
+#endif
+}
+
+TEST(LazyMacros, StartStopWorksAndRecords)
+{
+#if PROF_ENABLED
+  {
+    ProfGuard guard{1024}; // RAII init/flush for THIS thread
+    Profiler_id id1 = PROF_REGISTER_EVENT("macro_event");
+
+    PROF_START(id1);
+    PROF_STOP(id1);
+  }
+  //PROF_THREAD_FLUSH();
+
+  auto base = temp_base("lazy");
+  PROF_SAVE_DATA(base.string());
+
+  auto durations = read_lines(base.string() + "_durations.csv");
+  // Header + >=1 row for "macro_event"
+  ASSERT_GE(durations.size(), 2u);
+  bool found = false;
+  for (auto &ln : durations)
+  {
+    if (ln.rfind("macro_event,", 0) == 0)
+    {
+      found = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(found);
+#else
+  GTEST_SKIP() << "Profiling disabled";
+#endif
+}
+
+TEST(ThreadInitAndGrow, RegisterAfterInitStillWorks) {
+#if PROF_ENABLED
+  // Pre-register one event, then use a new one AFTER thread_init via macro.
+  Profiler_id pre_event = PROF_REGISTER_EVENT("pre_registered");
+
+  std::thread t([&]{
+    ProfGuard guard{1024};
+    // This event name is registered lazily after thread_init; TLS must grow.
+    Profiler_id post_event = PROF_REGISTER_EVENT("post_registered");
+    for (int i=0;i<10;++i) { PROF_START(post_event); PROF_STOP(post_event); }
+  });
+  t.join();
+
+  auto base = temp_base("grow");
+  Profiler::instance().dump_csv(base.string());
+  auto durations = read_lines(base.string() + "_durations.csv");
+
+  bool seen_pre  = false, seen_post = false;
+  for (auto& ln : durations) {
+    if (ln.rfind("pre_registered,", 0) == 0)  seen_pre  = true;
+    if (ln.rfind("post_registered,", 0) == 0) seen_post = true;
+  }
+  EXPECT_TRUE(seen_post); // post_registered samples must be present
+#else
+  GTEST_SKIP() << "Profiling disabled";
+#endif
+}
+
+TEST(FreeFormEvents, MessageAndTimestampWritten) {
+#if PROF_ENABLED
+  ProfGuard guard{512};
+  PROF_EVENT("worker start");
+  PROF_EVENT("worker ok");
+  auto base = temp_base("events");
+  PROF_SAVE_DATA(base.string());
+  auto events = read_lines(base.string() + "_events.csv");
+  ASSERT_GE(events.size(), 3u); // header + at least 2 rows
+
+  // Find a row with "worker start", timestamp should be digits
+  bool found = false;
+  std::regex re(R"(worker start,\d+)");
+  for (auto& ln : events) if (std::regex_match(ln, re)) { found = true; break; }
+  EXPECT_TRUE(found);
+#else
+  GTEST_SKIP() << "Profiling disabled";
+#endif
+}
+
+TEST(MultiThread, AggregateAllSamples) {
+#if PROF_ENABLED
+  const int T = 4;
+  const int N = 2000;
+  std::atomic<int> ready{0};
+
+  auto worker = [&]{
+    ProfGuard guard{N};
+    ready.fetch_add(1);
+    // tiny barrier
+    Profiler_id nop_id = PROF_REGISTER_EVENT("mt_nop");
+    while (ready.load() < T) std::this_thread::yield();
+    for (int i=0;i<N;++i) { PROF_START(nop_id); PROF_STOP(nop_id); }
+  };
+
+  std::vector<std::thread> threads;
+  threads.reserve(T);
+  for (int i=0;i<T;++i) threads.emplace_back(worker);
+  for (auto& th : threads) th.join();
+
+  auto base = temp_base("mt");
+  Profiler::instance().dump_csv(base.string());
+  auto durations = read_lines(base.string() + "_durations.csv");
+
+  // Count rows for mt_nop
+  int count = 0;
+  for (auto& ln : durations) if (ln.rfind("mt_nop,", 0) == 0) ++count;
+
+  EXPECT_EQ(count, 1);
+#else
+  GTEST_SKIP() << "Profiling disabled";
+#endif
+}

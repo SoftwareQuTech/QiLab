@@ -1,3 +1,6 @@
+# Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
 cmake_minimum_required(VERSION 3.14)
 
 ## Only set cross-compilers if a compiler has not been provided by the user
@@ -26,7 +29,47 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
 
 # RelWithDebInfo
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -DNDEBUG")
-project(QILab)
+
+# Version information (single source of truth for local builds)
+set(QILAB_VERSION_MAJOR 0)
+set(QILAB_VERSION_MINOR 4)
+set(QILAB_VERSION_PATCH 3)
+
+# Optional CI tag override (accepts vX.Y.Z or X.Y.Z)
+set(QILAB_CI_TAG "${QILAB_CI_TAG}")
+if(NOT QILAB_CI_TAG AND DEFINED ENV{CI_COMMIT_TAG})
+  set(QILAB_CI_TAG "$ENV{CI_COMMIT_TAG}")
+endif()
+
+if(QILAB_CI_TAG)
+  string(REGEX REPLACE "^v" "" QILAB_CI_TAG_CLEAN "${QILAB_CI_TAG}")
+  if(QILAB_CI_TAG_CLEAN MATCHES "^([0-9]+)\.([0-9]+)\.([0-9]+)$")
+    set(QILAB_VERSION_MAJOR "${CMAKE_MATCH_1}")
+    set(QILAB_VERSION_MINOR "${CMAKE_MATCH_2}")
+    set(QILAB_VERSION_PATCH "${CMAKE_MATCH_3}")
+  endif()
+endif()
+
+set(QILAB_VERSION "${QILAB_VERSION_MAJOR}.${QILAB_VERSION_MINOR}.${QILAB_VERSION_PATCH}")
+
+execute_process(
+  COMMAND git rev-parse --short HEAD
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  OUTPUT_VARIABLE QILAB_GIT_COMMIT
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET)
+
+if(NOT QILAB_GIT_COMMIT)
+  set(QILAB_GIT_COMMIT "unknown")
+endif()
+
+project(QILab VERSION ${QILAB_VERSION})
+
+# Generate version header from CMake values
+configure_file(
+  ${CMAKE_SOURCE_DIR}/src/utils/version.hpp.in
+  ${CMAKE_BINARY_DIR}/generated/qilab/version.hpp
+  @ONLY)
 
 # ---- Project compilation ----
 #get the stim library
@@ -43,7 +86,8 @@ endif()
 
 # ---- Options ----
 option(ENABLE_PROFILING "Enable fast TLS profiler" ON)
-option(ENABLE_LOGGING "Enable logging functionality" OFF)  # Default OFF
+option(ENABLE_LOGGING "Enable logging functionality" ON)  # Default ON
+option(ENABLE_DATA_ACQUISITION "Enable structured research data acquisition" ON)
 
 if(ENABLE_PROFILING)
   add_library(profiler STATIC src/logger/profiler.cpp)
@@ -69,27 +113,46 @@ else()
   target_compile_definitions(logger INTERFACE LOGGING_ENABLED=0)
 endif()
 
+if(ENABLE_DATA_ACQUISITION)
+  add_library(data_acquisition STATIC src/logger/data_acquisition.cpp)
+  target_compile_definitions(data_acquisition PUBLIC DAQ_ENABLED=1)
+  target_include_directories(data_acquisition PUBLIC ${PROJECT_SOURCE_DIR}/src)
+  # data_acquisition.cpp uses the logger for its own status messages.
+  target_link_libraries(data_acquisition PUBLIC logger)
+else()
+  # Empty interface library when disabled
+  add_library(data_acquisition INTERFACE)
+  target_compile_definitions(data_acquisition INTERFACE DAQ_ENABLED=0)
+endif()
+
 add_library(qilab_lib STATIC
   #Data Transmission
   src/DataTransmission/handlers/mock_handler.cpp
   src/DataTransmission/TransmissionRunner/transmission_runner.cpp
   src/DataTransmission/TransmissionProcessor/transmission_processor.cpp
   #Simulator
-  src/SimulatorRunners/simulator_runner.cpp
-  src/Simulator/adapters/mock_adapter.cpp
-  src/Simulator/adapters/stim_adapter.cpp
+  src/Simulator/SimulatorRunners/simulator_runner.cpp
+  src/Simulator/SimulatorAdapters/mock_adapter.cpp
+  src/Simulator/SimulatorAdapters/stim_adapter.cpp
+  src/Simulator/SimulatorAdapters/stim_nv_adapter.cpp
+  src/Simulator/SimulatorManager/simulator_manager.cpp  
+  src/Simulator/SimulatorManager/operations_engine.cpp
+    
   #Message Broker
   src/MessageBroker/message_broker.cpp
   #Entanglement Manager
-  src/Simulator/entanglement/entanglement_manager.cpp
-  src/SimulatorRunners/entanglement_runner.cpp
+  src/Simulator/EntanglementManager/entanglement_manager.cpp
+  src/Simulator/SimulatorRunners/entanglement_runner.cpp
+  #Configuration Engine
+  src/ConfigurationEngine/config_loader.cpp
 )
 
 target_include_directories(qilab_lib PUBLIC
   ${PROJECT_SOURCE_DIR}/include
   ${PROJECT_SOURCE_DIR}/src
+  ${CMAKE_BINARY_DIR}/generated
 )
-target_link_libraries(qilab_lib PRIVATE libstim profiler)
+target_link_libraries(qilab_lib PRIVATE libstim profiler data_acquisition)
 
 include_directories("src")
 
@@ -101,16 +164,22 @@ add_executable(qilab
   src/DataTransmission/TransmissionRunner/transmission_runner.cpp
   src/DataTransmission/TransmissionProcessor/transmission_processor.cpp
   #Simulator
-  src/SimulatorRunners/simulator_runner.cpp
-  src/Simulator/adapters/mock_adapter.cpp
-  src/Simulator/adapters/stim_adapter.cpp
+  src/Simulator/SimulatorRunners/simulator_runner.cpp
+  src/Simulator/SimulatorAdapters/mock_adapter.cpp
+  src/Simulator/SimulatorAdapters/stim_adapter.cpp
+  src/Simulator/SimulatorAdapters/stim_nv_adapter.cpp
+  src/Simulator/SimulatorManager/simulator_manager.cpp  
+  src/Simulator/SimulatorManager/operations_engine.cpp
   #Message Broker
   src/MessageBroker/message_broker.cpp
   #Entanglement Manager
-  src/Simulator/entanglement/entanglement_manager.cpp
-  src/SimulatorRunners/entanglement_runner.cpp
+  src/Simulator/EntanglementManager/entanglement_manager.cpp
+  src/Simulator/SimulatorRunners/entanglement_runner.cpp
+  #Configuration Engine
+  src/ConfigurationEngine/config_loader.cpp
     )
-target_link_libraries(qilab PRIVATE libstim profiler logger)
+target_include_directories(qilab PRIVATE ${CMAKE_BINARY_DIR}/generated)
+target_link_libraries(qilab PRIVATE libstim profiler logger data_acquisition)
 
 include(CTest)                 # defines BUILD_TESTING (default ON)
 

@@ -1,3 +1,6 @@
+// Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+// SPDX-License-Identifier: BSD-3-Clause-Clear
+
 #pragma once
 #if LOGGING_ENABLED
 
@@ -6,6 +9,7 @@
 #define LOG_INFO(msg_sv) ::StandardLogger::instance().log_info(msg_sv)
 #define LOG_WARNING(msg_sv) ::StandardLogger::instance().log_warning(msg_sv)
 #define LOG_ERROR(msg_sv) ::StandardLogger::instance().log_error(msg_sv)
+#define LOG_LEVEL(level) ::StandardLogger::instance().log_level(level)
 
 #else // LOGGING_ENABLED == 0  -----------------------------
 // No-ops when disabled; zero overhead, zero linking.
@@ -21,4 +25,9 @@
     do                    \
     {                     \
     } while (0)
+#define LOG_LEVEL(level) \
+    do                   \
+    {                    \
+    } while (0) 
+
 #endif // LOGGING_ENABLED
