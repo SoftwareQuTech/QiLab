@@ -2,7 +2,7 @@
 
 QiLab is a C++20 framework for simulating quantum internet networks with a focus on command routing, entanglement coordination, and pluggable data transport. It integrates the [Stim](https://github.com/quantumlib/stim) stabilizer simulator and provides runners for simulation, entanglement, and data transmission.
 
-> **QiLab currently works only with QNodeOS. QNodeOS is not included with QiLab, and QiLab's license grants no rights to QNodeOS.** See the [QNodeOS notice](#qnodeos-notice).
+> **QiLab stands in for a quantum device. It speaks the QNodeOS instruction set, so any quantum network operating system that uses that instruction set can drive it. QNodeOS is not included with QiLab, and QiLab's license grants no rights to QNodeOS.** See the [QNodeOS notice](#qnodeos-notice).
 
 ## Demo
 ![QiLab demo: from Python to qubits and back](docs/demo/qilab_demo.mp4)
@@ -215,10 +215,10 @@ Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, M
 QiLab is released under the [Clear BSD License](LICENSE) (SPDX: `BSD-3-Clause-Clear`). This license grants no patent rights. Every source file carries the matching SPDX header.
 
 ### QNodeOS notice
-1. **Compatibility.** QiLab is currently compatible only with QNodeOS. It has no other supported use.
-2. **Not included.** QNodeOS is separate software. It is not part of QiLab and is not provided, distributed or sublicensed with QiLab.
-3. **No rights granted.** The QiLab license covers QiLab only. It grants no rights of any kind in QNodeOS, express or implied, including copyright, patent and trademark rights.
-4. **Separate terms.** You must get QNodeOS from its rights holders. Any use of QNodeOS is governed solely by its own license terms.
+1. **What QiLab is.** QiLab stands in for a quantum device. It receives and answers operations in the QNodeOS instruction set (the interface between a quantum network operating system and its quantum device). Any quantum network operating system that uses this instruction set, QNodeOS among them, can communicate with QiLab.
+2. **Not included.** QNodeOS and any other operating system are separate software. They are not part of QiLab and are not provided, distributed or sublicensed with QiLab.
+3. **No rights granted.** The QiLab license covers QiLab only. It grants no rights of any kind, express or implied, in QNodeOS or in the QNodeOS instruction set or its specifications, including copyright, patent and trademark rights. QiLab implements the device side of the instruction set solely for interoperability.
+4. **Separate terms.** You must get QNodeOS, or any other operating system you use with QiLab, from its rights holders. Its use is governed solely by its own license terms.
 5. **Name only.** The name "QNodeOS" is used here only to describe compatibility. It does not imply endorsement by the QNodeOS rights holders.
 
 ### Third-party software
