@@ -1,3 +1,6 @@
+// Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+// SPDX-License-Identifier: BSD-3-Clause-Clear
+
 // This binary is built with LOGGING_ENABLED=1 (via linking the real `logger`
 // static library target), unlike the consolidated `unit_tests` binary which
 // builds everything with LOGGING_ENABLED=0. StandardLogger only exists when

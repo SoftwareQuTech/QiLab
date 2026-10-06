@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>QI Lab: from Python to qubits and back</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0E1E42; --panel:#152B57; --panel2:#0B1835; --line:#2C4C88;
+  --navy:#23437F; --yellow:#FFCC00; --blue:#8FD3FF; --led:#8CF5A8;
+  --ink:#F2F6FC; --muted:#9DB1D6; --dim:#5A759E;
+  --sans:"IBM Plex Sans", Arial, Helvetica, sans-serif;
+  --mono:"JetBrains Mono", Consolas, "Courier New", monospace;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#0E1E42; } }
+:root[data-theme="dark"]{ --bg:#0E1E42; }
+html{ scroll-padding-top:env(safe-area-inset-top,0px); }
+html,body{ height:100%; margin:0; background:var(--bg); overflow:hidden; }
+body{ font-family:var(--sans); color:var(--ink); cursor:none; }
+body.showcursor{ cursor:default; }
+
+#stage{ position:absolute; left:50%; top:50%; width:1920px; height:1080px;
+  transform-origin:center center; background:
+  radial-gradient(1200px 700px at 50% 85%, #17336B 0%, rgba(14,30,66,0) 70%), var(--bg);
+  overflow:hidden; }
+
+/* ---------- header ---------- */
+.brand{ position:absolute; left:60px; top:34px; }
+.brand .word{ font-weight:700; font-size:56px; letter-spacing:-1px; line-height:1; }
+.brand .word b{ color:var(--yellow); font-weight:700; }
+.brand .sub{ margin-top:10px; font-size:20px; color:var(--muted); }
+
+.caption{ position:absolute; left:900px; top:30px; width:960px; height:92px;
+  display:flex; align-items:center; gap:22px; }
+.caption .num{ flex:0 0 64px; height:64px; border-radius:50%; border:2px solid var(--yellow);
+  color:var(--yellow); font-size:30px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+.caption .ct{ flex:1; }
+.caption .t{ font-size:30px; font-weight:600; }
+.caption .d{ font-size:20px; color:var(--muted); margin-top:4px; line-height:1.35; }
+.caption .ct, .caption .num{ transition:opacity .35s; }
+.caption.swap .ct, .caption.swap .num{ opacity:0; }
+.dots{ position:absolute; right:60px; top:130px; display:flex; gap:8px; }
+.dots i{ width:34px; height:5px; border-radius:3px; background:#2C4C88; transition:background .3s; }
+.dots i.on{ background:var(--yellow); }
+
+/* ---------- editors ---------- */
+.editor{ position:absolute; top:150px; width:760px; height:420px; background:var(--panel2);
+  border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+#edC{ left:60px; } #edS{ left:1100px; }
+.titlebar{ height:44px; display:flex; align-items:center; justify-content:space-between;
+  padding:0 18px; background:#12244C; border-bottom:1px solid var(--line); font-size:18px; }
+.titlebar .f{ font-family:var(--mono); color:var(--ink); }
+.titlebar .n{ color:var(--muted); }
+.code{ padding:14px 0; font-family:var(--mono); font-size:18px; line-height:27px; }
+.line{ display:flex; position:relative; transition:background .25s, box-shadow .25s; }
+.ln{ flex:0 0 46px; text-align:right; padding-right:16px; color:#3A5486; user-select:none; }
+.txt{ white-space:pre; transition:opacity .3s; }
+.anno{ white-space:pre; color:var(--yellow); opacity:0; transition:opacity .4s; font-weight:600; }
+.anno.show{ opacity:1; }
+.line.active{ background:rgba(255,204,0,.10); box-shadow:inset 4px 0 var(--yellow); }
+.line.skipped .txt{ opacity:.3; }
+.cm{ color:#6F86B8; } .kw{ color:#C9B6FF; } .fn{ color:var(--blue); } .nm{ color:#FFB27A; } .id{ color:var(--ink); }
+.cursor{ display:inline-block; width:10px; height:21px; margin-bottom:-4px; background:var(--blue);
+  animation:blink 1s steps(1) infinite; }
+@keyframes blink{ 50%{ opacity:0; } }
+.console{ position:absolute; left:0; right:0; bottom:0; height:78px; border-top:1px solid var(--line);
+  background:#081229; padding:10px 18px; font-family:var(--mono); font-size:17px; color:#B9C7E6; }
+.console .lab{ color:var(--dim); font-family:var(--sans); font-size:14px; margin-bottom:4px; }
+.console .out{ white-space:pre; }
+.console .out b{ color:var(--yellow); font-weight:600; }
+
+/* ---------- QNodeOS ---------- */
+.qnos{ position:absolute; top:620px; width:760px; height:130px; background:var(--panel);
+  border:1px solid var(--line); border-radius:12px; }
+#qC{ left:60px; } #qS{ left:1100px; }
+.qhead{ display:flex; justify-content:space-between; align-items:baseline; padding:12px 18px 0; }
+.qhead .t{ font-size:21px; font-weight:600; }
+.qhead .t span{ color:var(--muted); font-weight:400; font-size:18px; margin-left:8px; }
+.qhead .st{ font-size:17px; color:var(--muted); transition:color .3s; }
+.qhead .st.live{ color:var(--yellow); }
+.track{ position:absolute; left:18px; right:18px; top:62px; height:48px; border-radius:8px;
+  background:repeating-linear-gradient(90deg, rgba(255,255,255,.04) 0 1px, transparent 1px 36px), #0F2249; }
+.blk{ position:absolute; top:8px; height:32px; padding:0 12px; border-radius:6px; background:var(--navy);
+  border:1px solid #4A6DB0; font-family:var(--mono); font-size:15px; line-height:30px; color:var(--ink);
+  opacity:0; transform:translateY(-14px); transition:opacity .35s, transform .35s, background .3s; }
+.blk.in{ opacity:1; transform:none; }
+.blk.done{ background:#1E5A49; border-color:#4FB38C; }
+.blk.q{ border-color:var(--blue); }
+.now{ position:absolute; top:-6px; bottom:-6px; width:2px; background:var(--ink); left:0; opacity:0;
+  box-shadow:0 0 10px rgba(255,255,255,.6); }
+.deadline{ position:absolute; top:-6px; bottom:-6px; right:40px; width:0; border-left:2px dashed var(--yellow); }
+.deadline span{ position:absolute; left:6px; top:-1px; font-size:12px; color:var(--yellow); white-space:nowrap; }
+
+/* ---------- overlay & packets ---------- */
+#wires{ position:absolute; left:0; top:0; width:1920px; height:1080px; pointer-events:none; }
+.wlabel{ position:absolute; font-size:16px; color:var(--muted); text-align:center; }
+.pkt{ position:absolute; left:0; top:0; padding:5px 14px; border-radius:999px; background:var(--yellow);
+  color:#14264D; font-family:var(--mono); font-size:16px; font-weight:600; white-space:nowrap;
+  box-shadow:0 0 18px rgba(255,204,0,.55); will-change:transform; z-index:20; }
+.pkt.q{ background:var(--blue); box-shadow:0 0 18px rgba(143,211,255,.7); padding:0; width:14px; height:14px; }
+
+/* ---------- QI Lab box ---------- */
+#box{ position:absolute; left:610px; top:800px; width:700px; height:232px; }
+#boxwrap{ position:absolute; left:592px; top:784px; width:736px; height:264px; border:2px dashed rgba(203,216,236,.35); border-radius:18px; }
+.boxlab{ position:absolute; left:592px; top:1052px; width:736px; text-align:center; font-size:17px; color:var(--muted); }
+
+/* ---------- bottom panels ---------- */
+.side{ position:absolute; top:800px; width:500px; height:232px; background:var(--panel);
+  border:1px solid var(--line); border-radius:12px; padding:16px 20px; box-sizing:border-box; }
+#runs{ left:60px; } #legend{ left:1360px; }
+.side h3{ margin:0 0 8px; font-size:20px; font-weight:600; }
+table{ width:100%; border-collapse:collapse; font-family:var(--mono); font-size:16px; }
+th{ font-family:var(--sans); font-weight:500; color:var(--muted); text-align:left; font-size:15px; padding:2px 0 4px; }
+td{ padding:2px 0; height:22px; }
+tr.new td{ animation:rowin .6s; }
+@keyframes rowin{ from{ background:rgba(255,204,0,.25); } to{ background:transparent; } }
+td.m{ color:var(--led); }
+.note{ position:absolute; left:20px; right:20px; bottom:14px; font-size:14px; color:var(--muted); line-height:1.4; }
+.lg{ display:flex; align-items:center; gap:14px; font-size:16px; color:var(--ink); margin:7px 0; }
+.lg .sw{ flex:0 0 46px; display:flex; justify-content:center; }
+.sw .p{ width:34px; height:16px; border-radius:8px; background:var(--yellow); }
+.sw .ql{ width:42px; border-top:3px dashed var(--blue); }
+.sw .em{ width:36px; height:18px; border:2px dashed rgba(203,216,236,.6); border-radius:5px; }
+.att{ margin-top:12px; font-size:16px; color:var(--muted); display:flex; align-items:center; gap:8px; min-height:30px; }
+.att .a{ width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:16px; animation:pop .3s; }
+.att .a.x{ background:#3A2340; color:#FF8FA3; } .att .a.ok{ background:#1E5A49; color:var(--led); }
+@keyframes pop{ from{ transform:scale(.4); opacity:0; } }
+
+/* ---------- act 2: four nodes ---------- */
+.act{ position:absolute; inset:0; transition:opacity .8s; }
+#act2{ opacity:0; }
+.card{ position:absolute; top:160px; width:420px; height:354px; background:var(--panel2);
+  border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+.card .titlebar{ height:40px; font-size:17px; padding:0 14px; }
+.card .code{ padding:8px 0; font-size:15px; line-height:24px; }
+.card .ln{ flex-basis:34px; padding-right:12px; }
+.card .cons{ position:absolute; left:0; right:0; top:224px; height:40px; box-sizing:border-box; border-top:1px solid var(--line);
+  background:#081229; padding:9px 14px; font-family:var(--mono); font-size:15px; color:#B9C7E6; white-space:pre; }
+.card .cons b{ color:var(--yellow); font-weight:600; }
+.card .cons i{ font-style:normal; color:var(--led); } .card .cons s{ text-decoration:none; color:#FF8FA3; }
+.card .mq{ position:absolute; left:0; right:0; top:264px; bottom:0; background:var(--panel); border-top:1px solid var(--line); }
+.card .qhead{ padding:8px 14px 0; } .card .qhead .t{ font-size:17px; } .card .qhead .st{ font-size:14px; }
+.card .track{ top:40px; height:40px; left:14px; right:14px; }
+.card .blk{ top:6px; height:26px; line-height:24px; font-size:13px; padding:0 9px; }
+.card .deadline{ right:24px; } .card .deadline span{ display:none; }
+.st2{ color:#B5E8A0; }
+#dom{ position:absolute; left:60px; top:552px; width:1800px; height:262px; box-sizing:border-box;
+  border:2px dashed rgba(203,216,236,.35); border-radius:18px; }
+#busbar{ position:absolute; left:100px; top:576px; width:1720px; height:40px; box-sizing:border-box; background:var(--navy);
+  border:1px solid #4A6DB0; border-radius:8px; text-align:center; font-size:17px; line-height:38px; color:var(--ink); }
+.stimlab{ position:absolute; left:96px; top:634px; font-size:16px; color:var(--muted); }
+#keys{ position:absolute; left:60px; top:834px; width:1800px; height:216px; box-sizing:border-box; background:var(--panel);
+  border:1px solid var(--line); border-radius:12px; padding:14px 22px; }
+#keys .kh{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+#keys .kh h3{ margin:0; font-size:20px; font-weight:600; } #keys .kh span{ font-size:15px; color:var(--muted); }
+.krow{ display:flex; align-items:center; height:37px; opacity:.3; transition:opacity .5s; }
+.krow.on{ opacity:1; }
+.krow .kl{ flex:0 0 230px; font-size:17px; }
+.chips{ display:flex; gap:6px; }
+.chip{ width:26px; height:28px; border-radius:5px; border:1px solid var(--yellow); color:var(--yellow); background:#0F2249;
+  font-family:var(--mono); font-size:16px; font-weight:600; display:flex; align-items:center; justify-content:center; animation:pop .35s; }
+
+/* ---------- end card ---------- */
+#endcard{ position:absolute; inset:0; background:var(--bg); display:flex; flex-direction:column;
+  align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity .9s; z-index:50; }
+#endcard.show{ opacity:1; }
+#endcard .word{ font-size:150px; font-weight:700; letter-spacing:-4px; line-height:1; }
+#endcard .word b{ color:var(--yellow); }
+#endcard .l1{ font-size:38px; margin-top:28px; }
+#endcard .l2{ font-size:28px; color:var(--muted); margin-top:16px; }
+#endcard .l3{ margin-top:56px; font-size:30px; padding:16px 34px; border:2px solid var(--yellow); border-radius:999px; color:var(--yellow); }
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <div class="brand">
+    <div class="word">QI<b>Lab</b></div>
+    <div class="sub">From your Python script to the qubits and back, in real time</div>
+  </div>
+
+  <div class="caption" id="cap"><div class="num" id="capN">1</div>
+    <div class="ct"><div class="t" id="capT"></div><div class="d" id="capD"></div></div></div>
+  <div class="dots" id="dots"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+  <div class="act" id="act1">
+  <svg id="wires" viewBox="0 0 1920 1080">
+    <g fill="none" stroke-linecap="round">
+      <path d="M440 570 L440 620" stroke="#3B5C9B" stroke-width="2"/>
+      <path d="M1480 570 L1480 620" stroke="#3B5C9B" stroke-width="2"/>
+      <path d="M440 750 L440 916 L610 916" stroke="#3B5C9B" stroke-width="2"/>
+      <path d="M1480 750 L1480 916 L1310 916" stroke="#3B5C9B" stroke-width="2"/>
+      <path d="M820 470 L1100 470" stroke="rgba(255,204,0,.45)" stroke-width="2" stroke-dasharray="2 8"/>
+      <path d="M820 685 L1100 685" stroke="rgba(143,211,255,.5)" stroke-width="3" stroke-dasharray="8 8"/>
+    </g>
+    <!-- flight paths -->
+    <path id="pCd" d="M440 545 L440 640" fill="none"/>
+    <path id="pSd" d="M1480 545 L1480 640" fill="none"/>
+    <path id="pCb" d="M440 750 L440 916 L640 916" fill="none"/>
+    <path id="pSb" d="M1480 750 L1480 916 L1280 916" fill="none"/>
+    <path id="pSock" d="M810 470 L1110 470" fill="none"/>
+    <path id="pQl" d="M820 685 L960 685" fill="none"/>
+    <path id="pQr" d="M1100 685 L960 685" fill="none"/>
+  </svg>
+  <div class="wlabel" style="left:820px;top:430px;width:280px">classical socket</div>
+  <div class="wlabel" style="left:820px;top:645px;width:280px">entanglement request</div>
+  <div class="wlabel" style="left:450px;top:885px;width:150px;text-align:left">device bus</div>
+  <div class="wlabel" style="left:1320px;top:885px;width:150px;text-align:right">device bus</div>
+
+  <div class="editor" id="edC">
+    <div class="titlebar"><span class="f">client.py</span><span class="n">Node 1</span></div>
+    <div class="code" id="codeC"></div>
+    <div class="console"><div class="lab">output</div><div class="out" id="outC"> </div></div>
+  </div>
+  <div class="editor" id="edS">
+    <div class="titlebar"><span class="f">server.py</span><span class="n">Node 2</span></div>
+    <div class="code" id="codeS"></div>
+    <div class="console"><div class="lab">output</div><div class="out" id="outS"> </div></div>
+  </div>
+
+  <div class="qnos" id="qC">
+    <div class="qhead"><div class="t">QNodeOS<span>on Node 1</span></div><div class="st" id="stC">idle</div></div>
+    <div class="track" id="trC"><div class="deadline"><span>deadline</span></div><div class="now"></div></div>
+  </div>
+  <div class="qnos" id="qS">
+    <div class="qhead"><div class="t">QNodeOS<span>on Node 2</span></div><div class="st" id="stS">idle</div></div>
+    <div class="track" id="trS"><div class="deadline"><span>deadline</span></div><div class="now"></div></div>
+  </div>
+
+  <div id="boxwrap"></div>
+  <svg id="box" viewBox="0 0 700 232">
+    <defs>
+      <linearGradient id="alu" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#D9DDE2"/><stop offset="1" stop-color="#8E959E"/>
+      </linearGradient>
+      <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
+        <feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <rect x="14" y="0" width="672" height="30" rx="8" fill="url(#alu)"/>
+    <line x1="130" y1="3" x2="130" y2="28" stroke="#F4F6F8" stroke-width="2"/>
+    <line x1="570" y1="3" x2="570" y2="28" stroke="#F4F6F8" stroke-width="2"/>
+    <rect x="0" y="18" width="700" height="214" rx="16" fill="#0A0B0D" stroke="#26282C" stroke-width="2"/>
+    <g fill="#16181B" stroke="#B8962E" stroke-width="2">
+      <circle cx="22" cy="40" r="7"/><circle cx="678" cy="40" r="7"/><circle cx="22" cy="210" r="7"/><circle cx="678" cy="210" r="7"/>
+    </g>
+    <g id="vents" fill="#1C1F24" stroke="#5B6068" stroke-width="1.2">
+      <rect x="70" y="50" width="180" height="18" rx="9"/><rect x="70" y="76" width="180" height="18" rx="9"/><rect x="70" y="102" width="180" height="18" rx="9"/>
+      <rect x="265" y="50" width="170" height="18" rx="9"/><rect x="265" y="76" width="170" height="18" rx="9"/><rect x="265" y="102" width="170" height="18" rx="9"/>
+      <rect x="450" y="50" width="180" height="18" rx="9"/><rect x="450" y="76" width="180" height="18" rx="9"/><rect x="450" y="102" width="180" height="18" rx="9"/>
+    </g>
+    <!-- entanglement link + qubits (Stim) -->
+    <path id="wave" d="M160 85 C 205 55, 250 115, 295 85 S 385 55, 430 85 S 495 115, 540 85" fill="none"
+      stroke="#8FD3FF" stroke-width="4" stroke-linecap="round" filter="url(#glow)" opacity="0"/>
+    <circle id="qa" cx="160" cy="85" r="15" fill="#8FD3FF" filter="url(#glow)" opacity="0"/>
+    <circle id="qb" cx="540" cy="85" r="15" fill="#8FD3FF" filter="url(#glow)" opacity="0"/>
+    <text x="160" y="142" text-anchor="middle" fill="#7E8794" font-family="IBM Plex Sans, Arial" font-size="14">node 1 qubit</text>
+    <text x="540" y="142" text-anchor="middle" fill="#7E8794" font-family="IBM Plex Sans, Arial" font-size="14">node 2 qubit</text>
+    <text x="350" y="200" text-anchor="middle" fill="#F2F2F2" font-family="IBM Plex Sans, Arial" font-size="40" font-weight="500">QiLab</text>
+    <text x="90" y="200" fill="#C9CDD3" font-family="IBM Plex Sans, Arial" font-size="15" font-weight="600">QuTech</text>
+    <text x="560" y="164" fill="#E6E6E6" font-family="IBM Plex Sans, Arial" font-size="14" font-weight="600">POWER</text>
+    <g font-family="IBM Plex Sans, Arial" font-size="12" fill="#BFC4CA">
+      <circle id="ledC" cx="566" cy="180" r="5" fill="#33363B"/><text x="578" y="184">Controller</text>
+      <circle id="led1" cx="566" cy="198" r="5" fill="#33363B"/><text x="578" y="202">Node 1</text>
+      <circle id="led2" cx="566" cy="216" r="5" fill="#33363B"/><text x="578" y="220">Node 2</text>
+    </g>
+  </svg>
+  <div class="boxlab">The quantum devices are emulated: a Stim simulator answers over the real device bus</div>
+
+  <div class="side" id="runs">
+    <h3>Runs</h3>
+    <table><thead><tr><th>run</th><th>client outcome p</th><th>server outcome m</th></tr></thead>
+      <tbody id="runBody"></tbody></table>
+    <div class="note">m is always 0. After the correction the server's qubit is exactly the state the client chose, whatever p was.</div>
+  </div>
+
+  <div class="side" id="legend">
+    <h3>What moves where</h3>
+    <div class="lg"><span class="sw"><span class="p"></span></span>Classical data: batches, results, socket bits</div>
+    <div class="lg"><span class="sw"><span class="ql"></span></span>Quantum link, entanglement simulated</div>
+    <div class="lg"><span class="sw"><span class="em"></span></span>Emulated, not physical</div>
+    <div class="att" id="att">Entanglement attempts</div>
+  </div>
+
+  </div>
+
+  <div class="act" id="act2">
+    <div id="dom"></div>
+    <div id="busbar">Hardware bus manager: one link per node</div>
+    <div class="stimlab">Stim simulator answers for every node</div>
+    <div class="card" style="left:60px">
+      <div class="titlebar"><span class="f">qkd.py</span><span class="n">Node 1</span></div>
+      <div class="code" id="code0"></div>
+      <div class="cons" id="out0"> </div>
+      <div class="mq"><div class="qhead"><div class="t">QNodeOS</div><div class="st" id="st0">idle</div></div>
+        <div class="track" id="tr0"><div class="deadline"><span></span></div><div class="now"></div></div></div>
+    </div>
+    <div class="card" style="left:520px">
+      <div class="titlebar"><span class="f">qkd.py</span><span class="n">Node 2</span></div>
+      <div class="code" id="code1"></div>
+      <div class="cons" id="out1"> </div>
+      <div class="mq"><div class="qhead"><div class="t">QNodeOS</div><div class="st" id="st1">idle</div></div>
+        <div class="track" id="tr1"><div class="deadline"><span></span></div><div class="now"></div></div></div>
+    </div>
+    <div class="card" style="left:980px">
+      <div class="titlebar"><span class="f">qkd.py</span><span class="n">Node 3</span></div>
+      <div class="code" id="code2"></div>
+      <div class="cons" id="out2"> </div>
+      <div class="mq"><div class="qhead"><div class="t">QNodeOS</div><div class="st" id="st2">idle</div></div>
+        <div class="track" id="tr2"><div class="deadline"><span></span></div><div class="now"></div></div></div>
+    </div>
+    <div class="card" style="left:1440px">
+      <div class="titlebar"><span class="f">qkd.py</span><span class="n">Node 4</span></div>
+      <div class="code" id="code3"></div>
+      <div class="cons" id="out3"> </div>
+      <div class="mq"><div class="qhead"><div class="t">QNodeOS</div><div class="st" id="st3">idle</div></div>
+        <div class="track" id="tr3"><div class="deadline"><span></span></div><div class="now"></div></div></div>
+    </div>
+    <svg id="wires2" viewBox="0 0 1920 1080" style="position:absolute;left:0;top:0;width:1920px;height:1080px;pointer-events:none">
+      <defs><filter id="glow2" x="-100%" y="-100%" width="300%" height="300%">
+        <feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+      <g fill="none" stroke="#3B5C9B" stroke-width="2"><path d="M270 514 L270 576"/><path d="M270 616 L270 706"/><path d="M730 514 L730 576"/><path d="M730 616 L730 706"/><path d="M1190 514 L1190 576"/><path d="M1190 616 L1190 706"/><path d="M1650 514 L1650 576"/><path d="M1650 616 L1650 706"/></g>
+      <g id="links2" fill="none"></g>
+      <path id="d0" d="M270 500 L270 704" fill="none"/><path id="d1" d="M730 500 L730 704" fill="none"/><path id="d2" d="M1190 500 L1190 704" fill="none"/><path id="d3" d="M1650 500 L1650 704" fill="none"/>
+      <circle id="q2_0" cx="270" cy="720" r="14" fill="#8FD3FF" filter="url(#glow2)" opacity=".22"/><text x="294" y="726" fill="#9DB1D6" font-family="IBM Plex Sans, Arial" font-size="15">node 1 qubit</text><circle id="q2_1" cx="730" cy="720" r="14" fill="#8FD3FF" filter="url(#glow2)" opacity=".22"/><text x="754" y="726" fill="#9DB1D6" font-family="IBM Plex Sans, Arial" font-size="15">node 2 qubit</text><circle id="q2_2" cx="1190" cy="720" r="14" fill="#8FD3FF" filter="url(#glow2)" opacity=".22"/><text x="1214" y="726" fill="#9DB1D6" font-family="IBM Plex Sans, Arial" font-size="15">node 3 qubit</text><circle id="q2_3" cx="1650" cy="720" r="14" fill="#8FD3FF" filter="url(#glow2)" opacity=".22"/><text x="1674" y="726" fill="#9DB1D6" font-family="IBM Plex Sans, Arial" font-size="15">node 4 qubit</text>
+    </svg>
+    <div id="keys">
+      <div class="kh"><h3>Shared keys</h3><span>A bit is kept only when both nodes picked the same basis. Both ends hold identical bits.</span></div>
+      <div class="krow" id="k0"><span class="kl">Node 1 and Node 2</span><span class="chips"></span></div>
+      <div class="krow" id="k1"><span class="kl">Node 3 and Node 4</span><span class="chips"></span></div>
+      <div class="krow" id="k2"><span class="kl">Node 1 and Node 4</span><span class="chips"></span></div>
+      <div class="krow" id="k3"><span class="kl">Node 3 and Node 2</span><span class="chips"></span></div>
+    </div>
+  </div>
+
+  <div id="endcard">
+    <div class="word">QI<b>Lab</b></div>
+    <div class="l1">Real quantum network nodes, with the quantum devices emulated</div>
+    <div class="l2">Real QNodeOS, real classical timing, a small quantum network on your desk</div>
+    <div class="l3">Ask us for a live demo</div>
+  </div>
+</div>
+
+<script>
+(() => {
+/* ---------- stage scaling ---------- */
+const stage = document.getElementById('stage');
+function fit(){
+  const s = Math.min(innerWidth/1920, innerHeight/1080);
+  stage.style.transform = `translate(-50%,-50%) scale(${s})`;
+}
+addEventListener('resize', fit); fit();
+
+/* ---------- controls: space pauses, F or double-click toggles fullscreen ---------- */
+let paused = false, SPEED = 1;
+addEventListener('keydown', e => {
+  if (e.code === 'Space') { paused = !paused; e.preventDefault(); }
+  if (e.key === 'f' || e.key === 'F') toggleFS();
+});
+addEventListener('dblclick', toggleFS);
+function toggleFS(){
+  try { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); } catch(e){}
+}
+let curT; addEventListener('mousemove', () => {
+  document.body.classList.add('showcursor'); clearTimeout(curT);
+  curT = setTimeout(() => document.body.classList.remove('showcursor'), 2000);
+});
+
+/* ---------- timing helpers (pause-aware) ---------- */
+function sleep(ms){
+  return new Promise(res => {
+    let left = ms / SPEED, last = performance.now();
+    (function tick(now){
+      if (!paused) left -= (now - last);
+      last = now;
+      left <= 0 ? res() : requestAnimationFrame(tick);
+    })(last);
+  });
+}
+const $ = id => document.getElementById(id);
+
+/* ---------- code ---------- */
+const CLIENT = [
+  [['cm','# remote state preparation, client side']],
+  [['id','epr = epr_socket.'],['fn','create_keep'],['id','()['],['nm','0'],['id',']']],
+  [['id','epr.'],['fn','H'],['id','()'],['cm','                  # measure in the X basis']],
+  [['id','p = epr.'],['fn','measure'],['id','()']],
+  [['id','conn.'],['fn','flush'],['id','()'],['cm','             # batch goes to QNodeOS']],
+  [['id','csocket.'],['fn','send'],['id','(p)'],['cm','         # one classical bit']],
+];
+const SERVER = [
+  [['cm','# remote state preparation, server side']],
+  [['id','epr = epr_socket.'],['fn','recv_keep'],['id','()['],['nm','0'],['id',']']],
+  [['id','conn.'],['fn','flush'],['id','()']],
+  [['id','p = '],['fn','int'],['id','(csocket.'],['fn','recv'],['id','())']],
+  [['kw','if'],['id',' p == '],['nm','1'],['id',':']],
+  [['id','    epr.'],['fn','Z'],['id','()'],['cm','              # Pauli correction']],
+  [['id','epr.'],['fn','H'],['id','()']],
+  [['id','m = epr.'],['fn','measure'],['id','()']],
+  [['id','conn.'],['fn','flush'],['id','()'],['cm','             # second subroutine']],
+];
+
+function buildEditor(el, lines){
+  el.innerHTML = '';
+  return lines.map((segs, i) => {
+    const row = document.createElement('div'); row.className = 'line';
+    row.innerHTML = `<span class="ln">${i+1}</span><span class="txt"></span><span class="anno"></span>`;
+    el.appendChild(row);
+    return { row, txt: row.querySelector('.txt'), anno: row.querySelector('.anno'), segs, spans: [] };
+  });
+}
+async function typeOut(rows, total){
+  const chars = rows.reduce((n, r) => n + r.segs.reduce((m, s) => m + s[1].length, 0), 0);
+  const per = total / chars;
+  const cur = document.createElement('span'); cur.className = 'cursor';
+  for (const r of rows){
+    for (const [cls, text] of r.segs){
+      const sp = document.createElement('span'); sp.className = cls; r.txt.appendChild(sp); r.spans.push(sp);
+      r.txt.appendChild(cur);
+      const isPad = cls === 'cm' && /^ +/.test(text);
+      let i = 0;
+      if (isPad){ const pad = text.match(/^ +/)[0].length; sp.textContent = text.slice(0, pad); i = pad; }
+      for (; i < text.length; i++){
+        sp.textContent += text[i];
+        await sleep(per * (0.6 + Math.random()*0.8));
+      }
+    }
+    await sleep(per * 6);
+  }
+  cur.remove();
+}
+function annotate(r, text){ r.anno.textContent = '   # ' + text; r.anno.classList.add('show'); }
+function hl(rows, idx){ rows.forEach((r, i) => r.row.classList.toggle('active', idx.includes(i))); }
+
+/* ---------- caption ---------- */
+const STEPS = [
+  ['You write Python','Two ordinary scripts, one per node. Each quantum call is recorded, not executed yet.'],
+  ['flush()','The calls are compiled into one instruction batch and handed to QNodeOS on the node.'],
+  ['QNodeOS schedules','The batch runs against real-time deadlines. Both nodes ask the network for an entangled pair.'],
+  ['QiLab answers','Same device bus, same protocol. Stim answers in real time where the qubits would be, retrying until entanglement is heralded.'],
+  ['Results come back','The measurement outcome lands in the client\u2019s Python variable p.'],
+  ['One classical bit','The client sends p to the server over a plain socket. That traffic never passes through QNodeOS.'],
+  ['Correct and measure','The server applies the Pauli correction if p = 1, then measures. It always gets m = 0, the state the client chose.'],
+];
+async function caption(i, title, desc, numLabel){
+  const cap = $('cap'); cap.classList.add('swap');
+  await sleep(300);
+  $('capN').textContent = numLabel ?? (i === null ? '\u21BB' : i + 1);
+  $('dots').style.opacity = numLabel ? 0 : 1;
+  $('capT').textContent = title ?? STEPS[i][0];
+  $('capD').textContent = desc ?? STEPS[i][1];
+  [...$('dots').children].forEach((d, k) => d.classList.toggle('on', i === null || k <= i));
+  cap.classList.remove('swap');
+}
+
+/* ---------- packets ---------- */
+function fly(pathId, label, { dur = 900, reverse = false, quantum = false } = {}){
+  return new Promise(res => {
+    const path = $(pathId), L = path.getTotalLength();
+    const el = document.createElement('div');
+    el.className = 'pkt' + (quantum ? ' q' : ''); if (!quantum) el.textContent = label;
+    stage.appendChild(el);
+    let t = 0, last = performance.now(); const d = dur / SPEED;
+    (function f(now){
+      if (!paused) t += (now - last) / d; last = now;
+      const k = Math.min(1, t), e = k < .5 ? 2*k*k : 1 - Math.pow(-2*k + 2, 2)/2;
+      const p = path.getPointAtLength((reverse ? 1 - e : e) * L);
+      el.style.transform = `translate(${p.x}px,${p.y}px) translate(-50%,-50%)`;
+      if (k < 1) requestAnimationFrame(f); else { el.remove(); res(); }
+    })(last);
+  });
+}
+
+/* ---------- QNodeOS ---------- */
+function status(id, text, live = true){ const s = $(id); s.textContent = text; s.classList.toggle('live', live); }
+function addBlock(trackId, label, xPct, quantum = false){
+  const b = document.createElement('div'); b.className = 'blk' + (quantum ? ' q' : '');
+  b.textContent = label; b.style.left = xPct + '%';
+  $(trackId).appendChild(b); requestAnimationFrame(() => requestAnimationFrame(() => b.classList.add('in')));
+  return b;
+}
+function clearTrack(trackId){ $(trackId).querySelectorAll('.blk').forEach(b => b.remove()); const n = $(trackId).querySelector('.now'); n.style.opacity = 0; n.style.left = '0%'; }
+function sweep(trackId, from, to, dur){
+  return new Promise(res => {
+    const n = $(trackId).querySelector('.now'); n.style.opacity = 1;
+    let t = 0, last = performance.now(); const d = dur / SPEED;
+    (function f(now){
+      if (!paused) t += (now - last) / d; last = now;
+      const k = Math.min(1, t); n.style.left = (from + (to - from) * k) + '%';
+      $(trackId).querySelectorAll('.blk').forEach(b => { if (parseFloat(b.style.left) + 4 <= from + (to-from)*k) b.classList.add('done'); });
+      k < 1 ? requestAnimationFrame(f) : res();
+    })(last);
+  });
+}
+
+/* ---------- box ---------- */
+const LED_ON = '#8CF5A8', LED_OFF = '#33363B';
+function led(id, on){ $(id).setAttribute('fill', on ? LED_ON : LED_OFF); $(id).setAttribute('filter', on ? 'url(#glow)' : ''); }
+async function blink(id, n = 3){ for (let i = 0; i < n; i++){ led(id, true); await sleep(110); led(id, false); await sleep(90); } }
+function fade(el, to, ms = 400){ el.style.transition = `opacity ${ms/SPEED}ms`; el.setAttribute('opacity', to); }
+async function drawWave(success){
+  const w = $('wave'), L = w.getTotalLength();
+  w.style.transition = 'none'; w.setAttribute('opacity', success ? 1 : .45);
+  w.style.strokeDasharray = L; w.style.strokeDashoffset = L;
+  w.setAttribute('stroke', success ? '#8FD3FF' : '#7A8CA8');
+  await sleep(30);
+  w.style.transition = `stroke-dashoffset ${520/SPEED}ms ease-out`; w.style.strokeDashoffset = 0;
+  await sleep(560);
+  if (!success){ w.style.transition = `opacity ${250/SPEED}ms`; w.setAttribute('opacity', 0); await sleep(260); }
+}
+function resetBox(){
+  ['qa','qb'].forEach(q => { $(q).style.transition = 'none'; $(q).setAttribute('opacity', 0); $(q).setAttribute('fill', '#8FD3FF'); });
+  const w = $('wave'); w.style.transition = 'none'; w.setAttribute('opacity', 0);
+  ['ledC','led1','led2'].forEach(l => led(l, false));
+}
+
+/* ---------- runs ---------- */
+let runNo = 0;
+function addRun(p, m){
+  const tb = $('runBody'); const tr = document.createElement('tr'); tr.className = 'new';
+  tr.innerHTML = `<td>${runNo}</td><td>${p}</td><td class="m">${m}</td>`;
+  tb.prepend(tr); while (tb.children.length > 3) tb.lastChild.remove();
+}
+function attempt(ok){
+  const a = document.createElement('span'); a.className = 'a ' + (ok ? 'ok' : 'x'); a.textContent = ok ? '\u2713' : '\u2717';
+  $('att').appendChild(a);
+}
+function resetAttempts(){ $('att').querySelectorAll('.a').forEach(a => a.remove()); }
+
+/* ---------- one run of the protocol ---------- */
+async function run(C, S, narrate){
+  runNo++;
+  const p = Math.random() < .5 ? 0 : 1, attempts = 1 + Math.floor(Math.random()*3);
+  const cap = i => narrate ? caption(i) : Promise.resolve();
+
+  // reset per-run state
+  [...C, ...S].forEach(r => { r.anno.classList.remove('show'); r.row.classList.remove('active','skipped'); });
+  clearTrack('trC'); clearTrack('trS'); resetBox(); resetAttempts();
+  status('stC','idle',false); status('stS','idle',false);
+  $('outC').innerHTML = ' '; $('outS').innerHTML = ' ';
+
+  // 2. flush
+  await cap(1);
+  hl(C,[1,2,3,4]); hl(S,[1,2]);
+  await sleep(narrate ? 900 : 300);
+  await Promise.all([fly('pCd','batch',{dur:800}), fly('pSd','batch',{dur:800})]);
+  status('stC','batch received'); status('stS','batch received');
+
+  // 3. QNodeOS schedules
+  await cap(2);
+  addBlock('trC','EPR',2,true); await sleep(160);
+  addBlock('trC','H',22); await sleep(160);
+  addBlock('trC','MEAS',33);
+  addBlock('trS','EPR',2,true);
+  await sleep(narrate ? 700 : 250);
+  status('stC','requesting entanglement'); status('stS','requesting entanglement');
+  for (let i = 0; i < (narrate ? 2 : 1); i++){
+    await Promise.all([fly('pQl','',{dur:600,quantum:true}), fly('pQr','',{dur:600,quantum:true})]);
+  }
+
+  // 4. down the bus into QI Lab
+  await cap(3);
+  sweep('trC', 0, 14, 900); sweep('trS', 0, 14, 900);
+  await Promise.all([fly('pCb','EPR',{dur:900}), fly('pSb','EPR',{dur:900})]);
+  led('ledC', true);
+  for (let a = 1; a <= attempts; a++){
+    const ok = a === attempts;
+    await Promise.all([blink('led1',2), blink('led2',2), drawWave(ok)]);
+    attempt(ok);
+    await sleep(narrate ? 250 : 80);
+  }
+  fade($('qa'),1); fade($('qb'),1);
+  status('stC','executing H, MEAS'); status('stS','pair delivered');
+  await sleep(narrate ? 600 : 200);
+  // client measures its half
+  await sweep('trC', 14, 46, narrate ? 1000 : 500);
+  led('led1', true); $('qa').setAttribute('fill', '#FFCC00');
+  await sleep(narrate ? 500 : 200);
+  fade($('wave'),0); fade($('qa'),.25);
+  led('led1', false);
+
+  // 5. results come back
+  await cap(4);
+  await Promise.all([
+    (async () => { await fly('pCb',`p = ${p}`,{dur:900,reverse:true}); await fly('pCd',`p = ${p}`,{dur:600,reverse:true}); })(),
+    (async () => { await fly('pSb','pair',{dur:900,reverse:true}); await fly('pSd','pair',{dur:600,reverse:true}); })(),
+  ]);
+  led('ledC', false);
+  annotate(C[3], `p = ${p}`); annotate(S[2], 'pair delivered');
+  $('outC').innerHTML = `run ${runNo}   measured p = <b>${p}</b>`;
+  status('stC','done',false); status('stS','waiting',false);
+  await sleep(narrate ? 1400 : 400);
+
+  // 6. classical socket
+  await cap(5);
+  hl(C,[5]); hl(S,[3]);
+  await sleep(narrate ? 500 : 150);
+  await fly('pSock',`p = ${p}`,{dur:1300});
+  annotate(S[3], `p = ${p}`);
+  await sleep(narrate ? 900 : 250);
+
+  // 7. correction + measure
+  await cap(6);
+  hl(S, p ? [4,5,6,7,8] : [4,6,7,8]);
+  if (!p) S[5].row.classList.add('skipped');
+  await sleep(narrate ? 800 : 250);
+  await fly('pSd','batch',{dur:700});
+  status('stS','executing', true);
+  let x = 50;
+  if (p){ addBlock('trS','Z',x); x += 12; await sleep(140); }
+  addBlock('trS','H',x); await sleep(140);
+  addBlock('trS','MEAS',x + 11);
+  await sleep(narrate ? 500 : 150);
+  sweep('trS', 46, x + 24, narrate ? 1300 : 650);
+  await fly('pSb', p ? 'Z, H, MEAS' : 'H, MEAS',{dur:900});
+  led('ledC', true);
+  if (p){ $('qb').setAttribute('fill','#C9B6FF'); await blink('led2',2); $('qb').setAttribute('fill','#8FD3FF'); }
+  await blink('led2',2);
+  led('led2', true); $('qb').setAttribute('fill','#FFCC00');
+  await sleep(narrate ? 500 : 150);
+  fade($('qb'),.25); led('led2', false);
+  await fly('pSb','m = 0',{dur:900,reverse:true});
+  await fly('pSd','m = 0',{dur:600,reverse:true});
+  led('ledC', false);
+  annotate(S[7], 'm = 0');
+  $('outS').innerHTML = `run ${runNo}   p = ${p}, measured m = <b>0</b>  \u2713`;
+  status('stS','done',false);
+  hl(C,[]); hl(S,[]); S[5].row.classList.remove('skipped');
+  addRun(p, 0);
+  await sleep(narrate ? 2200 : 700);
+}
+
+
+/* ================= act 2: four nodes, parallel applications ================= */
+const CX = [270, 730, 1190, 1650];
+const CREATOR = [true, false, true, false];
+const PEERS_A = ['node2','node1','node4','node3'];
+const PEERS_B = ['node4','node3','node2','node1'];
+function qkdLines(peer, creator){
+  return [
+    [['id','epr_socket = '],['fn','EPRSocket'],['id','('],['nm',`"${peer}"`],['id',')']],
+    [['id','epr = epr_socket.'],['fn', creator ? 'create_keep' : 'recv_keep'],['id','()['],['nm','0'],['id',']']],
+    [['id','basis = random.'],['fn','choice'],['id','('],['nm','"ZX"'],['id',')']],
+    [['kw','if'],['id',' basis == '],['nm','"X"'],['id',': epr.'],['fn','H'],['id','()']],
+    [['id','bit = epr.'],['fn','measure'],['id','()']],
+    [['id','conn.'],['fn','flush'],['id','()']],
+    [['id','csocket.'],['fn','send'],['id','(basis)']],
+  ];
+}
+let cards = [];
+const SVGNS = 'http://www.w3.org/2000/svg';
+function mkPath(id, d, attrs){
+  const p = document.createElementNS(SVGNS, 'path'); p.id = id; p.setAttribute('d', d); p.setAttribute('fill','none');
+  for (const k in attrs) p.setAttribute(k, attrs[k]);
+  $('links2').appendChild(p); return p;
+}
+function setPairs(pairs){
+  $('links2').innerHTML = '';
+  pairs.forEach(([a, b, k]) => {
+    const xa = CX[a], xb = CX[b], mid = (xa + xb) / 2;
+    const far = Math.abs(a - b) > 1;
+    mkPath('sock' + k, `M${xa} 158 Q ${mid} 104 ${xb} 158`, { stroke:'rgba(255,204,0,.45)', 'stroke-width':2, 'stroke-dasharray':'2 8' });
+    mkPath('ent' + k, `M${xa} 720 Q ${mid} ${far ? 830 : 640} ${xb} 720`,
+      { stroke:'#8FD3FF', 'stroke-width':4, 'stroke-linecap':'round', filter:'url(#glow2)', opacity:0 });
+  });
+}
+async function drawArc(k, success){
+  const w = $('ent' + k), L = w.getTotalLength();
+  w.style.transition = 'none'; w.setAttribute('opacity', success ? 1 : .45);
+  w.setAttribute('stroke', success ? '#8FD3FF' : '#7A8CA8');
+  w.style.strokeDasharray = L; w.style.strokeDashoffset = L;
+  await sleep(30);
+  w.style.transition = `stroke-dashoffset ${520/SPEED}ms ease-out`; w.style.strokeDashoffset = 0;
+  await sleep(560);
+  if (!success){ w.style.transition = `opacity ${250/SPEED}ms`; w.setAttribute('opacity', 0); await sleep(260); }
+}
+function chip(k, bit){
+  const c = document.createElement('span'); c.className = 'chip'; c.textContent = bit;
+  const box = $('k' + k).querySelector('.chips'); box.appendChild(c);
+  while (box.children.length > 40) box.firstChild.remove();
+}
+async function pairRound(a, b, k, narrate){
+  const A = cards[a], B = cards[b];
+  const basA = Math.random() < .5 ? 'Z' : 'X', basB = Math.random() < .5 ? 'Z' : 'X';
+  const bitA = Math.random() < .5 ? 0 : 1, bitB = basA === basB ? bitA : (Math.random() < .5 ? 0 : 1);
+  const fails = Math.random() < .5 ? 1 : 0;
+  for (const [c, i] of [[A, a], [B, b]]){
+    c.rows.forEach(r => r.anno.classList.remove('show')); hl(c.rows, [1,2,3,4,5]);
+    clearTrack('tr' + i); status('st' + i, 'idle', false); $('out' + i).innerHTML = ' ';
+  }
+  await sleep(narrate ? 600 : 150);
+  await Promise.all([fly('d' + a, 'batch', { dur: 900 }), fly('d' + b, 'batch', { dur: 900 })]);
+  for (const [i, bas] of [[a, basA], [b, basB]]){
+    $('st' + i).textContent = 'entangling with node ' + ((i === a ? b : a) + 1);
+    addBlock('tr' + i, 'EPR', 2, true);
+    if (bas === 'X') addBlock('tr' + i, 'H', 30);
+    addBlock('tr' + i, 'MEAS', bas === 'X' ? 46 : 30);
+  }
+  await sleep(narrate ? 500 : 150);
+  for (let f = 0; f < fails; f++) await drawArc(k, false);
+  await drawArc(k, true);
+  for (const i of [a, b]){ const q = $('q2_' + i); q.style.transition = `opacity ${300/SPEED}ms`; q.setAttribute('opacity', 1); status('st' + i, 'executing'); }
+  await Promise.all([sweep('tr' + a, 0, 72, narrate ? 1000 : 500), sweep('tr' + b, 0, 72, narrate ? 1000 : 500)]);
+  for (const i of [a, b]) $('q2_' + i).setAttribute('fill', '#FFCC00');
+  await sleep(narrate ? 450 : 150);
+  const w = $('ent' + k); w.style.transition = `opacity ${400/SPEED}ms`; w.setAttribute('opacity', 0);
+  for (const i of [a, b]){ const q = $('q2_' + i); q.setAttribute('opacity', .22); q.setAttribute('fill', '#8FD3FF'); }
+  await Promise.all([
+    fly('d' + a, `bit = ${bitA}`, { dur: 900, reverse: true }),
+    fly('d' + b, `bit = ${bitB}`, { dur: 900, reverse: true }),
+  ]);
+  for (const [c, i, bas, bit] of [[A, a, basA, bitA], [B, b, basB, bitB]]){
+    annotate(c.rows[4], `bit = ${bit}`); status('st' + i, 'done', false);
+    $('out' + i).innerHTML = `basis ${bas}   bit <b>${bit}</b>`;
+  }
+  await sleep(narrate ? 700 : 200);
+  hl(A.rows, [6]); hl(B.rows, [6]);
+  await Promise.all([fly('sock' + k, basA, { dur: 1100 }), fly('sock' + k, basB, { dur: 1100, reverse: true })]);
+  const kept = basA === basB;
+  for (const [i, bas, bit] of [[a, basA, bitA], [b, basB, bitB]])
+    $('out' + i).innerHTML = `basis ${bas}   bit <b>${bit}</b>   ` + (kept ? '<i>kept</i>' : '<s>bases differ, dropped</s>');
+  if (kept) chip(k, bitA);
+  hl(A.rows, []); hl(B.rows, []);
+  await sleep(narrate ? 1300 : 350);
+}
+async function retypePeer(i, peer, per){
+  const r = cards[i].rows[0], sp = r.spans[3];
+  r.row.classList.add('active');
+  while (sp.textContent.length > 1){ sp.textContent = sp.textContent.slice(0, -1); await sleep(per); }
+  for (const ch of `${peer}"`){ sp.textContent += ch; await sleep(per); }
+  await sleep(400); r.row.classList.remove('active');
+}
+function resetAct2(){
+  cards = [0,1,2,3].map(i => ({ rows: buildEditor($('code' + i), qkdLines(PEERS_A[i], CREATOR[i])) }));
+  for (let i = 0; i < 4; i++){ clearTrack('tr' + i); status('st' + i, 'idle', false); $('out' + i).innerHTML = ' ';
+    const q = $('q2_' + i); q.setAttribute('opacity', .22); q.setAttribute('fill', '#8FD3FF'); }
+  for (let k = 0; k < 4; k++){ $('k' + k).classList.remove('on'); $('k' + k).querySelector('.chips').innerHTML = ''; }
+  $('links2').innerHTML = '';
+}
+async function act2(){
+  resetAct2();
+  await caption(null, 'Up to four nodes', 'Set the topology in the QI Lab web UI. Each node keeps its own QNodeOS and bus link, all ending in one QI Lab domain.', '8');
+  $('act1').style.opacity = 0; await sleep(500); $('act2').style.opacity = 1; await sleep(600);
+  await Promise.all(cards.map(c => typeOut(c.rows, 4200)));
+  await sleep(1200);
+
+  await caption(null, 'Applications in parallel', 'Nodes 1 and 2, and nodes 3 and 4, run entanglement-based key distribution at the same time, on the same QI Lab.', '9');
+  setPairs([[0, 1, 0], [2, 3, 1]]); $('k0').classList.add('on'); $('k1').classList.add('on');
+  for (let r = 0; r < 5; r++){
+    SPEED = r < 1 ? 1 : 2.2;
+    await Promise.all([pairRound(0, 1, 0, r < 1), pairRound(2, 3, 1, r < 1)]);
+  }
+  SPEED = 1;
+
+  await caption(null, 'Change the pairing, not the hardware', 'Point each script at a new peer. Now nodes 1 and 4, and nodes 3 and 2, build their own keys.', '10');
+  $('k0').classList.remove('on'); $('k1').classList.remove('on');
+  await sleep(600);
+  await Promise.all([0,1,2,3].map(i => retypePeer(i, PEERS_B[i], 110)));
+  setPairs([[0, 3, 2], [2, 1, 3]]); $('k2').classList.add('on'); $('k3').classList.add('on');
+  for (let r = 0; r < 5; r++){
+    SPEED = r < 1 ? 1 : 2.2;
+    await Promise.all([pairRound(0, 3, 2, r < 1), pairRound(2, 1, 3, r < 1)]);
+  }
+  SPEED = 1;
+  await sleep(1200);
+}
+
+/* ---------- main loop ---------- */
+async function loop(){
+  for (;;){
+    SPEED = 1; runNo = 0; $('runBody').innerHTML = '';
+    const C = buildEditor($('codeC'), CLIENT), S = buildEditor($('codeS'), SERVER);
+    clearTrack('trC'); clearTrack('trS'); resetBox(); resetAttempts();
+    status('stC','idle',false); status('stS','idle',false);
+    $('outC').innerHTML = ' '; $('outS').innerHTML = ' ';
+    $('endcard').classList.remove('show');
+    if (location.hash === '#act2'){ await act2(); continue; }
+    await caption(0);
+    await Promise.all([typeOut(C, 7000), typeOut(S, 7000)]);
+    await sleep(900);
+
+    await run(C, S, true);
+
+    await caption(null, 'Runs repeat', 'The scripts loop for as many runs as you ask for. p is random each time, m never is.');
+    SPEED = 2.4;
+    for (let i = 0; i < 4; i++) await run(C, S, false);
+    SPEED = 1;
+    await sleep(1200);
+
+    await act2();
+
+    $('endcard').classList.add('show');
+    await sleep(5500);
+    $('act2').style.opacity = 0; $('act1').style.opacity = 1;
+  }
+}
+(document.fonts ? document.fonts.ready : Promise.resolve()).then(loop);
+})();
+</script>
+</body>
+</html>

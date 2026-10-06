@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
 # Mirror every gate a vX.Y.Z tag has to clear in .gitlab-ci.yml, locally.
 #
 # Usage: .claude/skills/bump-version/check_release.sh 0.4.3 [--quick]

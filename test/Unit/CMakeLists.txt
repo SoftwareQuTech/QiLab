@@ -1,3 +1,6 @@
+# Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
 add_executable(unit_tests
                 ${CMAKE_CURRENT_SOURCE_DIR}/ConfigurationEngine/test_config_loader.cpp
                 ${CMAKE_CURRENT_SOURCE_DIR}/ConfigurationEngine/test_qubit_parsers.cpp

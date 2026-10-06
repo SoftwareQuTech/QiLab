@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
 """Extract the sequence of measurement results (0/1) from a qilab log.
 
 The log records measurements as lines such as:

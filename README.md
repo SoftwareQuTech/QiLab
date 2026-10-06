@@ -2,6 +2,13 @@
 
 QiLab is a C++20 framework for simulating quantum internet networks with a focus on command routing, entanglement coordination, and pluggable data transport. It integrates the [Stim](https://github.com/quantumlib/stim) stabilizer simulator and provides runners for simulation, entanglement, and data transmission.
 
+> **QiLab currently works only with QNodeOS. QNodeOS is not included with QiLab, and QiLab's license grants no rights to QNodeOS.** See the [QNodeOS notice](#qnodeos-notice).
+
+## Demo
+![QiLab demo: from Python to qubits and back](docs/demo/qilab_demo.mp4)
+
+A two-node remote state preparation run, then four nodes running entanglement-based key distribution in parallel. For the interactive version, download [docs/demo/qilab_demo.html](docs/demo/qilab_demo.html) and open it in a browser (Space pauses, F toggles fullscreen).
+
 ![Architecture Overview](docs/images/MultithreadedApplication-BigOverview_1.drawio.png)
 
 ## System Flow
@@ -201,6 +208,23 @@ For running QiLab as a systemd service in production (Raspberry Pi 5 target), se
 - Configuration reference: [docs/config_guide.md](docs/config_guide.md)
 - Release history: [CHANGELOG.md](CHANGELOG.md)
 - Core interfaces live under `src/`; headers include Doxygen comments for runners, brokers, transmission handlers, and profiling APIs.
+
+## License
+Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner.
+
+QiLab is released under the [Clear BSD License](LICENSE) (SPDX: `BSD-3-Clause-Clear`). This license grants no patent rights. Every source file carries the matching SPDX header.
+
+### QNodeOS notice
+1. **Compatibility.** QiLab is currently compatible only with QNodeOS. It has no other supported use.
+2. **Not included.** QNodeOS is separate software. It is not part of QiLab and is not provided, distributed or sublicensed with QiLab.
+3. **No rights granted.** The QiLab license covers QiLab only. It grants no rights of any kind in QNodeOS, express or implied, including copyright, patent and trademark rights.
+4. **Separate terms.** You must get QNodeOS from its rights holders. Any use of QNodeOS is governed solely by its own license terms.
+5. **Name only.** The name "QNodeOS" is used here only to describe compatibility. It does not imply endorsement by the QNodeOS rights holders.
+
+### Third-party software
+Third-party dependencies are fetched at build time and remain under their own licenses:
+- [Stim](https://github.com/quantumlib/stim) (v1.15.0): Apache License 2.0. Statically linked into the `qilab` binary. Release archives include its license as `LICENSE.stim`.
+- [GoogleTest](https://github.com/google/googletest) (tests only, not shipped): BSD 3-Clause License.
 
 ---
 Active development project — APIs and wiring may change.

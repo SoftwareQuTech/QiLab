@@ -1,3 +1,6 @@
+// Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+// SPDX-License-Identifier: BSD-3-Clause-Clear
+
 /*
 ** Full-pipeline functional tests: one non-entanglement operation type per
 ** TEST, driven through the real MessageBroker + SimulatorRunner +

@@ -23,6 +23,10 @@ builds. `Debug` forces `ENABLE_LOGGING=ON`; `ENABLE_PROFILING` defaults ON.
 what each does.
 
 ## Conventions
+- **License header on every new source file** (`.cpp`/`.hpp`/`.py`/`.sh`/
+  `CMakeLists.txt`; after the shebang in scripts, `#` instead of `//`):
+  `// Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner`
+  then `// SPDX-License-Identifier: BSD-3-Clause-Clear`.
 - **Real-time system: hot path is performance-critical.** Anything on the
   per-operation/per-gate/per-qubit path (simulator adapter calls, noise
   application, entanglement attempts) must be optimized for max throughput

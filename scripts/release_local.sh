@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026, Quantum Internet Alliance, Delft University of Technology, Milen Kolev, Samuel Oslovich, Jake Smith, Stephanie Wehner
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
 set -euo pipefail
 
 # Local release build — mirrors the GitLab CI `release_prepare` job exactly
@@ -46,6 +49,10 @@ cp build-release/qilab "dist/qilab-${VERSION}/"
 mv "dist/qilab-${VERSION}/qilab" "dist/qilab-${VERSION}/qilab-${VERSION}-linux-arm64"
 
 cp README.md "dist/qilab-${VERSION}/"
+# License texts: QiLab (BSD-3-Clause-Clear) and Stim, which is statically
+# linked into the binary (Apache-2.0). Both licenses require these to ship.
+cp LICENSE "dist/qilab-${VERSION}/LICENSE"
+cp build-release/_deps/stim-src/LICENSE "dist/qilab-${VERSION}/LICENSE.stim"
 cp deploy/systemd/qilab.service "dist-update/qilab-update-${VERSION}/deploy/systemd/qilab.service"
 cp scripts/update_release.sh "dist-update/qilab-update-${VERSION}/scripts/update_release.sh"
 chmod +x "dist-update/qilab-update-${VERSION}/scripts/update_release.sh"
