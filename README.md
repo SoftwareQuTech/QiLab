@@ -201,11 +201,13 @@ ctest --test-dir build --output-on-failure
 Every test is labeled `unit` or `functional` (`ctest -L unit` / `ctest -L functional` to filter). See `CLAUDE.md`'s Testing convention for the reference pattern to follow when adding new tests.
 
 ## Deployment
-For running QiLab as a systemd service in production (Raspberry Pi 5 target), see [docs/systemd_service_setup.md](docs/systemd_service_setup.md). For the versioning/release-flow rollout plan, see [docs/incremental_versioning_release_plan.md](docs/incremental_versioning_release_plan.md).
+For running QiLab as a systemd service in production (Raspberry Pi 5 target), see [docs/systemd_service_setup.md](docs/systemd_service_setup.md).
 
 ## Diagrams & Documentation
 - Architecture diagrams: `docs/Design/*.drawio`
 - Configuration reference: [docs/config_guide.md](docs/config_guide.md)
+- Hardware bill of materials (Raspberry Pi 5 QiLab box and QNodeOS boards): [docs/HwBOM_box.xlsx](docs/HwBOM_box.xlsx)
+- Workshop slides: [docs/QiLab_Workshop_Github.pptx](docs/QiLab_Workshop_Github.pptx)
 - Release history: [CHANGELOG.md](CHANGELOG.md)
 - Core interfaces live under `src/`; headers include Doxygen comments for runners, brokers, transmission handlers, and profiling APIs.
 
